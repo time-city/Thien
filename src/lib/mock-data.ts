@@ -123,12 +123,14 @@ export type RentalSession = {
   timeSlot: string;
   pricePerSession: number;
   paymentStatus: 'PAID' | 'PENDING';
+  room: string;
+  teacherId: string;
 };
 
 export const mockRentals: RentalSession[] = [
-  { id: 'R1', renterName: 'Thầy Hùng', roomName: 'Phòng 4', dayOfWeek: 6, shift: 1, timeSlot: '08:00 - 09:30', pricePerSession: 150000, paymentStatus: 'PENDING' },
-  { id: 'R2', renterName: 'Thầy Hùng', roomName: 'Phòng 4', dayOfWeek: 6, shift: 2, timeSlot: '14:00 - 15:30', pricePerSession: 150000, paymentStatus: 'PENDING' },
-  { id: 'R3', renterName: 'Cô Lan', roomName: 'Phòng 3', dayOfWeek: 7, shift: 3, timeSlot: '17:30 - 19:00', pricePerSession: 200000, paymentStatus: 'PAID' },
+  { id: 'R1', renterName: 'Thầy Hùng', roomName: 'Phòng 4', dayOfWeek: 6, shift: 1, timeSlot: '08:00 - 09:30', pricePerSession: 150000, paymentStatus: 'PENDING', room: 'Phòng 4', teacherId: 'u3' },
+  { id: 'R2', renterName: 'Thầy Hùng', roomName: 'Phòng 4', dayOfWeek: 6, shift: 2, timeSlot: '14:00 - 15:30', pricePerSession: 150000, paymentStatus: 'PENDING', room: 'Phòng 4', teacherId: 'u3' },
+  { id: 'R3', renterName: 'Cô Lan', roomName: 'Phòng 3', dayOfWeek: 7, shift: 3, timeSlot: '17:30 - 19:00', pricePerSession: 200000, paymentStatus: 'PAID', room: 'Phòng 3', teacherId: 'u4' },
 ];
 
 export type ScheduleItem = {

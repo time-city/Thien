@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import { AuthProvider } from "@/lib/AuthContext";
 import AppLayout from "@/components/AppLayout";
+import { SessionProvider } from "next-auth/react";
 
 export const metadata: Metadata = {
   title: "Nông Trại KHTN",
@@ -12,11 +13,13 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
   return (
     <html lang="vi">
       <body className="bg-slate-50 text-slate-800">
-        <AuthProvider>
-          <AppLayout>
-            {children}
-          </AppLayout>
-        </AuthProvider>
+        <SessionProvider>
+          <AuthProvider>
+            <AppLayout>
+              {children}
+            </AppLayout>
+          </AuthProvider>
+        </SessionProvider>
       </body>
     </html>
   );

@@ -98,11 +98,11 @@ export default function CinemaCheckInPage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-800 pb-20 font-sans">
+    <div className="w-full max-w-5xl mx-auto pb-8 font-sans">
       
-      {/* GLOBAL CONTROLS */}
-      <header className="sticky top-0 z-30 bg-white border-b border-slate-200 shadow-sm p-4 md:p-6 lg:px-8">
-        <div className="max-w-4xl mx-auto flex flex-col md:flex-row gap-4 items-center justify-between">
+      {/* GLOBAL CONTROLS CARD */}
+      <div className="bg-white border border-slate-200 shadow-sm rounded-xl p-4 md:p-5 mb-8">
+        <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center justify-between">
           <div>
             <h1 className="text-2xl font-extrabold tracking-tight text-slate-900">Sơ Đồ Lớp Học</h1>
             <p className="text-sm text-slate-500 font-medium">
@@ -110,10 +110,10 @@ export default function CinemaCheckInPage() {
             </p>
           </div>
           
-          <div className="flex flex-wrap gap-3 w-full md:w-auto">
+          <div className="flex flex-wrap gap-3 w-full lg:w-auto">
             {role === 'SUPER_ADMIN' && (
               <select 
-                className="flex-1 md:w-40 bg-purple-50 border border-purple-200 rounded-lg h-10 px-3 text-sm font-bold text-purple-700 focus:outline-none"
+                className="flex-1 lg:w-44 bg-purple-50 border border-purple-200 rounded-lg h-10 px-3 text-sm font-semibold text-purple-700 focus:outline-none"
                 value={filterTeacher}
                 onChange={(e) => setFilterTeacher(e.target.value)}
               >
@@ -125,7 +125,7 @@ export default function CinemaCheckInPage() {
             )}
 
             <select 
-              className="flex-1 md:w-32 bg-slate-50 border border-slate-200 rounded-lg h-10 px-3 text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-100"
+              className="flex-1 lg:w-36 bg-slate-50 border border-slate-200 rounded-lg h-10 px-3 text-sm font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-100"
               value={selectedClass}
               onChange={(e) => setSelectedClass(e.target.value)}
             >
@@ -134,15 +134,15 @@ export default function CinemaCheckInPage() {
             </select>
             <input 
               type="date"
-              className="flex-1 md:w-40 bg-slate-50 border border-slate-200 rounded-lg h-10 px-3 text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-100"
+              className="flex-1 lg:w-40 bg-slate-50 border border-slate-200 rounded-lg h-10 px-3 text-sm font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-100"
               value={sessionDate}
               onChange={(e) => setSessionDate(e.target.value)}
             />
           </div>
         </div>
-      </header>
+      </div>
 
-      <main className="p-4 md:p-8 max-w-4xl mx-auto flex flex-col gap-8 mt-4">
+      <div className="flex flex-col gap-6">
         
         {/* KHU VỰC BẢNG (SCREEN/BOARD) */}
         <div className="flex justify-center mb-4">
@@ -201,14 +201,14 @@ export default function CinemaCheckInPage() {
         </div>
         
         {/* Chú thích trạng thái dưới cùng */}
-        <div className="mt-8 flex flex-wrap justify-center gap-6 text-[11px] sm:text-xs font-semibold text-slate-500">
+        <div className="mt-6 flex flex-wrap justify-center gap-6 text-[11px] sm:text-xs font-semibold text-slate-500">
           <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-emerald-500 inline-block"></span> Tốt / Có mặt</div>
           <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-amber-500 inline-block"></span> Làm đủ / Trễ</div>
           <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-orange-500 inline-block"></span> Phép</div>
           <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-rose-500 inline-block"></span> Không làm / Vắng</div>
         </div>
 
-      </main>
+      </div>
 
       {/* DETAIL MODAL THẲNG Ở LAYER NÀY KHI TRUYỀN DATA */}
       {selectedStudent && (

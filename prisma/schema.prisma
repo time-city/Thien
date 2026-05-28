@@ -92,13 +92,30 @@ model User {
   role              Role           @default(TEACHER)
   roomFeePerSession Float          @default(0)
   isActive          Boolean        @default(true)
+
+  salaryBalance     Float          @default(0)
   createdAt         DateTime       @default(now())
 
   classTeachers     ClassTeacher[]
   classSessions     ClassSession[]
   roomRentalLogs    RoomRentalLog[]
 
+  salaryPayments    SalaryPayment[]
+
   @@map("users")
+  @@schema("public")
+}
+
+model SalaryPayment {
+  id          String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  teacherId   String   @db.Uuid
+  amount      Float    // Số tiền trung tâm ĐÃ THANH TOÁN cho GV
+  note        String?  // Ghi chú (VD: "Thanh toán lương tháng 5", "Ứng trước")
+  paymentDate DateTime @default(now())
+  
+  teacher     User     @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+
+  @@map("salary_payments")
   @@schema("public")
 }
 

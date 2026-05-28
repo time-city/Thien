@@ -1,0 +1,270 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["multiSchema"]
+}
+
+datasource db {
+  provider  = "postgresql"
+  schemas   = ["public"]
+}
+
+// ================= ENUMS =================
+enum Role {
+  SUPER_ADMIN
+  TEACHER
+  @@schema("public")
+}
+
+enum EnrollmentStatus {
+  ACTIVE
+  PAUSED
+  DROPPED
+  @@schema("public")
+}
+
+enum FeeStatus {
+  PAID
+  UNPAID
+  OVERDUE
+  @@schema("public")
+}
+
+enum SessionStatus {
+  SCHEDULED
+  COMPLETED
+  CANCELLED
+  @@schema("public")
+}
+
+enum AttendanceStatus {
+  PRESENT
+  LATE
+  EXCUSED
+  UNEXCUSED
+  @@schema("public")
+}
+
+enum HomeworkStatus {
+  GOOD
+  DONE
+  NOT_DONE
+  @@schema("public")
+}
+
+enum RentalStatus {
+  PENDING
+  PAID
+  @@schema("public")
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+  @@schema("public")
+}
+
+enum PaymentMethod {
+  BANK_TRANSFER
+  CASH
+  @@schema("public")
+}
+
+enum PaymentStatus {
+  SUCCESS
+  FAILED
+  PENDING
+  @@schema("public")
+}
+
+enum TransactionStatus {
+  PENDING
+  MATCHED
+  @@schema("public")
+}
+
+// ================= MODELS =================
+model User {
+  id                String         @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  username          String         @unique
+  passwordHash      String
+  fullName          String
+  role              Role           @default(TEACHER)
+  roomFeePerSession Float          @default(0)
+  isActive          Boolean        @default(true)
+  createdAt         DateTime       @default(now())
+
+  classTeachers     ClassTeacher[]
+  classSessions     ClassSession[]
+  roomRentalLogs    RoomRentalLog[]
+
+  @@map("users")
+  @@schema("public")
+}
+
+model Subject {
+  id                   String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  name                 String
+  pricePerSession      Float     @default(0)
+  sessionsPerPackage   Int       @default(12)
+  createdAt            DateTime  @default(now())
+
+  classes              Class[]
+
+  @@map("subjects")
+  @@schema("public")
+}
+
+model Class {
+  id           String         @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  subjectId    String         @db.Uuid
+  name         String
+  category     String
+  createdAt    DateTime       @default(now())
+
+  subject      Subject        @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  teachers     ClassTeacher[]
+  enrollments  Enrollment[]
+  sessions     ClassSession[]
+  payments     PaymentHistory[]
+
+  @@map("classes")
+  @@schema("public")
+}
+
+model ClassTeacher {
+  id        String  @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  classId   String  @db.Uuid
+  teacherId String  @db.Uuid
+  subModule String?
+
+  class     Class   @relation(fields: [classId], references: [id], onDelete: Cascade)
+  teacher   User    @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+
+  @@map("class_teachers")
+  @@schema("public")
+}
+
+model Student {
+  id             String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  fullName       String
+  dob            DateTime? @db.Date
+  gender         Gender?
+  school         String?
+  phoneStudent   String?
+  parentName     String?
+  phoneParent    String?
+  qrCodeId       String?   @unique
+  createdAt      DateTime  @default(now())
+
+  enrollments           Enrollment[]
+  payments              PaymentHistory[]
+  attendanceLogs        AttendanceLog[]
+  pendingTransactions   PendingTransaction[]
+
+  @@map("students")
+  @@schema("public")
+}
+
+model Enrollment {
+ id                  String           @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  studentId           String           @db.Uuid
+  classId             String           @db.Uuid
+  startDate           DateTime?
+  endDate             DateTime?
+  currentVoucher      Int              @default(1)
+  remainingSessions   Int              @default(0)
+  status              EnrollmentStatus @default(ACTIVE)
+  feeStatus           FeeStatus        @default(PAID)
+  createdAt           DateTime         @default(now())
+
+  student             Student          @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  class               Class            @relation(fields: [classId], references: [id], onDelete: Cascade)
+
+  @@map("enrollments")
+  @@schema("public")
+}
+
+model PaymentHistory {
+  id                String        @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  studentId         String        @db.Uuid
+  classId           String        @db.Uuid
+  amount            Float
+  paymentDate       DateTime      @default(now())
+  paymentMethod     PaymentMethod @default(BANK_TRANSFER)
+  voucherRef        Int?
+  status            PaymentStatus @default(SUCCESS)
+  transactionCode   String?       @unique
+  createdAt         DateTime      @default(now())
+
+  student           Student       @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  class             Class         @relation(fields: [classId], references: [id], onDelete: Cascade)
+
+  @@map("payment_history")
+  @@schema("public")
+}
+
+model ClassSession {
+  id                      String        @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  classId                 String        @db.Uuid
+  teacherId               String        @db.Uuid
+  date                    DateTime      @db.Date
+  slot                    Int
+  status                  SessionStatus @default(SCHEDULED)
+  isAttendanceSubmitted   Boolean       @default(false)
+  attendanceSubmittedAt   DateTime?
+
+  class                   Class         @relation(fields: [classId], references: [id], onDelete: Cascade)
+  teacher                 User          @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  attendanceLogs          AttendanceLog[]
+  roomRentalLogs          RoomRentalLog[]
+
+  @@unique([date, slot])
+  @@map("class_sessions")
+  @@schema("public")
+}
+
+model AttendanceLog {
+  id                 String           @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  classSessionId     String           @db.Uuid
+  studentId          String           @db.Uuid
+  attendanceStatus   AttendanceStatus
+  homeworkStatus     HomeworkStatus?
+  note               String?
+  createdAt          DateTime         @default(now())
+
+  classSession       ClassSession     @relation(fields: [classSessionId], references: [id], onDelete: Cascade)
+  student            Student          @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@map("attendance_logs")
+  @@schema("public")
+}
+
+model RoomRentalLog {
+  id               String       @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  teacherId        String       @db.Uuid
+  classSessionId   String       @db.Uuid
+  feeCalculated    Float        @default(0)
+  status           RentalStatus @default(PENDING)
+  createdAt        DateTime     @default(now())
+
+  teacher          User         @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  classSession     ClassSession @relation(fields: [classSessionId], references: [id], onDelete: Cascade)
+
+  @@map("room_rental_logs")
+  @@schema("public")
+}
+
+model PendingTransaction {
+  id                String            @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  amount            Float
+  transferContent   String
+  status            TransactionStatus @default(PENDING)
+  studentId         String?           @db.Uuid
+  createdAt         DateTime          @default(now())
+
+  student           Student?          @relation(fields: [studentId], references: [id], onDelete: SetNull)
+
+  @@map("pending_transactions")
+  @@schema("public")
+}

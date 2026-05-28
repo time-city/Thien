@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import { AuthProvider } from "@/lib/AuthContext";
+import AppLayout from "@/components/AppLayout";
 
 export const metadata: Metadata = {
   title: "Nông Trại KHTN",
@@ -8,8 +10,14 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="vi" className="dark">
-      <body>{children}</body>
+    <html lang="vi">
+      <body className="bg-slate-50 text-slate-800">
+        <AuthProvider>
+          <AppLayout>
+            {children}
+          </AppLayout>
+        </AuthProvider>
+      </body>
     </html>
   );
 }

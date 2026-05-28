@@ -1,0 +1,117 @@
+erDiagram
+    SUBJECTS ||--o{ CLASSES : "có (contains)"
+    CLASSES ||--o{ CLASS_TEACHERS : "phân công (assigned_to)"
+    USERS ||--o{ CLASS_TEACHERS : "giảng (teaches)"
+    
+    CLASSES ||--o{ CLASS_SESSIONS : "có lịch (scheduled)"
+    USERS ||--o{ CLASS_SESSIONS : "dạy (instructs)"
+    CLASS_SESSIONS ||--o{ ATTENDANCE_LOGS : "ghi nhận (records)"
+    STUDENTS ||--o{ ATTENDANCE_LOGS : "được đánh giá (evaluated)"
+    CLASS_SESSIONS ||--o| ROOM_RENTAL_LOGS : "phát sinh phí phòng (triggers)"
+
+    STUDENTS ||--o{ ENROLLMENTS : "đăng ký (enrolls_in)"
+    CLASSES ||--o{ ENROLLMENTS : "bao gồm (has)"
+    STUDENTS ||--o{ PAYMENT_HISTORY : "thanh toán (pays)"
+    CLASSES ||--o{ PAYMENT_HISTORY : "ghi nhận (recorded_for)"
+    STUDENTS ||--o{ PENDING_TRANSACTIONS : "gán tay (matched_to)"
+
+    SUBJECTS {
+        uuid id PK
+        string name 
+        float price_per_session
+        int sessions_per_package 
+    }
+    
+    CLASSES {
+        uuid id PK
+        uuid subject_id FK
+        string name 
+        string category 
+    }
+
+    CLASS_TEACHERS {
+        uuid id PK
+        uuid class_id FK
+        uuid teacher_id FK
+        string sub_module 
+    }
+
+    USERS {
+        uuid id PK
+        string username
+        string full_name
+        string role "SUPER_ADMIN, TEACHER"
+        float room_fee_per_session
+    }
+
+    STUDENTS {
+        uuid id PK
+        string full_name
+        datetime dob
+        string gender "MALE, FEMALE, OTHER"
+        string school 
+        string phone_student
+        string parent_name
+        string phone_parent
+        string qr_code_id
+    }
+
+    ENROLLMENTS {
+        uuid id PK
+        uuid student_id FK
+        uuid class_id FK
+        datetime start_date
+        datetime end_date
+        int current_voucher 
+        int remaining_sessions
+        string status "ACTIVE, PAUSED, DROPPED"
+        string fee_status "PAID, UNPAID, OVERDUE"
+    }
+
+    PAYMENT_HISTORY {
+        uuid id PK
+        uuid student_id FK
+        uuid class_id FK
+        float amount
+        datetime payment_date
+        string payment_method "BANK_TRANSFER, CASH"
+        int voucher_ref 
+        string status "SUCCESS, FAILED, PENDING"
+        string transaction_code "Khóa chống lặp (Unique)" 
+    }
+
+    CLASS_SESSIONS {
+        uuid id PK
+        uuid class_id FK
+        uuid teacher_id FK
+        datetime date "Khóa chống trùng (Unique)"
+        int slot "Khóa chống trùng (Unique)"
+        string status "SCHEDULED, COMPLETED, CANCELLED"
+        boolean is_attendance_submitted 
+        datetime attendance_submitted_at 
+    }
+    
+    ATTENDANCE_LOGS {
+        uuid id PK
+        uuid class_session_id FK
+        uuid student_id FK
+        string attendance_status "PRESENT, LATE, EXCUSED..."
+        string homework_status "GOOD, DONE, NOT_DONE"
+        text note 
+    }
+
+    ROOM_RENTAL_LOGS {
+        uuid id PK
+        uuid teacher_id FK
+        uuid class_session_id FK
+        float fee_calculated
+        string status "PENDING, PAID"
+    }
+
+    PENDING_TRANSACTIONS {
+        uuid id PK
+        float amount
+        string transfer_content
+        string status "PENDING, MATCHED"
+        uuid student_id FK 
+    }

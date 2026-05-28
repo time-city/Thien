@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useMemo, useEffect } from 'react';
-import { mockStudents, CLASSES } from '@/lib/mock-data';
+import { mockStudents, mockClasses, mockUsers } from '@/lib/mock-data';
+import { useAuth } from '@/lib/AuthContext';
 
 // Mở rộng kiểu dữ liệu Student cho màn hình Điểm danh Sơ đồ
 type CheckInStudent = {
@@ -15,7 +16,28 @@ type CheckInStudent = {
 };
 
 export default function CinemaCheckInPage() {
-  const [selectedClass, setSelectedClass] = useState<string>(CLASSES[0]);
+  const { role, currentUser } = useAuth();
+  const [filterTeacher, setFilterTeacher] = useState<string>('ALL');
+
+  // Lọc danh sách lớp: Teacher chỉ thấy lớp mình. Admin thấy theo filter.
+  const visibleClasses = useMemo(() => {
+    if (role === 'TEACHER') {
+      return mockClasses.filter(c => c.teacherId === currentUser?.id);
+    }
+    if (filterTeacher !== 'ALL') {
+      return mockClasses.filter(c => c.teacherId === filterTeacher);
+    }
+    return mockClasses;
+  }, [role, currentUser, filterTeacher]);
+
+  const [selectedClass, setSelectedClass] = useState<string>('');
+
+  useEffect(() => {
+    if (visibleClasses.length > 0 && !visibleClasses.some(c => c.name === selectedClass)) {
+      setSelectedClass(visibleClasses[0].name);
+    }
+  }, [visibleClasses, selectedClass]);
+
   const [sessionDate, setSessionDate] = useState<string>('');
   const [sessionNum, setSessionNum] = useState<number>(5);
 
@@ -82,17 +104,33 @@ export default function CinemaCheckInPage() {
       <header className="sticky top-0 z-30 bg-white border-b border-slate-200 shadow-sm p-4 md:p-6 lg:px-8">
         <div className="max-w-4xl mx-auto flex flex-col md:flex-row gap-4 items-center justify-between">
           <div>
-            <h1 className="text-2xl font-extrabold tracking-tight text-slate-900">Sơ Đồ Điểm Danh</h1>
-            <p className="text-sm text-slate-500 font-medium">Giao diện quản lý Lớp Học mô phỏng Rạp chiếu</p>
+            <h1 className="text-2xl font-extrabold tracking-tight text-slate-900">Sơ Đồ Lớp Học</h1>
+            <p className="text-sm text-slate-500 font-medium">
+              {role === 'SUPER_ADMIN' ? 'Giám sát chéo tất cả các lớp' : 'Quản lý điểm danh lớp của bạn'}
+            </p>
           </div>
           
-          <div className="flex gap-3 w-full md:w-auto">
+          <div className="flex flex-wrap gap-3 w-full md:w-auto">
+            {role === 'SUPER_ADMIN' && (
+              <select 
+                className="flex-1 md:w-40 bg-purple-50 border border-purple-200 rounded-lg h-10 px-3 text-sm font-bold text-purple-700 focus:outline-none"
+                value={filterTeacher}
+                onChange={(e) => setFilterTeacher(e.target.value)}
+              >
+                <option value="ALL">Tất cả Giảng viên</option>
+                {mockUsers.filter(u => u.role === 'TEACHER').map(t => (
+                  <option key={t.id} value={t.id}>{t.name}</option>
+                ))}
+              </select>
+            )}
+
             <select 
               className="flex-1 md:w-32 bg-slate-50 border border-slate-200 rounded-lg h-10 px-3 text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-100"
               value={selectedClass}
               onChange={(e) => setSelectedClass(e.target.value)}
             >
-              {CLASSES.map(c => <option key={c} value={c}>{c}</option>)}
+              {visibleClasses.length === 0 ? <option value="">Không có lớp</option> : null}
+              {visibleClasses.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
             </select>
             <input 
               type="date"

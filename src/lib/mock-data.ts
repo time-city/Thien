@@ -6,17 +6,56 @@ export type SessionLog = {
   note: string;
 };
 
+export type CourseInfo = {
+  course: string;
+  remaining: number;
+  fee: number;
+};
+
 export type Student = {
   id: string;
   name: string;
   className: string;
-  totalSessions: number;
-  remainingSessions: number;
+  totalSessions: number; // Tạm giữ lại cho tương thích
+  remainingSessions: number; // Tạm giữ lại
   feeStatus: 'PAID' | 'PENDING';
   logs: SessionLog[];
+  enrolledCourses: CourseInfo[];
 };
 
-const CLASS_NAMES = ['KHTN 6', 'KHTN 7', 'KHTN 8', 'KHTN 9', 'HSG 9'];
+export type User = {
+  id: string;
+  username: string;
+  name: string;
+  role: 'SUPER_ADMIN' | 'TEACHER';
+  status: 'ACTIVE' | 'LOCKED';
+  subjects: string[];
+};
+
+export const mockUsers: User[] = [
+  { id: 'u1', username: 'thien', name: 'Thiện', role: 'SUPER_ADMIN', status: 'ACTIVE', subjects: [] },
+  { id: 'u2', username: 'ha', name: 'Cô Hà', role: 'TEACHER', status: 'ACTIVE', subjects: ['Toán'] },
+  { id: 'u3', username: 'hung', name: 'Thầy Hùng', role: 'TEACHER', status: 'ACTIVE', subjects: ['Hóa'] },
+  { id: 'u4', username: 'lan', name: 'Cô Lan', role: 'TEACHER', status: 'ACTIVE', subjects: ['Văn'] },
+  { id: 'u5', username: 'nga', name: 'Cô Nga', role: 'TEACHER', status: 'ACTIVE', subjects: ['Sử'] },
+  { id: 'u6', username: 'dung', name: 'Thầy Dũng', role: 'TEACHER', status: 'LOCKED', subjects: ['Lý'] },
+];
+
+export type ClassInfo = {
+  id: string;
+  name: string;
+  teacherId: string;
+};
+
+export const mockClasses: ClassInfo[] = [
+  { id: 'C1', name: 'KHTN 6', teacherId: 'u2' }, // Cô Hà
+  { id: 'C2', name: 'KHTN 7', teacherId: 'u3' }, // Thầy Hùng
+  { id: 'C3', name: 'KHTN 8', teacherId: 'u2' }, // Cô Hà
+  { id: 'C4', name: 'KHTN 9', teacherId: 'u4' }, // Cô Lan
+  { id: 'C5', name: 'HSG 9', teacherId: 'u5' }, // Cô Nga
+];
+
+const CLASS_NAMES = mockClasses.map(c => c.name);
 const ATTENDANCE_OPTS: SessionLog['attendance'][] = ['PRESENT', 'LATE', 'EXCUSED', 'UNEXCUSED'];
 const HOMEWORK_OPTS: SessionLog['homework'][] = ['GOOD', 'DONE', 'NONE'];
 
@@ -41,6 +80,20 @@ function generateMockData(): Student[] {
         });
       }
 
+      const enrolledCourses: CourseInfo[] = [];
+      const possibleCourses = ['Hóa', 'Lý', 'Toán', 'Sinh'];
+      // Random 1 to 3 courses
+      const numCourses = Math.floor(Math.random() * 3) + 1;
+      const shuffled = possibleCourses.sort(() => 0.5 - Math.random());
+      
+      for(let k = 0; k < numCourses; k++) {
+        enrolledCourses.push({
+          course: shuffled[k],
+          remaining: Math.floor(Math.random() * 5), // 0 to 4 để test <= 2
+          fee: (Math.floor(Math.random() * 5) + 5) * 100000, // 500k to 900k
+        });
+      }
+
       students.push({
         id: `HS${idCounter.toString().padStart(3, '0')}`,
         name: `Học sinh ${idCounter}`,
@@ -49,6 +102,7 @@ function generateMockData(): Student[] {
         remainingSessions: totalSessions - logsCount,
         feeStatus: Math.random() > 0.7 ? 'PENDING' : 'PAID',
         logs,
+        enrolledCourses,
       });
       idCounter++;
     }
@@ -59,3 +113,39 @@ function generateMockData(): Student[] {
 
 export const mockStudents: Student[] = generateMockData();
 export const CLASSES = CLASS_NAMES;
+
+export type RentalSession = {
+  id: string;
+  renterName: string;
+  roomName: string;
+  dayOfWeek: number; // 1: T2 -> 7: CN
+  shift: number;
+  timeSlot: string;
+  pricePerSession: number;
+  paymentStatus: 'PAID' | 'PENDING';
+};
+
+export const mockRentals: RentalSession[] = [
+  { id: 'R1', renterName: 'Thầy Hùng', roomName: 'Phòng 4', dayOfWeek: 6, shift: 1, timeSlot: '08:00 - 09:30', pricePerSession: 150000, paymentStatus: 'PENDING' },
+  { id: 'R2', renterName: 'Thầy Hùng', roomName: 'Phòng 4', dayOfWeek: 6, shift: 2, timeSlot: '14:00 - 15:30', pricePerSession: 150000, paymentStatus: 'PENDING' },
+  { id: 'R3', renterName: 'Cô Lan', roomName: 'Phòng 3', dayOfWeek: 7, shift: 3, timeSlot: '17:30 - 19:00', pricePerSession: 200000, paymentStatus: 'PAID' },
+];
+
+export type ScheduleItem = {
+  id: string;
+  className: string;
+  room: string;
+  teacherId: string;
+  dayOfWeek: number; // 1: T2, 2: T3, ..., 7: CN
+  shift: number; // Ca 1, 2, 3, 4
+};
+
+export const mockSchedule: ScheduleItem[] = [
+  { id: 'S1', className: 'KHTN 9', room: 'Phòng 1', teacherId: 'u2', dayOfWeek: 1, shift: 1 },
+  { id: 'S2', className: 'KHTN 8', room: 'Phòng 2', teacherId: 'u3', dayOfWeek: 1, shift: 1 },
+  { id: 'S3', className: 'HSG 9', room: 'Phòng 1', teacherId: 'u4', dayOfWeek: 2, shift: 2 },
+  { id: 'S4', className: 'KHTN 7', room: 'Phòng 3', teacherId: 'u5', dayOfWeek: 3, shift: 3 },
+  // Cố tình tạo trùng lịch (Conflict) ở Ca 2 Thứ 5:
+  { id: 'S5', className: 'KHTN 6', room: 'Phòng 2', teacherId: 'u6', dayOfWeek: 4, shift: 2 },
+  { id: 'S6', className: 'KHTN 8', room: 'Phòng 2', teacherId: 'u3', dayOfWeek: 4, shift: 2 },
+];

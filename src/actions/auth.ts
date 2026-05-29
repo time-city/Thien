@@ -2,20 +2,27 @@
 
 import { signIn } from "@/auth";
 import { AuthError } from "next-auth";
+import { redirect } from "next/navigation";
 
 export async function loginAction(formData: FormData) {
+  const username = formData.get("username") as string;
+  const password = formData.get("password") as string;
+
   try {
-    const username = formData.get("username") as string;
-    const password = formData.get("password") as string;
-    
-    // Auth.js handles the response redirect inside signIn if we don't catch it, 
-    // but typically we pass redirect options.
-    await signIn("credentials", {
+    const res = await signIn("credentials", {
       username,
       password,
-      redirectTo: "/", // Middleware will handle redirecting based on role
+      // We handle redirect explicitly from this server action.
+      redirect: false,
     });
-    
+
+    if (!res || (res as any).error) {
+      return { error: "Tên đăng nhập hoặc mật khẩu không chính xác." };
+    }
+
+    // Force Next.js to re-evaluate server components with the new session.
+    // (Choose the correct landing route for your app.)
+    return redirect("/dashboard");
   } catch (error) {
     if (error instanceof AuthError) {
       switch (error.type) {
@@ -25,7 +32,7 @@ export async function loginAction(formData: FormData) {
           return { error: "Đã xảy ra lỗi trong quá trình đăng nhập." };
       }
     }
-    // Auth.js NEXT_REDIRECT error must be thrown so Next.js can handle the redirect gracefully
     throw error;
   }
 }
+

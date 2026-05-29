@@ -1,8 +1,17 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { Home, Shield, Users, Calendar, DollarSign, LogOut, BookOpen } from "lucide-react";
+import { usePathname, useRouter } from "next/navigation";
+import { 
+  Shield, 
+  Users, 
+  Calendar, 
+  DollarSign, 
+  LogOut, 
+  BookOpen, 
+  GraduationCap,
+  Layers
+} from "lucide-react";
 import { signOut } from "next-auth/react";
 
 type MenuItem = {
@@ -12,40 +21,44 @@ type MenuItem = {
   roles: string[];
 };
 
+// Đã quy hoạch lại Menu chuẩn chỉ, không thừa không thiếu
 const menuItems: MenuItem[] = [
+  // --- MENU DÙNG CHUNG ---
   {
-    title: "Dashboard",
-    href: "/admin",
-    icon: Home,
+    title: "Lịch Giảng Dạy",
+    href: "/schedule",
+    icon: Calendar,
+    roles: ["TEACHER", "SUPER_ADMIN"],
+  },
+  // {
+  //   title: "Sơ Đồ Lớp Học",
+  //   href: "/ta",
+  //   icon: Users,
+  //   roles: ["TEACHER", "SUPER_ADMIN"], // Đã fix lỗi chuỗi dính liền
+  // },
+  
+  // --- MENU DÀNH RIÊNG CHO ADMIN ---
+  {
+    title: "Quản Lý Học Sinh",
+    href: "/admin/students",
+    icon: GraduationCap,
     roles: ["SUPER_ADMIN"],
   },
   {
-    title: "Lớp Học",
-    href: "/ta",
-    icon: Users,
-    roles: ["SUPER_ADMIN", "TEACHER"],
-  },
-  {
-    title: "Lịch dạy của tôi",
-    href: "/schedule/me",
-    icon: BookOpen,
-    roles: ["TEACHER"],
-  },
-  {
-    title: "Quản Lý Tài Khoản",
-    href: "/admin/users",
+    title: "Quản Lý Giáo Viên",
+    href: "/admin/teachers",
     icon: Shield,
     roles: ["SUPER_ADMIN"],
   },
   {
-    title: "Lịch Phòng Học",
-    href: "/schedule",
-    icon: Calendar,
+    title: "Lớp Học & Môn Học",
+    href: "/admin/classes", // Hoặc /admin/subjects tuỳ ông đặt
+    icon: Layers,
     roles: ["SUPER_ADMIN"],
   },
   {
-    title: "Thu Học Phí",
-    href: "/tuition",
+    title: "Tài Chính & Học Phí",
+    href: "/admin/tuition",
     icon: DollarSign,
     roles: ["SUPER_ADMIN"],
   },
@@ -60,8 +73,9 @@ interface SidebarProps {
 
 export default function Sidebar({ userRole, userName, isOpen, onClose }: SidebarProps) {
   const pathname = usePathname();
-  
-  // Filter menu items based on current role
+  const router = useRouter();
+
+  // Lọc menu theo role của user hiện tại
   const filteredNav = menuItems.filter((item) => item.roles.includes(userRole));
 
   return (
@@ -96,7 +110,11 @@ export default function Sidebar({ userRole, userName, isOpen, onClose }: Sidebar
             Menu chính
           </div>
           {filteredNav.map((item) => {
-            const isActive = pathname === item.href || (item.href !== "/admin" && pathname.startsWith(item.href));
+            // Logic Active mượt hơn: bao gồm cả trường hợp đường dẫn con (VD: /admin/students/1)
+            const isActive = 
+              pathname === item.href || 
+              (item.href !== "/" && pathname.startsWith(item.href));
+            
             const Icon = item.icon;
             
             return (
@@ -121,18 +139,22 @@ export default function Sidebar({ userRole, userName, isOpen, onClose }: Sidebar
 
         {/* User Card & Logout */}
         <div className="p-4 border-t border-slate-100">
-          <div className="flex items-center gap-3 px-3 py-3 bg-slate-50 rounded-lg mb-3">
+          <div className="flex items-center gap-3 px-3 py-3 bg-slate-50 rounded-lg mb-3 border border-slate-200/60">
             <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold text-sm">
-              {userName.charAt(0).toUpperCase()}
+              {userName ? userName.charAt(0).toUpperCase() : "U"}
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold text-slate-900 truncate">{userName}</p>
+              <p className="text-sm font-semibold text-slate-900 truncate">{userName || "User"}</p>
               <p className="text-xs text-slate-500 truncate">{userRole === "SUPER_ADMIN" ? "Quản trị viên" : "Giáo viên"}</p>
             </div>
           </div>
-          <button 
-            onClick={() => signOut({ callbackUrl: "/login" })}
-            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-red-600 hover:bg-red-50 transition-colors"
+          
+          <button
+            onClick={async () => {
+              // Dùng callbackUrl là chuẩn bài của NextAuth, tự động làm sạch cache và chuyển hướng
+              await signOut({ callbackUrl: "/login" });
+            }}
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-rose-600 hover:bg-rose-50 transition-colors"
           >
             <LogOut size={18} />
             Đăng xuất

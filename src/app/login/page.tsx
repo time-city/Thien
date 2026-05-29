@@ -1,39 +1,36 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import { loginAction } from "@/actions/auth";
 import { User, Lock, Loader2 } from "lucide-react";
 
 export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
-  const [isPending, startTransition] = useTransition();
+  const [isPending, setIsPending] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError(null);
-    
+    setIsPending(true);
+
     const formData = new FormData(e.currentTarget);
-    
-    startTransition(async () => {
-      const result = await loginAction(formData);
-      if (result?.error) {
-        setError(result.error);
-      }
-    });
+    const result = await loginAction(formData);
+
+    if (result && "error" in result && result.error) {
+      setError(result.error as string);
+    }
+
+    setIsPending(false);
   };
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-50 px-4 font-sans">
       <div className="bg-white rounded-2xl p-8 w-full max-w-[400px] shadow-xl border border-slate-100">
         <div className="text-center mb-8">
-          <h1 className="text-2xl font-bold text-slate-800">
-            Đăng nhập hệ thống
-          </h1>
-          <p className="text-sm text-slate-500 mt-2">
-            Trung tâm Gia sư
-          </p>
+          <h1 className="text-2xl font-bold text-slate-800">Đăng nhập hệ thống</h1>
+          <p className="text-sm text-slate-500 mt-2">Trung tâm Gia sư</p>
         </div>
-        
+
         {error && (
           <div className="mb-6 p-3 bg-red-50 border border-red-200 text-red-600 rounded-lg text-sm text-center font-medium">
             {error}
@@ -42,9 +39,7 @@ export default function LoginPage() {
 
         <form onSubmit={handleSubmit} className="space-y-5">
           <div className="space-y-1.5">
-            <label className="block text-sm font-semibold text-slate-700">
-              Tên đăng nhập
-            </label>
+            <label className="block text-sm font-semibold text-slate-700">Tên đăng nhập</label>
             <div className="relative">
               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                 <User className="h-5 w-5 text-slate-400" />
@@ -61,9 +56,7 @@ export default function LoginPage() {
           </div>
 
           <div className="space-y-1.5">
-            <label className="block text-sm font-semibold text-slate-700">
-              Mật khẩu
-            </label>
+            <label className="block text-sm font-semibold text-slate-700">Mật khẩu</label>
             <div className="relative">
               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                 <Lock className="h-5 w-5 text-slate-400" />
@@ -112,3 +105,4 @@ export default function LoginPage() {
     </div>
   );
 }
+

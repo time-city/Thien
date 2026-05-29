@@ -1,11 +1,17 @@
-"use client";
+ "use client";
 
-import React, { useRef } from 'react';
-import { QRCodeSVG } from 'qrcode.react';
-import html2canvas from 'html2canvas';
-import { Student } from '@/lib/mock-data';
+import React, { useRef } from "react";
+import { QRCodeSVG } from "qrcode.react";
+import html2canvas from "html2canvas";
+import type { StudentData } from "@/lib/queries";
 
-export default function ReportTemplate({ student }: { student: Student }) {
+type LogAttendance = StudentData["logs"][number]["attendanceStatus"];
+
+type LogHomework = Exclude<StudentData["logs"][number]["homeworkStatus"], null>;
+
+
+
+export default function ReportTemplate({ student }: { student: StudentData }) {
   const reportRef = useRef<HTMLDivElement>(null);
 
   const exportToPNG = async () => {
@@ -13,12 +19,12 @@ export default function ReportTemplate({ student }: { student: Student }) {
     try {
       const canvas = await html2canvas(reportRef.current, {
         scale: 2,
-        backgroundColor: '#ffffff', // Trắng tinh chuẩn báo cáo
+        backgroundColor: "#ffffff",
         useCORS: true,
       });
-      const dataUrl = canvas.toDataURL('image/png');
-      const link = document.createElement('a');
-      link.download = `Bao_Cao_${student.id}_${student.name.replace(/\s/g, '_')}.png`;
+      const dataUrl = canvas.toDataURL("image/png");
+      const link = document.createElement("a");
+      link.download = `Bao_Cao_${student.id}_${student.fullName.replace(/\s/g, "_")}.png`;
       link.href = dataUrl;
       link.click();
     } catch (error) {
@@ -27,8 +33,9 @@ export default function ReportTemplate({ student }: { student: Student }) {
     }
   };
 
-  const presentCount = student.logs.filter(l => l.attendance === 'PRESENT' || l.attendance === 'LATE').length;
-  const absentCount = student.logs.filter(l => l.attendance === 'EXCUSED' || l.attendance === 'UNEXCUSED').length;
+const presentCount = student.logs.filter((l) => l.attendanceStatus === 'PRESENT' || l.attendanceStatus === 'LATE').length;
+  const absentCount = student.logs.filter((l) => l.attendanceStatus === 'EXCUSED' || l.attendanceStatus === 'UNEXCUSED').length;
+
 
   return (
     <div className="flex flex-col gap-4 items-start w-full max-w-sm">
@@ -44,7 +51,7 @@ export default function ReportTemplate({ student }: { student: Student }) {
       <div
         ref={reportRef}
         className="w-[375px] bg-white border border-slate-200 p-6 flex flex-col gap-6 text-slate-800 font-sans shadow-lg relative overflow-hidden"
-        style={{ minHeight: '667px' }}
+        style={{ minHeight: "667px" }}
       >
         {/* Header */}
         <div className="text-center border-b border-slate-200 pb-4">
@@ -55,13 +62,13 @@ export default function ReportTemplate({ student }: { student: Student }) {
         {/* Thông tin Overview */}
         <div className="flex flex-col gap-4 bg-slate-50 p-4 rounded-xl border border-slate-100">
           <div className="flex justify-between items-center text-sm">
-            <span className="text-slate-500">Họ và tên:</span>
-            <span className="font-bold text-base text-slate-900">{student.name}</span>
+<span className="text-slate-500">Họ và tên:</span>
+            <span className="font-bold text-base text-slate-900">{student.fullName}</span>
           </div>
           <div className="flex justify-between items-center text-sm">
             <span className="text-slate-500">Lớp học:</span>
             <span className="font-semibold text-slate-700 bg-white px-3 py-1 rounded-md shadow-sm border border-slate-200">
-              {student.className}
+              {student.enrolledCourses[0]?.className ?? "-"}
             </span>
           </div>
           <div className="grid grid-cols-2 gap-4 mt-2 border-t border-slate-200 pt-4">
@@ -86,24 +93,29 @@ export default function ReportTemplate({ student }: { student: Student }) {
             {student.logs.slice(-5).reverse().map((log, idx) => (
               <div key={idx} className="flex flex-col p-3 bg-white border border-slate-200 rounded-lg shadow-sm gap-2">
                 <div className="flex justify-between items-center border-b border-slate-100 pb-2">
-                  <span className="font-bold text-sm text-slate-800">Buổi {log.sessionNumber}</span>
-                  <span className="text-xs font-medium text-slate-500 bg-slate-50 px-2 py-1 rounded-md">{log.date}</span>
+                  <span className="font-bold text-sm text-slate-800">Buổi</span>
+                  <span className="text-xs font-medium text-slate-500 bg-slate-50 px-2 py-1 rounded-md">{log.date.toLocaleDateString("vi-VN")}</span>
                 </div>
                 <div className="flex gap-2 text-xs font-semibold">
-                  <span className={`px-2 py-1 rounded-md ${
-                    log.attendance === 'PRESENT' ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' :
-                    log.attendance === 'LATE' ? 'bg-amber-50 text-amber-700 border border-amber-100' :
-                    log.attendance === 'EXCUSED' ? 'bg-orange-50 text-orange-700 border border-orange-100' : 
-                    'bg-rose-50 text-rose-700 border border-rose-100'
-                  }`}>
-                    {log.attendance === 'PRESENT' ? 'Có mặt' : log.attendance === 'LATE' ? 'Trễ' : log.attendance === 'EXCUSED' ? 'Phép' : 'Vắng'}
+                  <span
+                    className={`px-2 py-1 rounded-md ${
+                      log.attendanceStatus === "PRESENT"
+                        ? "bg-emerald-50 text-emerald-700 border border-emerald-100"
+                        : log.attendanceStatus === "LATE"
+                          ? "bg-amber-50 text-amber-700 border border-amber-100"
+                          : log.attendanceStatus === "EXCUSED"
+                            ? "bg-orange-50 text-orange-700 border border-orange-100"
+                            : "bg-rose-50 text-rose-700 border border-rose-100"
+                    }`}
+                  >
+{log.attendanceStatus === 'PRESENT' ? 'Có mặt' : log.attendanceStatus === 'LATE' ? 'Trễ' : log.attendanceStatus === 'EXCUSED' ? 'Phép' : 'Vắng'}
                   </span>
                   <span className={`px-2 py-1 rounded-md ${
-                    log.homework === 'GOOD' ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' :
-                    log.homework === 'DONE' ? 'bg-amber-50 text-amber-700 border border-amber-100' : 
+log.homeworkStatus === 'GOOD' ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' :
+                    log.homeworkStatus === 'DONE' ? 'bg-amber-50 text-amber-700 border border-amber-100' : 
                     'bg-rose-50 text-rose-700 border border-rose-100'
                   }`}>
-                    BTVN: {log.homework === 'GOOD' ? 'Tốt' : log.homework === 'DONE' ? 'Đạt' : 'Kém'}
+BTVN: {log.homeworkStatus === 'GOOD' ? 'Tốt' : log.homeworkStatus === 'DONE' ? 'Đạt' : 'Kém'}
                   </span>
                 </div>
               </div>
@@ -117,7 +129,7 @@ export default function ReportTemplate({ student }: { student: Student }) {
             Mã QR ID học viên. Sử dụng để thanh toán học phí & quét tại lớp.
           </div>
           <div className="p-2 border border-slate-200 rounded-xl bg-white shadow-sm">
-            <QRCodeSVG value={`HP ${student.id} ${student.className}`} size={70} />
+            <QRCodeSVG value={`HP ${student.id} ${student.enrolledCourses[0]?.className ?? ""}`} size={70} />
           </div>
         </div>
       </div>

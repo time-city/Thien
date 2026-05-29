@@ -1,36 +1,41 @@
 "use client";
-import React, { createContext, useContext, useState } from 'react';
-import { User, mockUsers } from './mock-data';
+import React, { createContext, useContext, useMemo } from 'react';
+import { useSession } from 'next-auth/react';
 
 export type Role = 'SUPER_ADMIN' | 'TEACHER';
 
 interface AuthContextType {
   role: Role;
-  setRole: (role: Role) => void;
-  currentUser: User | null;
-  setCurrentUser: (user: User | null) => void;
+  currentUser: { id: string; role: Role; fullName?: string } | null;
 }
 
-const AuthContext = createContext<AuthContextType>({ 
-  role: 'SUPER_ADMIN', 
-  setRole: () => {},
-  currentUser: null,
-  setCurrentUser: () => {}
-});
+
+const AuthContext = createContext<AuthContextType>({ role: 'TEACHER', currentUser: null });
+
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
-  const [currentUser, setCurrentUser] = useState<User | null>(mockUsers[0]);
-  const role = currentUser?.role || 'SUPER_ADMIN';
-  
-  const setRole = (newRole: Role) => {
-    if (newRole === 'SUPER_ADMIN') {
-      setCurrentUser(mockUsers.find(u => u.role === 'SUPER_ADMIN') || null);
-    } else {
-      setCurrentUser(mockUsers.find(u => u.role === 'TEACHER') || null);
-    }
-  };
+  const { data: session } = useSession();
 
-  return <AuthContext.Provider value={{ role, setRole, currentUser, setCurrentUser }}>{children}</AuthContext.Provider>
+  const { role, currentUser } = useMemo(() => {
+    const r = session?.user?.role;
+    const normalizedRole: Role = r === "SUPER_ADMIN" || r === "TEACHER" ? r : "TEACHER";
+
+    const userId = session?.user?.id;
+    const userFullName = session?.user?.fullName;
+
+    const currentUser = userId
+      ? { id: userId as string, role: normalizedRole, fullName: userFullName as string | undefined }
+      : null;
+
+    return { role: normalizedRole, currentUser };
+  }, [session?.user?.role, session?.user?.id, session?.user?.fullName]);
+
+  return <AuthContext.Provider value={{ role, currentUser }}>{children}</AuthContext.Provider>;
 };
+
+// Backward-compatible alias for existing code expecting `currentUser`.
+export type LegacyAuthContextType = AuthContextType;
+
+
 
 export const useAuth = () => useContext(AuthContext);

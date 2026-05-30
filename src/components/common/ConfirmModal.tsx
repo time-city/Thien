@@ -1,32 +1,38 @@
 "use client";
 
-import { AlertTriangle, X } from "lucide-react";
+import { useConfirmStore } from "@/components/store/useConfirmStore"; // Import store của ông vào đây
+import { AlertTriangle, X, Loader2 } from "lucide-react";
 
-interface ConfirmModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  onConfirm: () => void;
-  title: string;
-  message: React.ReactNode;
-  confirmText?: string;
-  cancelText?: string;
-  isDestructive?: boolean;
-  isLoading?: boolean;
-}
+export default function GlobalConfirmModal() {
+  // Lấy toàn bộ state và hàm từ Zustand ra thay vì dùng Props
+  const {
+    isOpen,
+    title,
+    message,
+    confirmText,
+    cancelText,
+    isDestructive,
+    onConfirm,
+    closeConfirm,
+    isLoading,
+    setLoading,
+  } = useConfirmStore();
 
-export default function ConfirmModal({
-  isOpen,
-  onClose,
-  onConfirm,
-  title,
-  message,
-  confirmText = "Xác nhận",
-  cancelText = "Hủy",
-  isDestructive = false,
-  isLoading = false,
-}: ConfirmModalProps) {
+  // Nếu không open thì không render gì cả
   if (!isOpen) return null;
 
+  // Hàm bọc (wrapper) để tự động bật/tắt loading khi chạy onConfirm
+  const handleConfirm = async () => {
+    setLoading(true);
+    try {
+      await onConfirm();
+    } finally {
+      setLoading(false);
+      closeConfirm(); // Chạy xong API thì tự đóng Modal
+    }
+  };
+
+  // Giữ nguyên 100% giao diện UI của ông
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200">
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden flex flex-col">
@@ -40,9 +46,9 @@ export default function ConfirmModal({
               <AlertTriangle size={24} />
             </div>
             <button
-              onClick={onClose}
+              onClick={() => !isLoading && closeConfirm()}
               disabled={isLoading}
-              className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full transition-colors"
+              className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full transition-colors disabled:opacity-50"
             >
               <X size={20} />
             </button>
@@ -50,24 +56,31 @@ export default function ConfirmModal({
           <h3 className="text-xl font-bold text-slate-900 mb-2">{title}</h3>
           <div className="text-sm text-slate-500 leading-relaxed">{message}</div>
         </div>
+        
         <div className="p-4 bg-slate-50 flex justify-end gap-3 border-t border-slate-100">
           <button
-            onClick={onClose}
+            onClick={closeConfirm}
             disabled={isLoading}
             className="px-4 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-200 bg-slate-100 rounded-xl transition-colors disabled:opacity-50"
           >
             {cancelText}
           </button>
           <button
-            onClick={onConfirm}
+            onClick={handleConfirm}
             disabled={isLoading}
-            className={`px-4 py-2.5 text-sm font-semibold text-white rounded-xl transition-colors flex items-center justify-center min-w-[110px] disabled:opacity-50 ${
+            className={`px-4 py-2.5 text-sm font-semibold text-white rounded-xl transition-colors flex items-center justify-center gap-2 min-w-[110px] disabled:opacity-70 disabled:cursor-not-allowed ${
               isDestructive
                 ? "bg-rose-600 hover:bg-rose-700"
                 : "bg-blue-600 hover:bg-blue-700"
             }`}
           >
-            {isLoading ? "Đang xử lý..." : confirmText}
+            {isLoading ? (
+              <>
+                <Loader2 size={16} className="animate-spin" /> Đang xử lý...
+              </>
+            ) : (
+              confirmText
+            )}
           </button>
         </div>
       </div>

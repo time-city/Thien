@@ -5,7 +5,7 @@ import { Plus, Edit2, Trash2, X, Search, User as UserIcon, Phone, CheckSquare, S
 import { createStudent, updateStudent, deleteStudent, deleteStudents, getStudentDeletionImpact, importStudentsCsv } from "@/actions/mutations";
 import { StudentData, ClassData } from "@/actions/queries";
 import { toast } from "sonner";
-import ConfirmModal from "@/components/common/ConfirmModal";
+import { useConfirm } from "@/hooks/useconfirm"; // <-- Import hook mới
 import { useRouter } from "next/navigation";
 
 export default function StudentsClient({
@@ -16,6 +16,7 @@ export default function StudentsClient({
   classes: ClassData[];
 }) {
   const router = useRouter();
+  const { confirm } = useConfirm(); // <-- Khởi tạo hook
 
   // ====== STATE ======
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -34,11 +35,8 @@ export default function StudentsClient({
   // Selection
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
-  // Delete Confirm
-  const [isConfirmDeleteOpen, setIsConfirmDeleteOpen] = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState<{ type: "single" | "multiple", id?: string, name?: string } | null>(null);
+  // Delete State
   const [isCheckingImpact, setIsCheckingImpact] = useState<string | null>(null);
-  const [impactData, setImpactData] = useState<any>(null);
 
   // Filters & Pagination
   const [search, setSearch] = useState("");
@@ -190,18 +188,55 @@ export default function StudentsClient({
     setSelectedIds(newSet);
   };
 
-  // ====== XÓA ======
+  // ====== XÓA GỌI GLOBAL CONFIRM ======
   const confirmDeleteSingle = async (id: string, name: string) => {
     setIsCheckingImpact(id);
     try {
       const res = await getStudentDeletionImpact(id);
-      if (res.success) {
-        setImpactData(res.impact);
-        setDeleteTarget({ type: "single", id, name });
-        setIsConfirmDeleteOpen(true);
-      } else {
+      if (!res.success) {
         toast.error(res.error || "Lỗi kiểm tra dữ liệu.");
+        return;
       }
+
+      const impact = res.impact || { enrollmentCount: 0, paymentCount: 0, attendanceCount: 0 };
+      const isSafe = impact?.enrollmentCount === 0 && impact.paymentCount === 0 && impact.attendanceCount === 0;
+      
+      confirm({
+        title: "Xóa Học Sinh",
+        message: (
+          <div className="space-y-3">
+            <p>Bạn có chắc chắn muốn xóa <strong>{name}</strong>?</p>
+            {isSafe ? (
+              <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-emerald-700 text-[13px] leading-relaxed">
+                <strong>✅ Dữ liệu an toàn:</strong> Học sinh này chưa có lịch sử ghi danh, thanh toán hay điểm danh. Bạn có thể xóa an toàn.
+              </div>
+            ) : (
+              <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg text-rose-700 text-[13px] leading-relaxed">
+                <strong>⚠️ CẢNH BÁO NGHIÊM TRỌNG:</strong> Xóa học sinh này sẽ làm mất:
+                <ul className="list-disc pl-5 mt-2 space-y-1 mb-2 font-medium">
+                  {impact.enrollmentCount > 0 && <li>{impact.enrollmentCount} bản ghi danh</li>}
+                  {impact.paymentCount > 0 && <li>{impact.paymentCount} lịch sử thanh toán</li>}
+                  {impact.attendanceCount > 0 && <li>{impact.attendanceCount} lịch sử điểm danh</li>}
+                </ul>
+                Hành động này <strong>KHÔNG THỂ hoàn tác!</strong>
+              </div>
+            )}
+          </div>
+        ),
+        confirmText: "Vẫn Xóa Dữ Liệu",
+        cancelText: "Hủy bỏ",
+        isDestructive: true,
+        onConfirm: async () => {
+          const deleteRes = await deleteStudent(id);
+          if (deleteRes.success) {
+            toast.success("Xóa thành công!");
+            router.refresh();
+          } else {
+            toast.error(deleteRes.error || "Lỗi xóa");
+          }
+        },
+      });
+
     } catch {
       toast.error("Lỗi khi kiểm tra dữ liệu ảnh hưởng.");
     } finally {
@@ -211,36 +246,31 @@ export default function StudentsClient({
 
   const confirmDeleteMultiple = () => {
     if (selectedIds.size === 0) return;
-    setImpactData(null); 
-    setDeleteTarget({ type: "multiple" });
-    setIsConfirmDeleteOpen(true);
-  };
 
-  const executeDelete = async () => {
-    if (!deleteTarget) return;
-    setLoading(true);
-
-    if (deleteTarget.type === "single" && deleteTarget.id) {
-      const res = await deleteStudent(deleteTarget.id);
-      if (res.success) {
-        toast.success("Xóa thành công!");
-        router.refresh();
-      } else {
-        toast.error(res.error || "Lỗi xóa");
-      }
-    } else if (deleteTarget.type === "multiple") {
-      const res = await deleteStudents(Array.from(selectedIds));
-      if (res.success) {
-        toast.success(`Đã xóa ${selectedIds.size} học sinh!`);
-        setSelectedIds(new Set());
-        router.refresh();
-      } else {
-        toast.error(res.error || "Lỗi xóa nhiều");
-      }
-    }
-    
-    setIsConfirmDeleteOpen(false);
-    setLoading(false);
+    confirm({
+      title: "Xóa Nhiều Học Sinh",
+      message: (
+        <div className="space-y-3">
+          <p>Bạn có chắc chắn muốn xóa <strong>{selectedIds.size} học sinh đã chọn</strong>?</p>
+          <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg text-rose-700 text-[13px] leading-relaxed">
+            <strong>⚠️ CẢNH BÁO:</strong> Xóa nhiều học sinh có thể làm mất dữ liệu ghi danh, điểm danh và thanh toán liên quan của các học sinh này.
+          </div>
+        </div>
+      ),
+      confirmText: "Vẫn Xóa Dữ Liệu",
+      cancelText: "Hủy bỏ",
+      isDestructive: true,
+      onConfirm: async () => {
+        const res = await deleteStudents(Array.from(selectedIds));
+        if (res.success) {
+          toast.success(`Đã xóa ${selectedIds.size} học sinh!`);
+          setSelectedIds(new Set());
+          router.refresh();
+        } else {
+          toast.error(res.error || "Lỗi xóa nhiều");
+        }
+      },
+    });
   };
 
   // ====== FILTER & PAGINATION ======
@@ -294,7 +324,7 @@ export default function StudentsClient({
                 <Trash2 size={18} /> Xóa ({selectedIds.size})
               </button>
             )}
-            <label className="transition-all cursor-pointer  hover:bg-emerald-100 text-emerald-700 px-5 py-2.5 rounded-xl font-bold text-sm shadow-sm flex items-center gap-2 transition-all cursor-pointer border border-emerald-200">
+            <label className="transition-all cursor-pointer  hover:bg-emerald-100 text-emerald-700 px-5 py-2.5 rounded-xl font-bold text-sm shadow-sm flex items-center gap-2 border border-emerald-200">
               <Upload size={18} strokeWidth={3} /> Import CSV
               <input type="file" accept=".csv" className="hidden" onChange={handleFileUpload} />
             </label>
@@ -604,47 +634,6 @@ export default function StudentsClient({
           </div>
         </div>
       )}
-
-      {/* Confirm Delete */}
-      <ConfirmModal
-        isOpen={isConfirmDeleteOpen}
-        onClose={() => !loading && setIsConfirmDeleteOpen(false)}
-        onConfirm={executeDelete}
-        title={deleteTarget?.type === "single" ? "Xóa Học Sinh" : "Xóa Nhiều Học Sinh"}
-        message={
-          <div className="space-y-3">
-            <p>
-              Bạn có chắc chắn muốn xóa {deleteTarget?.type === "single" ? <strong>{deleteTarget.name}</strong> : <strong>{selectedIds.size} học sinh đã chọn</strong>}?
-            </p>
-            {impactData && (
-              impactData.enrollmentCount === 0 && impactData.paymentCount === 0 && impactData.attendanceCount === 0 ? (
-                <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-emerald-700 text-[13px] leading-relaxed">
-                  <strong>✅ Dữ liệu an toàn:</strong> Học sinh này chưa có lịch sử ghi danh, thanh toán hay điểm danh. Bạn có thể xóa an toàn.
-                </div>
-              ) : (
-                <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg text-rose-700 text-[13px] leading-relaxed">
-                  <strong>⚠️ CẢNH BÁO NGHIÊM TRỌNG:</strong> Xóa học sinh này sẽ làm mất:
-                  <ul className="list-disc pl-5 mt-2 space-y-1 mb-2 font-medium">
-                    {impactData.enrollmentCount > 0 && <li>{impactData.enrollmentCount} bản ghi danh</li>}
-                    {impactData.paymentCount > 0 && <li>{impactData.paymentCount} lịch sử thanh toán</li>}
-                    {impactData.attendanceCount > 0 && <li>{impactData.attendanceCount} lịch sử điểm danh</li>}
-                  </ul>
-                  Hành động này <strong>KHÔNG THỂ hoàn tác!</strong>
-                </div>
-              )
-            )}
-            {deleteTarget?.type === "multiple" && (
-              <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg text-rose-700 text-[13px] leading-relaxed">
-                  <strong>⚠️ CẢNH BÁO:</strong> Xóa nhiều học sinh có thể làm mất dữ liệu ghi danh, điểm danh và thanh toán liên quan của các học sinh này.
-              </div>
-            )}
-          </div>
-        }
-        confirmText="Vẫn Xóa Dữ Liệu"
-        cancelText="Hủy bỏ"
-        isDestructive={true}
-        isLoading={loading}
-      />
     </div>
   );
 }

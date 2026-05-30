@@ -5,7 +5,7 @@ import { Plus, Edit2, Trash2, X, BookOpen, Tag, DollarSign, CalendarDays, Layers
 import { createClass, updateClass, deleteClass, createSubject, updateSubject, deleteSubject, getSubjectDeletionImpact, getClassDeletionImpact } from "@/actions/mutations";
 import { ClassData } from "@/actions/queries";
 import { toast } from "sonner";
-import ConfirmModal from "@/components/common/ConfirmModal";
+import { useConfirm } from "@/hooks/useconfirm"; // <-- Import hook xịn xò
 import { useRouter } from "next/navigation";
 
 type Subject = {
@@ -42,12 +42,10 @@ export default function ClassesClient({
   const [pricePerSession, setPricePerSession] = useState<number>(0);
   const [sessionsPerPackage, setSessionsPerPackage] = useState<number>(12);
 
-  // ====== STATE CHUNG ======
+  // ====== STATE CHUNG & HOOK ======
   const [loading, setLoading] = useState(false);
-  const [isConfirmDeleteOpen, setIsConfirmDeleteOpen] = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState<{ type: "class" | "subject", id: string, name: string } | null>(null);
-  const [isCheckingImpact, setIsCheckingImpact] = useState<string | null>(null); // store ID being checked
-  const [impactData, setImpactData] = useState<any>(null);
+  const [isCheckingImpact, setIsCheckingImpact] = useState<string | null>(null);
+  const { confirm } = useConfirm(); // <-- Khởi tạo hook
 
   // ====== HANDLERS LỚP HỌC ======
   const openAddClassModal = () => {
@@ -148,61 +146,91 @@ export default function ClassesClient({
     setLoading(false);
   };
 
-  // ====== HANDLER XÓA CHUNG (CONFIRM MODAL) ======
+  // ====== HANDLER XÓA KẾT HỢP GLOBAL CONFIRM ======
   const confirmDelete = async (type: "class" | "subject", id: string, name: string) => {
-    setIsCheckingImpact(id);
+    setIsCheckingImpact(id); // Bật loading spinner tại nút bấm
     try {
-      if (type === "class") {
-        const res = await getClassDeletionImpact(id);
-        if (res.success) {
-          setImpactData(res.impact);
-          setDeleteTarget({ type, id, name });
-          setIsConfirmDeleteOpen(true);
-        } else {
-          toast.error(res.error || "Không thể kiểm tra dữ liệu liên quan.");
-        }
-      } else {
-        const res = await getSubjectDeletionImpact(id);
-        if (res.success) {
-          setImpactData(res.impact);
-          setDeleteTarget({ type, id, name });
-          setIsConfirmDeleteOpen(true);
-        } else {
-          toast.error(res.error || "Không thể kiểm tra dữ liệu liên quan.");
-        }
+      const res = type === "class" ? await getClassDeletionImpact(id) : await getSubjectDeletionImpact(id);
+      
+      if (!res.success) {
+        toast.error(res.error || "Không thể kiểm tra dữ liệu liên quan.");
+        return;
       }
+
+      const impactData = res.impact as any ;
+      let totalImpact = 0;
+      if (type === "subject") {
+        totalImpact = impactData.classCount + impactData.enrollmentCount + impactData.sessionCount;
+      } else {
+        totalImpact = impactData.classTeacherCount + impactData.enrollmentCount + impactData.sessionCount + impactData.paymentCount;
+      }
+
+      // Khởi tạo giao diện cảnh báo để truyền vào Modal
+    const impactMessage = (
+        <div className="space-y-3">
+          <p>Bạn có chắc chắn muốn xóa <strong>{name}</strong> không?</p>
+          {totalImpact === 0 ? (
+            <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-emerald-700 text-[13px] leading-relaxed">
+              <strong>✅ Dữ liệu an toàn:</strong> {type === "subject" ? "Môn học" : "Lớp học"} này hiện chưa có bất kỳ dữ liệu ràng buộc nào. Bạn có thể xóa an toàn.
+            </div>
+          ) : (
+            <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg text-rose-700 text-[13px] leading-relaxed">
+              <strong>⚠️ CẢNH BÁO NGHIÊM TRỌNG:</strong> Việc xóa sẽ tự động làm mất:
+              <ul className="list-disc pl-5 mt-2 space-y-1 mb-2 font-medium">
+                {type === "subject" ? (
+                  <>
+                    {impactData?.classCount > 0 && <li>{impactData.classCount} lớp học</li>}
+                    {impactData?.enrollmentCount > 0 && <li>{impactData.enrollmentCount} học sinh ghi danh</li>}
+                    {impactData?.sessionCount > 0 && <li>{impactData.sessionCount} lịch dạy</li>}
+                  </>
+                ) : (
+                  <>
+                    {impactData?.classTeacherCount > 0 && <li>{impactData.classTeacherCount} giáo viên được phân công</li>}
+                    {impactData?.enrollmentCount > 0 && <li>{impactData.enrollmentCount} học sinh ghi danh</li>}
+                    {impactData?.sessionCount > 0 && <li>{impactData.sessionCount} lịch dạy</li>}
+                    {impactData?.paymentCount > 0 && <li>{impactData.paymentCount} lịch sử thanh toán</li>}
+                  </>
+                )}
+              </ul>
+              Hành động này <strong>KHÔNG THỂ hoàn tác!</strong>
+            </div>
+          )}
+        </div>
+      );
+
+      // Gọi Global Modal
+      confirm({
+        title: `Xóa ${type === "class" ? "Lớp Học" : "Môn Học"}`,
+        message: impactMessage,
+        confirmText: "Vẫn Xóa Dữ Liệu",
+        cancelText: "Hủy bỏ",
+        isDestructive: true,
+        onConfirm: async () => {
+          if (type === "class") {
+            const deleteRes = await deleteClass(id);
+            if (deleteRes?.success) {
+              toast.success("Đã xóa lớp học thành công!");
+              setClasses(prev => prev.filter(c => c.id !== id));
+            } else {
+              toast.error(deleteRes?.error || "Lỗi xóa lớp học");
+            }
+          } else {
+            const deleteRes = await deleteSubject(id);
+            if (deleteRes?.success) {
+              toast.success("Đã xóa môn học thành công!");
+              setLocalSubjects(prev => prev.filter(s => s.id !== id));
+            } else {
+              toast.error(deleteRes?.error || "Không thể xóa môn học đang có lớp hoạt động.");
+            }
+          }
+        }
+      });
+
     } catch (error) {
       toast.error("Lỗi khi kiểm tra dữ liệu ảnh hưởng.");
     } finally {
-      setIsCheckingImpact(null);
+      setIsCheckingImpact(null); // Tắt loading spinner ở nút bấm
     }
-  };
-
-  const executeDelete = async () => {
-    if (!deleteTarget) return;
-    setLoading(true);
-
-    if (deleteTarget.type === "class") {
-      const res = await deleteClass(deleteTarget.id);
-      if (res?.success) {
-        toast.success("Đã xóa lớp học thành công!");
-        setClasses(classes.filter(c => c.id !== deleteTarget.id));
-      } else {
-        toast.error(res?.error || "Lỗi xóa lớp học");
-      }
-    } else {
-      const res = await deleteSubject(deleteTarget.id);
-      if (res?.success) {
-        toast.success("Đã xóa môn học thành công!");
-        setLocalSubjects(localSubjects.filter(s => s.id !== deleteTarget.id));
-      } else {
-        toast.error(res?.error || "Không thể xóa môn học đang có lớp hoạt động.");
-      }
-    }
-    
-    setLoading(false);
-    setIsConfirmDeleteOpen(false);
-    setDeleteTarget(null);
   };
 
   return (
@@ -472,64 +500,6 @@ export default function ClassesClient({
           </div>
         </div>
       )}
-
-     {/* ================= MODAL XÁC NHẬN XÓA CHUNG ================= */}
-      <ConfirmModal
-        isOpen={isConfirmDeleteOpen}
-        onClose={() => !loading && setIsConfirmDeleteOpen(false)}
-        onConfirm={executeDelete}
-        title={`Xóa ${deleteTarget?.type === "class" ? "Lớp Học" : "Môn Học"}`}
-        message={
-          <div className="space-y-3">
-            <p>
-              Bạn có chắc chắn muốn xóa <strong>{deleteTarget?.name}</strong> không?
-            </p>
-            {impactData && (() => {
-              let totalImpact = 0;
-              if (deleteTarget?.type === "subject") {
-                totalImpact = impactData.classCount + impactData.enrollmentCount + impactData.sessionCount;
-              } else if (deleteTarget?.type === "class") {
-                totalImpact = impactData.classTeacherCount + impactData.enrollmentCount + impactData.sessionCount + impactData.paymentCount;
-              }
-
-              if (totalImpact === 0) {
-                return (
-                  <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-emerald-700 text-[13px] leading-relaxed">
-                    <strong>✅ Dữ liệu an toàn:</strong> {deleteTarget?.type === "subject" ? "Môn học" : "Lớp học"} này hiện chưa có bất kỳ dữ liệu ràng buộc nào. Bạn có thể xóa an toàn.
-                  </div>
-                );
-              }
-
-              return (
-                <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg text-rose-700 text-[13px] leading-relaxed">
-                  <strong>⚠️ CẢNH BÁO NGHIÊM TRỌNG:</strong> Việc xóa sẽ tự động làm mất:
-                  <ul className="list-disc pl-5 mt-2 space-y-1 mb-2 font-medium">
-                    {deleteTarget?.type === "subject" ? (
-                      <>
-                        {impactData.classCount > 0 && <li>{impactData.classCount} lớp học</li>}
-                        {impactData.enrollmentCount > 0 && <li>{impactData.enrollmentCount} học sinh ghi danh</li>}
-                        {impactData.sessionCount > 0 && <li>{impactData.sessionCount} lịch dạy</li>}
-                      </>
-                    ) : (
-                      <>
-                        {impactData.classTeacherCount > 0 && <li>{impactData.classTeacherCount} giáo viên được phân công</li>}
-                        {impactData.enrollmentCount > 0 && <li>{impactData.enrollmentCount} học sinh ghi danh</li>}
-                        {impactData.sessionCount > 0 && <li>{impactData.sessionCount} lịch dạy</li>}
-                        {impactData.paymentCount > 0 && <li>{impactData.paymentCount} lịch sử thanh toán</li>}
-                      </>
-                    )}
-                  </ul>
-                  Hành động này <strong>KHÔNG THỂ hoàn tác!</strong>
-                </div>
-              );
-            })()}
-          </div>
-        }
-        confirmText="Vẫn Xóa Dữ Liệu"
-        cancelText="Hủy bỏ"
-        isDestructive={true}
-        isLoading={loading}
-      />
     </div>
   );
 }

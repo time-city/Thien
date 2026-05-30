@@ -4,16 +4,15 @@ import { useMemo, useState } from "react";
 import {
   addDays,
   addWeeks,
-  endOfWeek,
   format,
   isSameDay,
   startOfWeek,
 } from "date-fns";
 import Link from "next/link";
-import { MapPin, Trash2, CheckSquare, XSquare } from "lucide-react";
+import { MapPin, Trash2, CheckSquare, XSquare, ChevronLeft, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 import { deleteBulkSchedules } from "@/actions/schedule";
-import ConfirmModal from "@/components/common/ConfirmModal"; // Path chuẩn của ông
+import { useConfirm } from "@/hooks/useconfirm"; 
 
 const SHIFTS = [
   { id: 1, label: "Ca 1", time: "07:30 - 09:00" },
@@ -78,30 +77,23 @@ function dayOfWeekMon1Sun7(date: Date): number {
 
 export default function WeeklyCalendar({ userRole, sessions }: WeeklyCalendarProps) {
   const [currentDate, setCurrentDate] = useState<Date>(() => new Date());
-  
-  // STATE MỚI CHO CHỨC NĂNG XÓA HÀNG LOẠT
   const [isSelectMode, setIsSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  
-  // State xử lý Modal Confirm
-  const [isDeleting, setIsDeleting] = useState(false);
-  const [isConfirmDeleteOpen, setIsConfirmDeleteOpen] = useState(false);
+  const { confirm } = useConfirm();
+  const [isDeleting, setIsDeleting] = useState(false); 
 
   const { startOfThisWeek } = useMemo(() => {
-    const startOfThisWeek = startOfWeek(currentDate, { weekStartsOn: 1 });
-    return { startOfThisWeek };
+    return { startOfThisWeek: startOfWeek(currentDate, { weekStartsOn: 1 }) };
   }, [currentDate]);
 
   const conflictCounts = useMemo(() => {
     const map = new Map<string, number>();
-
     for (const s of sessions) {
       const dateISO = toISODate(s.date);
       const room = `Phòng ${((s.slot + s.className.length) % 4) + 1}`;
       const key = `${dateISO}|${s.slot}|${room}`;
       map.set(key, (map.get(key) ?? 0) + 1);
     }
-
     return map;
   }, [sessions]);
 
@@ -112,10 +104,9 @@ export default function WeeklyCalendar({ userRole, sessions }: WeeklyCalendarPro
 
   const isAdmin = userRole === "SUPER_ADMIN";
 
-  // LOGIC XỬ LÝ CHỌN / HỦY CHỌN
   const toggleSelectMode = () => {
     setIsSelectMode(!isSelectMode);
-    setSelectedIds(new Set()); // Reset danh sách chọn khi tắt/bật
+    setSelectedIds(new Set()); 
   };
 
   const toggleSelection = (id: string) => {
@@ -127,95 +118,109 @@ export default function WeeklyCalendar({ userRole, sessions }: WeeklyCalendarPro
     });
   };
   
-  // LOGIC XÓA LỊCH BẰNG MODAL CONFIRM
   const handleDeleteClick = () => {
     if (selectedIds.size === 0) return;
-    setIsConfirmDeleteOpen(true); // Mở modal xác nhận
-  };
 
-  const executeDelete = async () => {
-    setIsDeleting(true);
-    const result = await deleteBulkSchedules(Array.from(selectedIds));
-    setIsDeleting(false);
-    setIsConfirmDeleteOpen(false); // Đóng modal
+    confirm({
+      title: "Xác nhận xóa lịch dạy",
+      message: (
+        <>
+          Bạn có chắc chắn muốn xóa <strong>{selectedIds.size} ca học</strong> đã chọn không? Hành động này sẽ xóa hoàn toàn dữ liệu điểm danh liên quan và không thể hoàn tác.
+        </>
+      ),
+      confirmText: "Xóa dữ liệu",
+      cancelText: "Hủy bỏ",
+      isDestructive: true,
+      onConfirm: async () => {
+        setIsDeleting(true);
+        const result = await deleteBulkSchedules(Array.from(selectedIds));
+        setIsDeleting(false);
 
-    if (result.success) {
-      toast.success(`Đã xóa thành công ${selectedIds.size} ca học!`);
-      setSelectedIds(new Set());
-      setIsSelectMode(false);
-    } else {
-      toast.error(result.error || "Xóa thất bại!");
-    }
+        if (result.success) {
+          toast.success(`Đã xóa thành công ${selectedIds.size} ca học!`);
+          setSelectedIds(new Set());
+          setIsSelectMode(false);
+        } else {
+          toast.error(result.error || "Xóa thất bại!");
+        }
+      },
+    });
   };
 
   return (
-    <div className="p-4 md:p-6 max-w-7xl mx-auto overflow-x-auto">
-      <div className="mb-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="flex items-center gap-4">
-          <h1 className="text-xl font-extrabold tracking-tight text-slate-900 leading-none">
+    <div className="p-3 md:p-6 w-full mx-auto">
+      {/* HEADER SECTION */}
+      <div className="mb-6 flex flex-col xl:flex-row xl:items-center justify-between gap-4">
+        
+        {/* Title & Week Info */}
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+          <h1 className="text-xl md:text-2xl font-extrabold tracking-tight text-slate-900 leading-none">
             Quản Lý Lịch Dạy
           </h1>
-          <div className="text-[13px] font-bold text-slate-700 bg-slate-100 px-2 py-1 rounded-md">
-            Tuần: {weekTitle}
+          <div className="inline-flex items-center gap-1.5 text-sm font-bold text-slate-700 bg-white border border-slate-200 px-3 py-1.5 rounded-lg shadow-sm">
+            <span className="text-slate-400">Tuần:</span> {weekTitle}
           </div>
         </div>
 
-        <div className="flex items-center gap-2 flex-wrap">
-          <button
-            type="button"
-            onClick={() => setCurrentDate((d) => addWeeks(d, -1))}
-            className="h-8 px-3 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-bold text-[13px]"
-            disabled={isSelectMode}
-          >
-           Tuần trước
-          </button>
+        {/* Controls */}
+        <div className="flex flex-wrap items-center gap-2">
+          
+          {/* Navigation */}
+          <div className="flex items-center bg-white border border-slate-200 rounded-lg p-1 shadow-sm">
+             <button
+              onClick={() => setCurrentDate((d) => addWeeks(d, -1))}
+              disabled={isSelectMode}
+              className="p-1.5 rounded hover:bg-slate-100 text-slate-600 disabled:opacity-50 transition-colors"
+              title="Tuần trước"
+            >
+             <ChevronLeft size={18} />
+            </button>
+            <button
+              onClick={() => setCurrentDate(new Date())}
+              disabled={isSelectMode}
+              className="px-3 py-1.5 text-[13px] font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50 transition-colors"
+            >
+              Hôm nay
+            </button>
+             <button
+              onClick={() => setCurrentDate((d) => addWeeks(d, 1))}
+              disabled={isSelectMode}
+              className="p-1.5 rounded hover:bg-slate-100 text-slate-600 disabled:opacity-50 transition-colors"
+               title="Tuần sau"
+            >
+              <ChevronRight size={18} />
+            </button>
+          </div>
 
-          <button
-            type="button"
-            onClick={() => setCurrentDate(new Date())}
-            className="h-8 px-3 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-bold text-[13px]"
-            disabled={isSelectMode}
-          >
-            Hôm nay
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setCurrentDate((d) => addWeeks(d, 1))}
-            className="h-8 px-3 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-bold text-[13px]"
-            disabled={isSelectMode}
-          >
-            Tuần sau
-          </button>
-
-          {/* CÁC NÚT DÀNH RIÊNG CHO CHẾ ĐỘ XÓA NỀN ADMIN */}
+          {/* Admin Actions */}
           {isAdmin && (
-            <div className="flex items-center gap-2 ml-2 pl-2 border-l border-slate-200">
+            <div className="flex items-center gap-2">
               {isSelectMode ? (
                 <>
                   <button
                     onClick={toggleSelectMode}
-                    className="h-8 px-3 flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold text-[13px] transition-colors"
+                    className="h-[34px] px-3 flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold text-[13px] transition-colors"
                   >
-                    <XSquare size={14} /> Hủy chọn
+                    <XSquare size={14} /> <span className="hidden sm:inline">Hủy chọn</span>
                   </button>
                   {selectedIds.size > 0 && (
                     <button
                       onClick={handleDeleteClick}
                       disabled={isDeleting}
-                      className="h-8 px-3 flex items-center gap-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 disabled:bg-rose-400 text-white font-bold text-[13px] shadow-sm transition-colors"
+                      className="h-[34px] px-3 flex items-center gap-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 disabled:bg-rose-400 text-white font-bold text-[13px] shadow-sm transition-colors"
                     >
                       <Trash2 size={14} /> 
-                      {isDeleting ? "Đang xử lý..." : `Xóa (${selectedIds.size})`}
+                      {isDeleting ? "Đang xử lý..." : <span className="hidden sm:inline">{`Xóa (${selectedIds.size})`}</span>}
+                      {!isDeleting && <span className="sm:hidden">{selectedIds.size}</span>}
                     </button>
                   )}
                 </>
               ) : (
                 <button
                   onClick={toggleSelectMode}
-                  className="h-8 px-3 flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 text-slate-700 font-bold text-[13px] transition-colors"
+                  className="h-[34px] px-3 flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 text-slate-700 font-bold text-[13px] shadow-sm transition-colors"
                 >
-                  <CheckSquare size={14} /> Chọn nhiều
+                  <CheckSquare size={14} /> <span className="hidden sm:inline">Chọn nhiều</span>
                 </button>
               )}
             </div>
@@ -223,156 +228,151 @@ export default function WeeklyCalendar({ userRole, sessions }: WeeklyCalendarPro
         </div>
       </div>
 
-      {/* BẢNG LỊCH */}
-      <div className={`min-w-[900px] border rounded-xl bg-white shadow-sm overflow-hidden transition-colors ${isSelectMode ? "border-blue-400 ring-2 ring-blue-100" : "border-slate-200"}`}>
-        <div className="grid grid-cols-[140px_repeat(7,1fr)] bg-slate-50 border-b border-slate-200">
-          <div className="p-3 border-r border-slate-200 flex items-center justify-center font-bold text-slate-600 text-[13px]">
-            Ca học
+      {/* CALENDAR GRID CONTAINER 
+        - Sử dụng overflow-x-auto để có thể cuộn ngang trên màn hình nhỏ.
+        - Đặt max-width hoặc để full width tùy layout tổng thể.
+      */}
+      <div className={`w-full overflow-x-auto border rounded-xl bg-white shadow-sm transition-colors scrollbar-thin scrollbar-thumb-slate-300 scrollbar-track-slate-100 ${isSelectMode ? "border-blue-400 ring-2 ring-blue-100" : "border-slate-200"}`}>
+        
+        {/* Đặt min-width để ép cái bảng không bị co dúm lại, đảm bảo các ô luôn có kích thước dễ đọc */}
+        <div className="min-w-[900px]">
+          
+          {/* HEADER ROW (Các ngày trong tuần) */}
+          <div className="grid grid-cols-[80px_repeat(7,1fr)] sm:grid-cols-[100px_repeat(7,1fr)] bg-slate-50 border-b border-slate-200">
+            <div className="p-2 sm:p-3 border-r border-slate-200 flex items-center justify-center font-bold text-slate-500 text-[11px] sm:text-[13px] uppercase tracking-wider">
+              Ca học
+            </div>
+
+            {DAYS.map((d) => {
+              const dateForCol = addDays(startOfThisWeek, d.id - 1);
+              const isToday = isSameDay(dateForCol, new Date());
+              return (
+                <div
+                  key={d.id}
+                  className={`p-2 border-r border-slate-200 last:border-r-0 text-center flex flex-col justify-center items-center leading-tight gap-0.5 ${
+                    isToday ? "bg-blue-50/50" : ""
+                  }`}
+                >
+                  <div className={`font-extrabold text-[12px] sm:text-[13px] ${isToday ? "text-blue-700" : "text-slate-900"}`}>
+                    {d.id <= 6 ? `Thứ ${d.id + 1}` : "Chủ Nhật"}
+                  </div>
+                  <div className={`text-[11px] font-semibold ${isToday ? "text-blue-500" : "text-slate-500"}`}>
+                    {format(dateForCol, "dd/MM")}
+                  </div>
+                </div>
+              );
+            })}
           </div>
 
-          {DAYS.map((d) => {
-            const dateForCol = addDays(startOfThisWeek, d.id - 1);
-            const isToday = isSameDay(dateForCol, new Date());
-            return (
+          {/* BODY ROWS (Các ca học) */}
+          <div>
+            {SHIFTS.map((shift) => (
               <div
-                key={d.id}
-                className={`p-2 border-r border-slate-200 last:border-r-0 text-center flex flex-col justify-center items-center leading-tight gap-0.5 ${
-                  isToday ? "bg-blue-50" : ""
-                }`}
+                key={shift.id}
+                className="grid grid-cols-[80px_repeat(7,1fr)] sm:grid-cols-[100px_repeat(7,1fr)] border-b border-slate-200 last:border-b-0"
               >
-                <div className="font-extrabold text-slate-900 text-[13px]">
-                  {`Thứ ${d.id <= 6 ? d.id + 0 : "CN"}`}
+                {/* Cột thời gian của ca học */}
+                <div className="p-2 border-r border-slate-200 bg-slate-50/30 flex flex-col justify-center items-center gap-0.5">
+                  <span className="font-bold text-slate-800 text-[12px] sm:text-[13px] leading-tight">{shift.label}</span>
+                  <span className="text-[10px] sm:text-[11px] text-slate-500 font-medium leading-tight text-center">{shift.time}</span>
                 </div>
-                <div className="text-[11px] text-slate-500 font-semibold">
-                  {format(dateForCol, "dd/MM")}
-                </div>
-              </div>
-            );
-          })}
-        </div>
 
-        <div>
-          {SHIFTS.map((shift) => (
-            <div
-              key={shift.id}
-              className="grid grid-cols-[140px_repeat(7,1fr)] border-b border-slate-200 last:border-b-0"
-            >
-              <div className="p-2 border-r border-slate-200 bg-slate-50/50 flex flex-col justify-center items-center gap-0">
-                <span className="font-bold text-slate-800 text-[13px] leading-tight">{shift.label}</span>
-                <span className="text-[11px] text-slate-500 font-medium leading-tight">{shift.time}</span>
-              </div>
+                {/* Các ô (Cells) chứa lớp học tương ứng với ngày và ca */}
+                {DAYS.map((day) => {
+                  const dateForCell = addDays(startOfThisWeek, day.id - 1);
+                  const dateISO = toISODate(dateForCell);
+                  const isToday = isSameDay(dateForCell, new Date());
 
-              {DAYS.map((day) => {
-                const dateForCell = addDays(startOfThisWeek, day.id - 1);
-                const dateISO = toISODate(dateForCell);
+                  const cellSessions: CellSession[] = sessions
+                    .filter((s) => {
+                      const dISO = toISODate(s.date);
+                      const sDayId = dayOfWeekMon1Sun7(s.date);
+                      return dISO === dateISO && sDayId === day.id && s.slot === shift.id;
+                    })
+                    .map((s) => {
+                      const room = `Phòng ${((s.slot + s.className.length) % 4) + 1}`;
+                      const key = `${dateISO}|${s.slot}|${room}`;
+                      const attendanceConflict = (conflictCounts.get(key) ?? 0) > 1;
 
-                const cellSessions: CellSession[] = sessions
-                  .filter((s) => {
-                    const dISO = toISODate(s.date);
-                    const sDayId = dayOfWeekMon1Sun7(s.date);
-                    return dISO === dateISO && sDayId === day.id && s.slot === shift.id;
-                  })
-                  .map((s) => {
-                    const room = `Phòng ${((s.slot + s.className.length) % 4) + 1}`;
-                    const key = `${dateISO}|${s.slot}|${room}`;
-                    const attendanceConflict = (conflictCounts.get(key) ?? 0) > 1;
+                      return {
+                        id: s.id,
+                        classId: s.classId,
+                        className: s.className,
+                        teacherFullName: s.teacherFullName,
+                        room,
+                        dateISO,
+                        slot: s.slot,
+                        attendanceConflict,
+                        teacherId: s.teacherId,
+                      };
+                    })
+                    .sort((a, b) => a.className.localeCompare(b.className));
 
-                    return {
-                      id: s.id,
-                      classId: s.classId,
-                      className: s.className,
-                      teacherFullName: s.teacherFullName,
-                      room,
-                      dateISO,
-                      slot: s.slot,
-                      attendanceConflict,
-                      teacherId: s.teacherId,
-                    };
-                  })
-                  .sort((a, b) => a.className.localeCompare(b.className));
+                  return (
+                    <div
+                      key={day.id}
+                      className={`p-1.5 border-r border-slate-100 last:border-r-0 min-h-[80px] ${isToday ? "bg-blue-50/20" : ""}`}
+                    >
+                      {cellSessions.length === 0 ? (
+                        // Render vùng trống đứt nét mờ nhẹ khi không có lớp
+                        <div className="h-full min-h-[60px] rounded border border-transparent hover:border-slate-200 hover:bg-slate-50/50 transition-colors" />
+                      ) : (
+                        <div className="flex flex-col gap-1.5 h-full">
+                          {cellSessions.map((ev) => {
+                            const isSelected = selectedIds.has(ev.id);
+                            
+                            const cardStyle = `p-1.5 sm:p-2 rounded-lg border text-[10px] sm:text-[11px] leading-snug shadow-sm flex flex-col gap-0.5 relative transition-all duration-200 ${
+                              isSelectMode ? "cursor-pointer hover:scale-[1.02]" : "hover:shadow-md hover:-translate-y-0.5"
+                            } ${
+                              isSelected
+                                ? "bg-blue-600 border-blue-600 text-white z-10 shadow-blue-500/30"
+                                : ev.attendanceConflict
+                                ? "border-rose-300 bg-rose-50 text-rose-900"
+                                : "border-slate-200 bg-white text-slate-700"
+                            }`;
 
-                return (
-                  <div
-                    key={day.id}
-                    className="p-1.5 border-r last:border-r-0 border-slate-100 min-h-[70px]"
-                  >
-                    {cellSessions.length === 0 ? (
-                      <div className="h-full min-h-[50px] rounded-lg bg-transparent border border-dashed border-slate-200" />
-                    ) : (
-                      <div className="flex flex-col gap-1.5">
-                        {cellSessions.map((ev) => {
-                          const isSelected = selectedIds.has(ev.id);
-                          
-                          // Style của thẻ dựa vào trạng thái Chọn / Lỗi đụng phòng / Bình thường
-                          const cardStyle = `p-1.5 rounded border text-[11px] leading-tight shadow-sm flex flex-col gap-0.5 relative transition-all ${
-                            isSelectMode ? "cursor-pointer hover:ring-2 hover:ring-blue-300" : "hover:shadow-md"
-                          } ${
-                            isSelected
-                              ? "bg-blue-100 border-blue-500 ring-2 ring-blue-600 z-10"
-                              : ev.attendanceConflict
-                              ? "border-rose-500 bg-rose-50 text-rose-900"
-                              : "border-blue-200 bg-blue-50 text-blue-700"
-                          }`;
-
-                          const content = (
-                            <>
-                              <div className="flex items-center justify-between">
-                                <span className={`font-extrabold line-clamp-1 text-[12px] ${isSelected ? "text-blue-900" : ""}`}>
-                                  {ev.className}
+                            const content = (
+                              <>
+                                <div className="flex items-start justify-between gap-1">
+                                  <span className={`font-extrabold line-clamp-2 ${isSelected ? "text-white" : "text-slate-900"}`}>
+                                    {ev.className}
+                                  </span>
+                                </div>
+                                <span className={`font-semibold flex items-center gap-1 mt-0.5 ${isSelected ? "text-blue-100" : ev.attendanceConflict ? "text-rose-600" : "text-blue-600"}`}>
+                                  <MapPin size={10} strokeWidth={2.5} className="shrink-0" /> {ev.room}
                                 </span>
-                              </div>
-                              <span className={`font-semibold flex items-center gap-1 ${isSelected ? "text-blue-800" : ev.attendanceConflict ? "text-rose-700" : "text-blue-600"}`}>
-                                <MapPin size={10} strokeWidth={2.5} /> {ev.room.replace(/^Phòng\s+/i, "")}
-                              </span>
-                              <span className={`border-t pt-0.5 mt-0.5 line-clamp-1 ${isSelected ? "border-blue-300 text-blue-800" : "border-blue-200/50 text-blue-600/80"}`}>
-                                {ev.teacherFullName.replace(/^(Thầy|Cô)\s+/i, "")}
-                              </span>
-                            </>
-                          );
-
-                          // Nếu đang ở Mode Chọn -> Render Thẻ div có onClick
-                          if (isSelectMode) {
-                            return (
-                              <div key={ev.id} onClick={() => toggleSelection(ev.id)} className={cardStyle}>
-                                {content}
-                              </div>
+                                <span className={`border-t pt-1 mt-1 line-clamp-1 font-medium ${isSelected ? "border-blue-400/50 text-blue-100" : "border-slate-100 text-slate-500"}`}>
+                                  {ev.teacherFullName}
+                                </span>
+                              </>
                             );
-                          }
 
-                          // Nếu ở Mode xem bình thường -> Render Thẻ Link để bấm qua Sơ đồ lớp
-                          const href = `/ta/?classId=${encodeURIComponent(ev.classId)}&sessionId=${encodeURIComponent(ev.id)}&date=${encodeURIComponent(ev.dateISO)}`;
-                          return (
-                            <Link key={ev.id} href={href} className={cardStyle}>
-                              {content}
-                            </Link>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          ))}
+                            if (isSelectMode) {
+                              return (
+                                <div key={ev.id} onClick={() => toggleSelection(ev.id)} className={cardStyle}>
+                                  {content}
+                                </div>
+                              );
+                            }
+
+                            const href = `/ta/?classId=${encodeURIComponent(ev.classId)}&sessionId=${encodeURIComponent(ev.id)}&date=${encodeURIComponent(ev.dateISO)}`;
+                            return (
+                              <Link key={ev.id} href={href} className={cardStyle}>
+                                {content}
+                              </Link>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+
         </div>
       </div>
-
-      {/* Modal Xác nhận Xóa Hàng Loạt */}
-      <ConfirmModal
-        isOpen={isConfirmDeleteOpen}
-        onClose={() => !isDeleting && setIsConfirmDeleteOpen(false)}
-        onConfirm={executeDelete}
-        title="Xác nhận xóa lịch dạy"
-        message={
-          <>
-            Bạn có chắc chắn muốn xóa <strong>{selectedIds.size} ca học</strong> đã chọn không? Hành động này sẽ xóa hoàn toàn dữ liệu điểm danh liên quan và không thể hoàn tác.
-          </>
-        }
-        confirmText="Xóa dữ liệu"
-        cancelText="Hủy bỏ"
-        isDestructive={true}
-        isLoading={isDeleting}
-      />
     </div>
   );
 }

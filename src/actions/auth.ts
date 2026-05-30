@@ -22,14 +22,15 @@ export async function loginAction(formData: FormData) {
 
     // Force Next.js to re-evaluate server components with the new session.
     // (Choose the correct landing route for your app.)
-    return redirect("/dashboard");
+    return redirect("schedule");
   } catch (error) {
     if (error instanceof AuthError) {
+      console.error("Authentication error:", error);
       switch (error.type) {
         case "CredentialsSignin":
           return { error: "Tên đăng nhập hoặc mật khẩu không chính xác." };
         default:
-          return { error: "Đã xảy ra lỗi trong quá trình đăng nhập." };
+          return { error: "Tên đăng nhập hoặc mật khẩu không chính xác." };
       }
     }
     throw error;

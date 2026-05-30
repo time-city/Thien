@@ -9,26 +9,26 @@ export async function createBulkSchedule(data: {
   teacherId: string;
   patterns: { day: number; slot: number }[]; // Dữ liệu mới: Mảng chứa các ô lưới được chọn
   startDate: string;
-  weeks: number;
+  endDate: string;
 }) {
-  const { classId, teacherId, patterns, startDate, weeks } = data;
+  const { classId, teacherId, patterns, startDate, endDate } = data;
 
   if (patterns.length === 0) return { success: false, error: "Chưa chọn lịch dạy!" };
 
   const start = new Date(`${startDate}T00:00:00.000Z`);
-  const startDay = start.getUTCDay();
+  const end = new Date(`${endDate}T23:59:59.999Z`);
   const sessionsToCreate: Prisma.ClassSessionCreateManyInput[] = [];
   const datesToCheck: { date: Date; slot: number }[] = [];
 
-  // Quét vòng lặp theo số tuần và các ô lưới được chọn
-  for (let w = 0; w < weeks; w++) {
-    for (const pat of patterns) {
-      let diff = pat.day - startDay;
-      if (diff < 0) diff += 7;
+  // Quét vòng lặp theo khoảng ngày và các ô lưới được chọn
+  for (const pat of patterns) {
+    const current = new Date(start);
+    let diff = pat.day - current.getUTCDay();
+    if (diff < 0) diff += 7;
+    current.setUTCDate(current.getUTCDate() + diff);
 
-      const targetDate = new Date(start);
-      targetDate.setUTCDate(start.getUTCDate() + w * 7 + diff);
-
+    while (current <= end) {
+      const targetDate = new Date(current);
       datesToCheck.push({ date: targetDate, slot: pat.slot });
       sessionsToCreate.push({
         classId,
@@ -37,6 +37,8 @@ export async function createBulkSchedule(data: {
         slot: pat.slot,
         status: SessionStatus.SCHEDULED,
       });
+
+      current.setUTCDate(current.getUTCDate() + 7);
     }
   }
 
@@ -182,10 +184,9 @@ export async function deleteSchedule(
 }
 
 // thêm lịch học hàng loạt (dành cho SUPER_ADMIN)
-export async function getOccupiedPatterns(startDate: string, weeks: number) {
+export async function getOccupiedPatterns(startDate: string, endDate: string) {
   const start = new Date(`${startDate}T00:00:00.000Z`);
-  const end = new Date(start);
-  end.setUTCDate(end.getUTCDate() + weeks * 7);
+  const end = new Date(`${endDate}T23:59:59.999Z`);
 
   // Lấy tất cả các ca học nằm trong khoảng thời gian này
   const sessions = await prisma.classSession.findMany({

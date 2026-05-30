@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { Plus, X, Calendar as CalendarIcon, Users, Check, Ban } from "lucide-react";
 import { createBulkSchedule, getOccupiedPatterns } from "@/actions/schedule";
 import { toast } from "sonner";
-import ConfirmModal from "@/components/common/ConfirmModal"; // Đảm bảo import chuẩn path
+import { useConfirm } from "@/hooks/useconfirm";  // <-- Import hook mới
 
 type BulkScheduleModalProps = {
   classes: { id: string; name: string }[];
@@ -23,25 +23,29 @@ export default function BulkScheduleModal({ classes, teachers }: BulkScheduleMod
   const [classId, setClassId] = useState(classes[0]?.id || "");
   const [teacherId, setTeacherId] = useState(teachers[0]?.id || "");
   const [startDate, setStartDate] = useState(new Date().toISOString().split("T")[0]);
-  const [weeks, setWeeks] = useState(4);
+  const [endDate, setEndDate] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 28);
+    return d.toISOString().split("T")[0];
+  });
   
   const [selectedPatterns, setSelectedPatterns] = useState<SchedulePattern[]>([]);
   
-  // STATE MỚI: Chứa các ô đã bị chiếm và trạng thái đang quét
+  // STATE: Chứa các ô đã bị chiếm và trạng thái đang quét
   const [occupiedSlots, setOccupiedSlots] = useState<Set<string>>(new Set());
   const [isScanning, setIsScanning] = useState(false);
   
-  // STATE MỚI: Dành cho Modal Xác nhận
-  const [isConfirmCreateOpen, setIsConfirmCreateOpen] = useState(false);
+  // Khởi tạo Hook
+  const { confirm } = useConfirm();
 
-  // EFFECT QUÉT LỊCH: Chạy mỗi khi đổi Ngày bắt đầu hoặc Số tuần
+  // EFFECT QUÉT LỊCH: Chạy mỗi khi đổi Ngày bắt đầu hoặc Ngày kết thúc
   useEffect(() => {
     if (!isOpen) return;
 
     let isMounted = true;
     const scanSchedule = async () => {
       setIsScanning(true);
-      const res = await getOccupiedPatterns(startDate, weeks);
+      const res = await getOccupiedPatterns(startDate, endDate);
       
       if (isMounted) {
         const newSet = new Set<string>();
@@ -60,7 +64,7 @@ export default function BulkScheduleModal({ classes, teachers }: BulkScheduleMod
       isMounted = false;
       clearTimeout(timer);
     };
-  }, [startDate, weeks, isOpen]);
+  }, [startDate, endDate, isOpen]);
 
   const handleToggleCell = (day: number, slot: number) => {
     setSelectedPatterns((prev) => {
@@ -72,37 +76,51 @@ export default function BulkScheduleModal({ classes, teachers }: BulkScheduleMod
     });
   };
 
-  // NHỊP 1: Chặn form và mở Modal Xác nhận
+  // LOGIC SUBMIT GỌI GLOBAL CONFIRM MODAL
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (selectedPatterns.length === 0) {
       toast.warning("Vui lòng click chọn ít nhất 1 ô lịch học trên bảng lưới!");
       return;
     }
-    setIsConfirmCreateOpen(true);
-  };
 
-  // NHỊP 2: Thực thi API khi người dùng bấm "Xác nhận tạo" trong Modal
-  const executeCreate = async () => {
-    setIsLoading(true);
-    const result = await createBulkSchedule({
-      classId,
-      teacherId,
-      patterns: selectedPatterns,
-      startDate,
-      weeks,
-    });
-    
-    setIsLoading(false);
-    setIsConfirmCreateOpen(false); // Đóng popup xác nhận
-    
-    if (result.success) {
-      toast.success("Tạo lịch dạy định kỳ thành công!");
-      setIsOpen(false); // Đóng luôn form lớn
-      setSelectedPatterns([]); 
-    } else {
-      toast.error(result.error || "Đã xảy ra lỗi khi tạo lịch.");
+    if (new Date(startDate) > new Date(endDate)) {
+      toast.error("Ngày kết thúc phải sau hoặc bằng ngày bắt đầu!");
+      return;
     }
+
+    confirm({
+      title: "Xác nhận tạo lịch học",
+      message: (
+        <>
+          Bạn đang chuẩn bị tạo lịch cho <strong>{selectedPatterns.length} ca/tuần</strong>, từ ngày <strong>{new Date(startDate).toLocaleDateString('vi-VN')}</strong> đến ngày <strong>{new Date(endDate).toLocaleDateString('vi-VN')}</strong>.<br/><br/>
+          Bạn có chắc chắn muốn tiếp tục?
+        </>
+      ),
+      confirmText: "Tạo dữ liệu",
+      cancelText: "Quay lại",
+      isDestructive: false,
+      onConfirm: async () => {
+        setIsLoading(true);
+        const result = await createBulkSchedule({
+          classId,
+          teacherId,
+          patterns: selectedPatterns,
+          startDate,
+          endDate,
+        });
+        
+        setIsLoading(false);
+        
+        if (result.success) {
+          toast.success("Tạo lịch dạy định kỳ thành công!");
+          setIsOpen(false); // Đóng luôn form lớn
+          setSelectedPatterns([]); 
+        } else {
+          toast.error(result.error || "Đã xảy ra lỗi khi tạo lịch.");
+        }
+      }
+    });
   };
 
   const daysHeader = [
@@ -230,13 +248,15 @@ export default function BulkScheduleModal({ classes, teachers }: BulkScheduleMod
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Lặp lại trong (Số tuần)</label>
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
+                    <CalendarIcon size={14}/> Đến ngày (Kết thúc)
+                  </label>
                   <input 
-                    type="number"
-                    min="1" max="52"
-                    value={weeks}
-                    onChange={(e) => setWeeks(Number(e.target.value))}
-                    className="w-full h-11 px-3 border border-slate-200 rounded-xl bg-slate-50 text-sm font-semibold focus:ring-2 focus:ring-blue-100 outline-none"
+                    type="date"
+                    value={endDate}
+                    min={startDate}
+                    onChange={(e) => setEndDate(e.target.value)}
+                    className="w-full h-11 px-3 border border-slate-200 rounded-xl bg-slate-50 text-sm font-semibold focus:ring-2 focus:ring-blue-100 outline-none cursor-pointer"
                     required
                   />
                 </div>
@@ -244,33 +264,15 @@ export default function BulkScheduleModal({ classes, teachers }: BulkScheduleMod
 
               <button 
                 type="submit" 
-                disabled={isScanning} // Đổi sang chỉ chặn khi đang quét, load thì form bị chặn bởi Modal rồi
+                disabled={isLoading || isScanning}
                 className="w-full h-12 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white rounded-xl font-bold text-base transition-all shadow-sm flex items-center justify-center gap-2"
               >
-                Xác Nhận Tạo Lịch ({selectedPatterns.length} ca/tuần)
+                {isLoading ? "Đang xử lý..." : `Xác Nhận Tạo Lịch (${selectedPatterns.length} ca/tuần)`}
               </button>
             </form>
           </div>
         </div>
       )}
-
-      {/* MODAL XÁC NHẬN TẠO LỊCH (Nằm độc lập ở ngoài để đè lên Form) */}
-      <ConfirmModal
-        isOpen={isConfirmCreateOpen}
-        onClose={() => !isLoading && setIsConfirmCreateOpen(false)}
-        onConfirm={executeCreate}
-        title="Xác nhận tạo lịch học"
-        message={
-          <>
-            Bạn đang chuẩn bị tạo lịch cho <strong>{selectedPatterns.length} ca/tuần</strong>, lặp lại trong <strong>{weeks} tuần</strong>.<br/><br/>
-            Hệ thống sẽ tự động tạo ra tổng cộng <strong>{selectedPatterns.length * weeks} ca học</strong>. Bạn có chắc chắn muốn tiếp tục?
-          </>
-        }
-        confirmText="Tạo dữ liệu"
-        cancelText="Quay lại"
-        isDestructive={false}
-        isLoading={isLoading}
-      />
     </>
   );
 }

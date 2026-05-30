@@ -22,7 +22,7 @@ export async function loginAction(formData: FormData) {
 
     // Force Next.js to re-evaluate server components with the new session.
     // (Choose the correct landing route for your app.)
-    return redirect("schedule");
+    return redirect("/schedule");
   } catch (error) {
     if (error instanceof AuthError) {
       console.error("Authentication error:", error);

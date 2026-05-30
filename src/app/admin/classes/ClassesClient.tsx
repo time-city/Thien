@@ -5,8 +5,9 @@ import { Plus, Edit2, Trash2, X, BookOpen, Tag, DollarSign, CalendarDays, Layers
 import { createClass, updateClass, deleteClass, createSubject, updateSubject, deleteSubject, getSubjectDeletionImpact, getClassDeletionImpact } from "@/actions/mutations";
 import { ClassData } from "@/actions/queries";
 import { toast } from "sonner";
-import { useConfirm } from "@/hooks/useconfirm"; // <-- Import hook xịn xò
+import { useConfirm } from "@/hooks/useconfirm"; // Đã sửa tên hook viết hoa chữ C
 import { useRouter } from "next/navigation";
+
 
 type Subject = {
   id: string;
@@ -16,26 +17,29 @@ type Subject = {
   createdAt: Date;
 };
 
+export type TeacherOption = { id: string; fullName: string };
+
 export default function ClassesClient({
   initialClasses,
-  subjects,
+  subjects, // Bây giờ ta sẽ dùng thẳng props này, không cần state localSubjects nữa
+  teachers,
 }: {
   initialClasses: ClassData[];
   subjects: Subject[];
+  teachers: TeacherOption[];
 }) {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<"classes" | "subjects">("classes");
 
-  // ====== STATE LỚP HỌC ======
-  const [classes, setClasses] = useState<ClassData[]>(initialClasses);
+  // ====== STATE LỚP HỌC (CHỈ GIỮ LẠI CÁC STATE CHO MODAL FORM) ======
   const [isClassModalOpen, setIsClassModalOpen] = useState(false);
   const [editingClass, setEditingClass] = useState<ClassData | null>(null);
   const [className, setClassName] = useState("");
   const [category, setCategory] = useState("");
   const [subjectId, setSubjectId] = useState("");
+  const [teacherId, setTeacherId] = useState<string>("");
 
-  // ====== STATE MÔN HỌC ======
-  const [localSubjects, setLocalSubjects] = useState<Subject[]>(subjects);
+  // ====== STATE MÔN HỌC (CHỈ GIỮ LẠI CÁC STATE CHO MODAL FORM) ======
   const [isSubjectModalOpen, setIsSubjectModalOpen] = useState(false);
   const [editingSubject, setEditingSubject] = useState<Subject | null>(null);
   const [subjectName, setSubjectName] = useState("");
@@ -45,14 +49,15 @@ export default function ClassesClient({
   // ====== STATE CHUNG & HOOK ======
   const [loading, setLoading] = useState(false);
   const [isCheckingImpact, setIsCheckingImpact] = useState<string | null>(null);
-  const { confirm } = useConfirm(); // <-- Khởi tạo hook
+  const { confirm } = useConfirm();
 
   // ====== HANDLERS LỚP HỌC ======
   const openAddClassModal = () => {
     setEditingClass(null);
     setClassName("");
     setCategory("");
-    setSubjectId(localSubjects.length > 0 ? localSubjects[0].id : "");
+    setSubjectId(subjects.length > 0 ? subjects[0].id : ""); // Dùng prop subjects
+    setTeacherId("");
     setIsClassModalOpen(true);
   };
 
@@ -61,6 +66,7 @@ export default function ClassesClient({
     setClassName(c.name);
     setCategory(c.category);
     setSubjectId(c.subjectId);
+    setTeacherId(c.teachers?.[0]?.teacherId || "");
     setIsClassModalOpen(true);
   };
 
@@ -68,26 +74,28 @@ export default function ClassesClient({
     e.preventDefault();
     setLoading(true);
 
+    const payload = {
+      name: className,
+      category,
+      subjectId,
+      teacherId: teacherId || undefined, // Nếu value rỗng thì gửi undefined
+    };
+
     if (editingClass) {
-      const res = await updateClass(editingClass.id, { name: className, category, subjectId });
+      const res = await updateClass(editingClass.id, payload);
       if (res?.success) {
         toast.success("Cập nhật lớp học thành công!");
-        const updatedSubject = localSubjects.find(s => s.id === subjectId);
-        setClasses(classes.map(c => 
-          c.id === editingClass.id 
-            ? { ...c, name: className, category, subjectId, subjectName: updatedSubject?.name || c.subjectName } 
-            : c
-        ));
         setIsClassModalOpen(false);
+        router.refresh(); // Tự động load lại data mới từ server
       } else {
         toast.error(res?.error || "Lỗi cập nhật lớp học");
       }
     } else {
-      const res = await createClass({ name: className, category, subjectId });
+      const res = await createClass(payload);
       if (res?.success) {
         toast.success("Thêm lớp học mới thành công!");
         setIsClassModalOpen(false);
-        router.refresh();
+        router.refresh(); // Tự động load lại data mới từ server
       } else {
         toast.error(res?.error || "Lỗi tạo lớp học");
       }
@@ -116,29 +124,27 @@ export default function ClassesClient({
     e.preventDefault();
     setLoading(true);
 
+    const payload = {
+      name: subjectName, 
+      pricePerSession, 
+      sessionsPerPackage 
+    };
+
     if (editingSubject) {
-      const res = await updateSubject(editingSubject.id, { 
-        name: subjectName, 
-        pricePerSession, 
-        sessionsPerPackage 
-      });
+      const res = await updateSubject(editingSubject.id, payload);
       if (res?.success) {
         toast.success("Cập nhật môn học thành công!");
-        setLocalSubjects(localSubjects.map(s => 
-          s.id === editingSubject.id 
-            ? { ...s, name: subjectName, pricePerSession, sessionsPerPackage } 
-            : s
-        ));
         setIsSubjectModalOpen(false);
+        router.refresh(); // Đã xóa bỏ cái trò tự set state lằng nhằng
       } else {
         toast.error(res?.error || "Lỗi cập nhật môn học");
       }
     } else {
-      const res = await createSubject({ name: subjectName, pricePerSession, sessionsPerPackage });
+      const res = await createSubject(payload);
       if (res?.success) {
         toast.success("Thêm môn học mới thành công!");
         setIsSubjectModalOpen(false);
-        router.refresh();
+        router.refresh(); 
       } else {
         toast.error(res?.error || "Lỗi tạo môn học");
       }
@@ -148,7 +154,7 @@ export default function ClassesClient({
 
   // ====== HANDLER XÓA KẾT HỢP GLOBAL CONFIRM ======
   const confirmDelete = async (type: "class" | "subject", id: string, name: string) => {
-    setIsCheckingImpact(id); // Bật loading spinner tại nút bấm
+    setIsCheckingImpact(id); 
     try {
       const res = type === "class" ? await getClassDeletionImpact(id) : await getSubjectDeletionImpact(id);
       
@@ -165,7 +171,6 @@ export default function ClassesClient({
         totalImpact = impactData.classTeacherCount + impactData.enrollmentCount + impactData.sessionCount + impactData.paymentCount;
       }
 
-      // Khởi tạo giao diện cảnh báo để truyền vào Modal
     const impactMessage = (
         <div className="space-y-3">
           <p>Bạn có chắc chắn muốn xóa <strong>{name}</strong> không?</p>
@@ -198,7 +203,6 @@ export default function ClassesClient({
         </div>
       );
 
-      // Gọi Global Modal
       confirm({
         title: `Xóa ${type === "class" ? "Lớp Học" : "Môn Học"}`,
         message: impactMessage,
@@ -210,7 +214,7 @@ export default function ClassesClient({
             const deleteRes = await deleteClass(id);
             if (deleteRes?.success) {
               toast.success("Đã xóa lớp học thành công!");
-              setClasses(prev => prev.filter(c => c.id !== id));
+              router.refresh(); // Đã xóa vụ tự cập nhật state, nhường Next.js lo
             } else {
               toast.error(deleteRes?.error || "Lỗi xóa lớp học");
             }
@@ -218,7 +222,7 @@ export default function ClassesClient({
             const deleteRes = await deleteSubject(id);
             if (deleteRes?.success) {
               toast.success("Đã xóa môn học thành công!");
-              setLocalSubjects(prev => prev.filter(s => s.id !== id));
+              router.refresh(); 
             } else {
               toast.error(deleteRes?.error || "Không thể xóa môn học đang có lớp hoạt động.");
             }
@@ -229,7 +233,7 @@ export default function ClassesClient({
     } catch (error) {
       toast.error("Lỗi khi kiểm tra dữ liệu ảnh hưởng.");
     } finally {
-      setIsCheckingImpact(null); // Tắt loading spinner ở nút bấm
+      setIsCheckingImpact(null); 
     }
   };
 
@@ -272,7 +276,7 @@ export default function ClassesClient({
           </div>
         </div>
 
-        {/* Nút hành động tương ứng với Tab */}
+        {/* Nút hành động */}
         <div className="flex justify-end pt-4 border-t border-slate-100">
           {activeTab === "classes" ? (
             <button 
@@ -292,7 +296,7 @@ export default function ClassesClient({
         </div>
       </div>
 
-      {/* ================= BẢNG LỚP HỌC ================= */}
+      {/* ================= BẢNG LỚP HỌC (RENDER TỪ initialClasses) ================= */}
       {activeTab === "classes" && (
         <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden animate-in fade-in duration-300">
           <div className="overflow-x-auto">
@@ -308,14 +312,14 @@ export default function ClassesClient({
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {classes.length === 0 ? (
+                {initialClasses.length === 0 ? (
                   <tr>
                     <td colSpan={6} className="px-4 py-12 text-center text-slate-500 font-medium">
                       Chưa có lớp học nào trong hệ thống.
                     </td>
                   </tr>
                 ) : (
-                  classes.map((c, index) => (
+                  initialClasses.map((c, index) => (
                     <tr key={c.id} className="hover:bg-slate-50/80 transition-colors group">
                       <td className="py-2.5 px-4 text-center font-bold text-slate-400 text-xs">{index + 1}</td>
                       <td className="py-2.5 px-4"><div className="font-bold text-slate-800 text-sm">{c.name}</div></td>
@@ -361,7 +365,7 @@ export default function ClassesClient({
         </div>
       )}
 
-      {/* ================= BẢNG MÔN HỌC ================= */}
+      {/* ================= BẢNG MÔN HỌC (RENDER TỪ subjects) ================= */}
       {activeTab === "subjects" && (
         <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden animate-in fade-in duration-300">
           <div className="overflow-x-auto">
@@ -376,14 +380,14 @@ export default function ClassesClient({
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {localSubjects.length === 0 ? (
+                {subjects.length === 0 ? (
                   <tr>
                     <td colSpan={5} className="px-4 py-12 text-center text-slate-500 font-medium">
                       Chưa có môn học nào trong hệ thống.
                     </td>
                   </tr>
                 ) : (
-                  localSubjects.map((s, index) => (
+                  subjects.map((s, index) => (
                     <tr key={s.id} className="hover:bg-slate-50/80 transition-colors group">
                       <td className="py-3 px-4 text-center font-bold text-slate-400 text-xs">{index + 1}</td>
                       <td className="py-3 px-4">
@@ -443,11 +447,41 @@ export default function ClassesClient({
               </div>
               <div className="space-y-1.5">
                 <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Thuộc Môn học</label>
-                <select required value={subjectId} onChange={(e) => setSubjectId(e.target.value)} className="w-full h-10 px-3 border border-slate-200 rounded-xl bg-slate-50 text-sm font-semibold focus:ring-2 focus:ring-blue-100 outline-none transition-all cursor-pointer">
-                  <option value="" disabled>-- Chọn môn học --</option>
-                  {localSubjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                <select
+                  required
+                  value={subjectId}
+                  onChange={(e) => setSubjectId(e.target.value)}
+                  className="w-full h-10 px-3 border border-slate-200 rounded-xl bg-slate-50 text-sm font-semibold focus:ring-2 focus:ring-blue-100 outline-none transition-all cursor-pointer"
+                >
+                  <option value="" disabled>
+                    -- Chọn môn học --
+                  </option>
+                  {subjects.map((s) => ( // Dùng prop subjects
+                    <option key={s.id} value={s.id}>
+                      {s.name}
+                    </option>
+                  ))}
                 </select>
               </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                  Giáo viên phụ trách
+                </label>
+                <select
+                  value={teacherId}
+                  onChange={(e) => setTeacherId(e.target.value)}
+                  className="w-full h-10 px-3 border border-slate-200 rounded-xl bg-slate-50 text-sm font-semibold focus:ring-2 focus:ring-blue-100 outline-none transition-all cursor-pointer"
+                >
+                  <option value="">--- Chưa phân công ---</option>
+                  {teachers.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.fullName}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
               <div className="mt-6 pt-4 border-t border-slate-100 flex justify-end gap-3">
                 <button type="button" onClick={() => setIsClassModalOpen(false)} className="px-4 py-2 text-sm font-bold text-slate-600 hover:bg-slate-200 bg-slate-100 rounded-lg transition-colors">Hủy</button>
                 <button type="submit" disabled={loading} className="px-5 py-2 min-w-[100px] text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-sm transition-all disabled:opacity-70 flex justify-center items-center">

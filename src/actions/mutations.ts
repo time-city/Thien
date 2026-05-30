@@ -274,12 +274,173 @@ export async function saveStudentEvaluation(data: {
 
 
 // ==========================================
-// 4. ACTIONS CHO LỚP HỌC (CLASSES)
+// 4. ACTIONS CHO GIÁO VIÊN (TEACHERS)
 // ==========================================
-export async function createClass(data: { name: string; category: string; subjectId: string }) {
+export async function createTeacher(data: {
+  username: string;
+  password: string;
+  fullName: string;
+  roomFeePerSession?: number;
+  isActive?: boolean;
+}) {
   await checkSuperAdmin();
   try {
-    await prisma.class.create({ data });
+    const session = await auth();
+    if (!session?.user) throw new Error("Bạn chưa đăng nhập");
+
+    const bcrypt = await import("bcryptjs");
+    const hashed = await bcrypt.hash(data.password, 10);
+
+    await prisma.user.create({
+      data: {
+        username: data.username,
+        passwordHash: hashed,
+        fullName: data.fullName,
+        role: "TEACHER",
+        roomFeePerSession: data.roomFeePerSession ?? 0,
+        isActive: data.isActive ?? true,
+      },
+    });
+
+    revalidatePath("/admin/teachers");
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: "Lỗi tạo giáo viên" };
+  }
+}
+
+export async function updateTeacher(
+  teacherId: string,
+  data: {
+    fullName?: string;
+    roomFeePerSession?: number;
+    isActive?: boolean;
+  }
+) {
+  await checkSuperAdmin();
+  try {
+    await prisma.user.update({
+      where: { id: teacherId },
+      data: {
+        fullName: data.fullName,
+        roomFeePerSession: data.roomFeePerSession,
+        isActive: data.isActive,
+      },
+    });
+    revalidatePath("/admin/teachers");
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: "Lỗi cập nhật giáo viên" };
+  }
+}
+
+export async function banTeacher(teacherId: string) {
+  await checkSuperAdmin();
+  try {
+    await prisma.user.update({
+      where: { id: teacherId },
+      data: { isActive: false },
+    });
+
+    revalidatePath("/admin/teachers");
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: "Lỗi ban giáo viên" };
+  }
+}
+
+export async function getTeacherBanImpact(teacherId: string) {
+  await checkSuperAdmin();
+  try {
+    const now = new Date();
+
+    const activeFutureSessionsCount = await prisma.classSession.count({
+      where: { teacherId, date: { gte: now } },
+    });
+
+    const roomRentalLogsCount = await prisma.roomRentalLog.count({
+      where: { teacherId },
+    });
+
+    return {
+      success: true,
+      impact: {
+        activeFutureSessionsCount,
+        roomRentalLogsCount,
+      },
+    };
+  } catch (error) {
+    return { success: false, error: "Không thể kiểm tra dữ liệu ban giáo viên" };
+  }
+}
+
+export async function getTeacherDeletionImpact(teacherId: string) {
+  await checkSuperAdmin();
+  try {
+    const classSessionsCount = await prisma.classSession.count({
+      where: { teacherId },
+    });
+
+    const roomRentalLogsCount = await prisma.roomRentalLog.count({
+      where: { teacherId },
+    });
+
+    const salaryPaymentsCount = await prisma.salaryPayment.count({
+      where: { teacherId },
+    });
+
+    const classTeacherLinksCount = await prisma.classTeacher.count({
+      where: { teacherId },
+    });
+
+    return {
+      success: true,
+      impact: {
+        classSessionsCount,
+        roomRentalLogsCount,
+        salaryPaymentsCount,
+        classTeacherLinksCount,
+      },
+    };
+  } catch (error) {
+    return { success: false, error: "Không thể kiểm tra ảnh hưởng khi xóa giáo viên" };
+  }
+}
+
+export async function deleteTeacher(teacherId: string) {
+  await checkSuperAdmin();
+  try {
+    // Prisma onDelete Cascade sẽ tự xóa các bảng phụ thuộc theo schema.
+    await prisma.user.delete({ where: { id: teacherId } });
+
+    revalidatePath("/admin/teachers");
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: "Lỗi xóa giáo viên" };
+  }
+}
+
+// ==========================================
+// 5. ACTIONS CHO LỚP HỌC (CLASSES)
+// ==========================================
+export async function createClass(data: { name: string; category: string; subjectId: string; teacherId?: string }) {
+  await checkSuperAdmin();
+  try {
+    await prisma.class.create({
+      data: {
+        name: data.name,
+        category: data.category,
+        subjectId: data.subjectId,
+        teachers: data.teacherId
+          ? {
+              create: {
+                teacherId: data.teacherId,
+              },
+            }
+          : undefined,
+      },
+    });
+
     revalidatePath("/admin/classes");
     return { success: true };
   } catch (error) {
@@ -287,10 +448,35 @@ export async function createClass(data: { name: string; category: string; subjec
   }
 }
 
-export async function updateClass(id: string, data: { name?: string; category?: string; subjectId?: string }) {
+export async function updateClass(
+  id: string,
+  data: { name?: string; category?: string; subjectId?: string; teacherId?: string }
+) {
   await checkSuperAdmin();
   try {
-    await prisma.class.update({ where: { id }, data });
+    await prisma.$transaction(async (tx) => {
+      // Ép mỗi class chỉ có đúng 1 record ClassTeacher (nếu có teacherId)
+      await tx.classTeacher.deleteMany({ where: { classId: id } });
+
+      await tx.class.update({
+        where: { id },
+        data: {
+          name: data.name,
+          category: data.category,
+          subjectId: data.subjectId,
+        },
+      });
+
+      if (data.teacherId) {
+        await tx.classTeacher.create({
+          data: {
+            classId: id,
+            teacherId: data.teacherId,
+          },
+        });
+      }
+    });
+
     revalidatePath("/admin/classes");
     return { success: true };
   } catch (error) {

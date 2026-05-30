@@ -67,6 +67,15 @@ export async function getUserById(id: string) {
   });
 }
 
+export async function getTeachers() {
+  return await prisma.user.findMany({
+    where: { 
+      role: "TEACHER" // Ép Database chỉ tìm giáo viên, không quan tâm bọn khác
+    },
+    orderBy: { createdAt: "desc" },
+  });
+}
+
 // ==========================================
 // 3. LỚP HỌC (CLASSES)
 // ==========================================

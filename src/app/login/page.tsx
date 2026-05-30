@@ -19,6 +19,10 @@ export default function LoginPage() {
     if (result && "error" in result && result.error) {
       setError(result.error as string);
     }
+    else if (result?.success) {
+    // Thành công thì F5 cứng chuyển trang để reset toàn bộ session và data
+    window.location.href = "/schedule";
+  } 
 
     setIsPending(false);
   };

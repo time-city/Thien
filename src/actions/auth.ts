@@ -2,8 +2,6 @@
 
 import { signIn } from "@/auth";
 import { AuthError } from "next-auth";
-import { redirect } from "next/navigation";
-import { revalidatePath } from "next/cache"; // <-- 1. Thêm import này
 
 export async function loginAction(formData: FormData) {
   const username = formData.get("username") as string;
@@ -13,22 +11,17 @@ export async function loginAction(formData: FormData) {
     await signIn("credentials", {
       username,
       password,
-      redirect: false,
+      redirect: false, // Bắt buộc phải là false để nó không tự văng lỗi redirect
     });
-  } catch (error) {
-   
+    
+    // Đăng nhập đúng -> Trả về success để Client tự xử lý
+    return { success: true }; 
 
+  } catch (error) {
     if (error instanceof AuthError) {
       const customMessage = (error.cause?.err as Error)?.message;
-      return { error: customMessage || "Tên đăng nhập hoặc mật khẩu không chính xác." };
+      return { success: false, error: customMessage || "Tên đăng nhập hoặc mật khẩu không chính xác." };
     }
-    throw error;
+    return { success: false, error: "Đã xảy ra lỗi trong quá trình đăng nhập." };
   }
-
-  // 2. ÉP XÓA CACHE TRƯỚC KHI CHUYỂN TRANG
-  // Lệnh này báo Next.js xóa sạch bộ nhớ tạm của toàn bộ Layout (từ Root trở xuống).
-  revalidatePath("/", "layout"); 
-
-  // 3. Chuyển trang (nhớ dấu / ở đầu để không lỗi production nhé)
-  redirect("/schedule");
 }

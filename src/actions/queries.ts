@@ -167,6 +167,7 @@ export type EnrolledCourseData = {
   remainingSessions: number;
   feeStatus: string;
   status: string;
+  teachers: string[]; // Tên các giáo viên phụ trách lớp
 };
 
 export type StudentData = {
@@ -175,6 +176,7 @@ export type StudentData = {
   phone: string | null;
   parentName: string | null;
   parentPhone: string | null;
+  gender: string | null;
   enrolledCourses: EnrolledCourseData[];
   logs: SessionLogData[];
 };
@@ -183,7 +185,14 @@ export async function getStudentsDetailed(): Promise<StudentData[]> {
   const students = await prisma.student.findMany({
     include: {
       enrollments: {
-        include: { class: { include: { subject: true } } }
+        include: { 
+          class: { 
+            include: { 
+              subject: true,
+              teachers: { include: { teacher: true } }
+            } 
+          } 
+        }
       },
       attendanceLogs: {
         include: { classSession: true },
@@ -200,6 +209,7 @@ export async function getStudentsDetailed(): Promise<StudentData[]> {
     phone: s.phoneStudent,
     parentName: s.parentName,
     parentPhone: s.phoneParent,
+    gender: s.gender,
     enrolledCourses: s.enrollments.map(e => ({
       enrollmentId: e.id,
       classId: e.classId,
@@ -207,7 +217,8 @@ export async function getStudentsDetailed(): Promise<StudentData[]> {
       subjectName: e.class.subject.name,
       remainingSessions: e.remainingSessions,
       feeStatus: e.feeStatus,
-      status: e.status
+      status: e.status,
+      teachers: e.class.teachers.map(t => t.teacher.fullName)
     })),
     logs: s.attendanceLogs.map(log => ({
       id: log.id,

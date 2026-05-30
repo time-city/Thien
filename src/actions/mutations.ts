@@ -20,7 +20,8 @@ export async function createSubject(data: { name: string; pricePerSession: numbe
   
   try {
     await prisma.subject.create({ data });
-    revalidatePath("/admin/subjects"); // Cập nhật lại UI trang admin
+    revalidatePath("/admin/subjects");
+    revalidatePath("/admin/classes"); // Cập nhật lại UI trang admin
     return { success: true };
   } catch (error) {
     return { success: false, error: "Lỗi tạo môn học" };
@@ -32,24 +33,48 @@ export async function updateSubject(id: string, data: { name?: string; pricePerS
   try {
     await prisma.subject.update({ where: { id }, data });
     revalidatePath("/admin/subjects");
+    revalidatePath("/admin/classes");
     return { success: true };
   } catch (error) {
     return { success: false, error: "Lỗi cập nhật môn học" };
   }
 }
-
-export async function deleteSubject(id: string) {
+export async function getSubjectDeletionImpact(subjectId: string) {
   await checkSuperAdmin();
   try {
-    await prisma.subject.delete({ where: { id } });
-    revalidatePath("/admin/subjects");
-    return { success: true };
+    const classCount = await prisma.class.count({ where: { subjectId } });
+    const classes = await prisma.class.findMany({ where: { subjectId }, select: { id: true } });
+    const classIds = classes.map((c) => c.id);
+
+    const enrollmentCount = await prisma.enrollment.count({ where: { classId: { in: classIds } } });
+    const sessionCount = await prisma.classSession.count({ where: { classId: { in: classIds } } });
+
+    return { success: true, impact: { classCount, enrollmentCount, sessionCount } };
   } catch (error) {
-    // Nếu môn này đã có lớp học, DB sẽ khóa không cho xóa cứng.
-    return { success: false, error: "Không thể xóa môn học đã có lớp đang hoạt động" };
+    console.error("Lỗi khi kiểm tra dữ liệu ảnh hưởng của môn học:", error);
+    return { success: false, error: "Lỗi hệ thống khi kiểm tra dữ liệu môn học." };
   }
 }
 
+export async function deleteSubject(id: string) {
+  try {
+    // Nhờ tính năng onDelete: Cascade trong Schema, 
+    // lệnh này sẽ tự động xóa sạch Class, ClassSession, Enrollment... của môn này.
+    // Dữ liệu User (Giáo viên) không bị ảnh hưởng vì nó không phải là bảng con của Subject.
+    await prisma.subject.delete({
+      where: { id },
+    });
+
+    revalidatePath("/admin/classes"); // Sửa lại đúng đường dẫn trang của ông nếu cần
+    return { success: true };
+  } catch (error) {
+    console.error("Lỗi khi xóa môn học:", error);
+    return { 
+      success: false, 
+      error: "Đã xảy ra lỗi hệ thống khi xóa môn học và các dữ liệu liên quan." 
+    };
+  }
+}
 // ==========================================
 // 2. ACTIONS CHO HỌC SINH (STUDENTS)
 // ==========================================
@@ -58,7 +83,8 @@ export async function createStudent(data: {
   phoneStudent?: string; 
   parentName?: string; 
   phoneParent?: string; 
-  gender?: string 
+  gender?: string;
+  classIds?: string[];
 }) {
   await checkSuperAdmin();
   try {
@@ -68,8 +94,12 @@ export async function createStudent(data: {
         phoneStudent: data.phoneStudent,
         parentName: data.parentName,
         phoneParent: data.phoneParent,
-        // Ép kiểu gender cho đúng enum
-        gender: data.gender === "MALE" || data.gender === "FEMALE" || data.gender === "OTHER" ? data.gender : null
+        gender: data.gender === "MALE" || data.gender === "FEMALE" || data.gender === "OTHER" ? data.gender : null,
+        enrollments: data.classIds?.length ? {
+          create: data.classIds.map(classId => ({
+            classId,
+          }))
+        } : undefined
       }
     });
     revalidatePath("/admin/students");
@@ -82,11 +112,63 @@ export async function createStudent(data: {
 export async function updateStudent(id: string, data: any) {
   await checkSuperAdmin();
   try {
-    await prisma.student.update({ where: { id }, data });
+    const { classIds, ...updateData } = data;
+    
+    await prisma.student.update({ where: { id }, data: updateData });
+
+    // Handle class enrollments if classIds are provided
+    if (classIds && Array.isArray(classIds)) {
+      const existingEnrollments = await prisma.enrollment.findMany({
+        where: { studentId: id }
+      });
+      const existingClassIds = existingEnrollments.map(e => e.classId);
+      
+      const newClassIds = classIds.filter(cid => !existingClassIds.includes(cid));
+      
+      if (newClassIds.length > 0) {
+        await prisma.enrollment.createMany({
+          data: newClassIds.map(classId => ({
+            studentId: id,
+            classId
+          }))
+        });
+      }
+    }
+
     revalidatePath("/admin/students");
     return { success: true };
   } catch (error) {
     return { success: false, error: "Lỗi cập nhật học sinh" };
+  }
+}
+
+export async function importStudentsCsv(data: { 
+  fullName: string; 
+  phoneStudent?: string; 
+  parentName?: string; 
+  phoneParent?: string; 
+  gender?: string 
+}[]) {
+  await checkSuperAdmin();
+  try {
+    const formattedData = data.filter(d => d.fullName?.trim()).map(row => ({
+      fullName: row.fullName.trim(),
+      phoneStudent: row.phoneStudent,
+      parentName: row.parentName,
+      phoneParent: row.phoneParent,
+      gender: (row.gender === "MALE" || row.gender === "FEMALE" || row.gender === "OTHER" ? row.gender : null) as any
+    }));
+
+    if (formattedData.length === 0) return { success: false, error: "Dữ liệu không hợp lệ" };
+
+    await prisma.student.createMany({
+      data: formattedData,
+      skipDuplicates: true
+    });
+    revalidatePath("/admin/students");
+    return { success: true, count: formattedData.length };
+  } catch(error) {
+    return { success: false, error: "Lỗi import file CSV" };
   }
 }
 
@@ -98,6 +180,36 @@ export async function deleteStudent(id: string) {
     return { success: true };
   } catch (error) {
     return { success: false, error: "Lỗi xóa học sinh" };
+  }
+}
+
+export async function deleteStudents(ids: string[]) {
+  await checkSuperAdmin();
+  try {
+    await prisma.student.deleteMany({ where: { id: { in: ids } } });
+    revalidatePath("/admin/students");
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: "Lỗi xóa nhiều học sinh" };
+  }
+}
+
+export async function getStudentDeletionImpact(studentId: string) {
+  try {
+    const enrollmentsCount = await prisma.enrollment.count({ where: { studentId } });
+    const paymentsCount = await prisma.paymentHistory.count({ where: { studentId } });
+    const attendanceCount = await prisma.attendanceLog.count({ where: { studentId } });
+
+    return { 
+      success: true, 
+      impact: { 
+        enrollmentCount: enrollmentsCount, 
+        paymentCount: paymentsCount, 
+        attendanceCount: attendanceCount 
+      } 
+    };
+  } catch (error) {
+    return { success: false, error: "Không thể kiểm tra dữ liệu học sinh." };
   }
 }
 
@@ -160,3 +272,55 @@ export async function saveStudentEvaluation(data: {
 }
 
 
+
+// ==========================================
+// 4. ACTIONS CHO LỚP HỌC (CLASSES)
+// ==========================================
+export async function createClass(data: { name: string; category: string; subjectId: string }) {
+  await checkSuperAdmin();
+  try {
+    await prisma.class.create({ data });
+    revalidatePath("/admin/classes");
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: "Lỗi tạo lớp học" };
+  }
+}
+
+export async function updateClass(id: string, data: { name?: string; category?: string; subjectId?: string }) {
+  await checkSuperAdmin();
+  try {
+    await prisma.class.update({ where: { id }, data });
+    revalidatePath("/admin/classes");
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: "Lỗi cập nhật lớp học" };
+  }
+}
+export async function getClassDeletionImpact(classId: string) {
+  await checkSuperAdmin();
+  try {
+    const classTeacherCount = await prisma.classTeacher.count({ where: { classId } });
+    const enrollmentCount = await prisma.enrollment.count({ where: { classId } });
+    const sessionCount = await prisma.classSession.count({ where: { classId } });
+    const paymentCount = await prisma.paymentHistory.count({ where: { classId } });
+
+    return { success: true, impact: { classTeacherCount, enrollmentCount, sessionCount, paymentCount } };
+  } catch (error) {
+    console.error("Lỗi khi kiểm tra dữ liệu ảnh hưởng của lớp học:", error);
+    return { success: false, error: "Lỗi hệ thống khi kiểm tra dữ liệu lớp học." };
+  }
+}
+
+export async function deleteClass(id: string) {
+  try {
+    await prisma.class.delete({
+      where: { id },
+    });
+    revalidatePath("/admin/classes");
+    return { success: true };
+  } catch (error) {
+    console.error("Lỗi khi xóa lớp học:", error);
+    return { success: false, error: "Đã xảy ra lỗi khi xóa lớp học." };
+  }
+}

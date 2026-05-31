@@ -522,16 +522,42 @@ export async function submitAttendanceAndCalculateFinance(
 
     const classId = sessionInfo.classId;
     const roomFee = sessionInfo.class.roomFeePerSession;
-    const salaryCalculated = attendanceData.length * sessionInfo.class.pricePerSession;
-    const netIncome = salaryCalculated - roomFee;
-
     const now = new Date();
     
-    // Lấy ra danh sách ID học sinh để xử lý trừ phiếu
     const studentIds = attendanceData.map((r) => r.studentId);
 
+    let salaryCalculated = 0;
+    let netIncome = 0;
+
     await prisma.$transaction(async (tx) => {
-      // 1) Tạo lịch sử điểm danh (AttendanceLogs)
+      // ==========================================
+      // BƯỚC 1: TÍNH LƯƠNG (CHỈ TRẢ TIỀN KHI HẾT PHIẾU)
+      // ==========================================
+      if (studentIds.length > 0) {
+        const enrollments = await tx.enrollment.findMany({
+          where: {
+            classId: classId,
+            studentId: { in: studentIds },
+          },
+          include: { class: true },
+        });
+
+        enrollments.forEach((enrollment) => {
+          // LOGIC MỚI: Chỉ thanh toán khi đây là buổi học CUỐI CÙNG của phiếu
+          // (Tức là trước khi trừ, số buổi còn lại đúng bằng 1)
+          if (enrollment.remainingSessions === 1) {
+            // Lương cộng thêm = Giá 1 buổi * Tổng số buổi trong gói (Ra tiền nguyên tháng)
+            salaryCalculated += (enrollment.class.pricePerSession * enrollment.class.sessionsPerPackage);
+          }
+        });
+      }
+
+      // Thực nhận = Lương tháng (của những bé hết hạn hôm nay) - Tiền phòng hôm nay
+      netIncome = salaryCalculated - roomFee;
+
+      // ==========================================
+      // BƯỚC 2: GHI NHẬN ĐIỂM DANH & CHỐT CA
+      // ==========================================
       await tx.attendanceLog.createMany({
         data: attendanceData.map((row) => ({
           classSessionId,
@@ -542,7 +568,6 @@ export async function submitAttendanceAndCalculateFinance(
         })),
       });
 
-      // 2) Đóng sổ buổi học này
       await tx.classSession.update({
         where: { id: classSessionId },
         data: {
@@ -552,7 +577,9 @@ export async function submitAttendanceAndCalculateFinance(
         },
       });
 
-      // 3) Ghi nhận tiền phòng (nếu có thu phí)
+      // ==========================================
+      // BƯỚC 3: TÀI CHÍNH & TRỪ PHIẾU
+      // ==========================================
       if (roomFee > 0) {
         await tx.roomRentalLog.create({
           data: {
@@ -564,7 +591,7 @@ export async function submitAttendanceAndCalculateFinance(
         });
       }
 
-      // 4) Cộng/trừ tiền trực tiếp vào ví giáo viên
+      // Cộng/trừ tiền trực tiếp vào ví giáo viên
       await tx.user.update({
         where: { id: teacherId },
         data: {
@@ -572,34 +599,21 @@ export async function submitAttendanceAndCalculateFinance(
         },
       });
 
-      // 5) Xử lý Học phí & Phiếu học sinh
       if (studentIds.length > 0) {
-        // 5.1: Trừ đi 1 buổi học của TẤT CẢ học sinh có trong danh sách điểm danh
+        // Trừ đi 1 buổi học
         await tx.enrollment.updateMany({
-          where: {
-            classId: classId,
-            studentId: { in: studentIds },
-          },
-          data: {
-            remainingSessions: { decrement: 1 },
-          },
+          where: { classId: classId, studentId: { in: studentIds } },
+          data: { remainingSessions: { decrement: 1 } },
         });
 
-        // 5.2: Tự động chuyển trạng thái sang UNPAID nếu số buổi bị rớt xuống <= 0
+        // Đổi trạng thái sang NỢ PHÍ nếu số buổi <= 0
         await tx.enrollment.updateMany({
-          where: {
-            classId: classId,
-            studentId: { in: studentIds },
-            remainingSessions: { lte: 0 },
-          },
-          data: {
-            feeStatus: "UNPAID",
-          },
+          where: { classId: classId, studentId: { in: studentIds }, remainingSessions: { lte: 0 } },
+          data: { feeStatus: "UNPAID" },
         });
       }
     });
 
-    // Làm mới lại dữ liệu hiển thị trên các trang liên quan
     revalidatePath("/ta/settings");
     revalidatePath("/ta");
 
@@ -728,5 +742,38 @@ export async function processStudentTuitionPayment(
   } catch (error) {
     console.error("Lỗi khi thu học phí:", error);
     return { success: false, error: "Đã xảy ra lỗi khi gia hạn học phí" };
+  }
+}
+// Thêm vào src/actions/mutations.ts
+export async function payTeacherSalary(teacherId: string, amount: number) {
+  try {
+    await checkSuperAdmin(); // Bắt buộc phải là Admin
+    
+    if (amount <= 0) return { success: false, error: "Số tiền thanh toán phải lớn hơn 0" };
+
+    await prisma.$transaction(async (tx) => {
+      // 1. Lưu lịch sử thanh toán
+      await tx.salaryPayment.create({
+        data: {
+          teacherId: teacherId,
+          amount: amount,
+          note: "Admin thanh toán lương",
+        }
+      });
+
+      // 2. Trừ tiền trong ví của Giáo viên
+      await tx.user.update({
+        where: { id: teacherId },
+        data: {
+          salaryBalance: { decrement: amount } // Trừ đúng số tiền đã thanh toán
+        }
+      });
+    });
+
+    revalidatePath("/admin/tuition");
+    return { success: true };
+  } catch (error) {
+    console.error("Lỗi khi thanh toán lương:", error);
+    return { success: false, error: "Đã xảy ra lỗi hệ thống" };
   }
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
-import { Plus, Edit2, Trash2, X, Search, User as UserIcon, Phone, CheckSquare, Square, Loader2, Eye, Filter, ChevronLeft, ChevronRight, BookOpen, Upload, Calendar, School } from "lucide-react";
+import { Plus, Edit2, Trash2, X, Search, User as UserIcon, Phone, CheckSquare, Square, Loader2, Eye, Filter, ChevronLeft, ChevronRight, BookOpen, Upload, Calendar, School, Download } from "lucide-react";
 import { createStudent, updateStudent, deleteStudent, deleteStudents, getStudentDeletionImpact, importStudentsCsv } from "@/actions/mutations";
 import { StudentData, ClassData } from "@/actions/queries";
 import { toast } from "sonner";
@@ -10,6 +10,9 @@ import { useRouter } from "next/navigation";
 
 // === DATA CỨNG: DANH SÁCH TRƯỜNG ĐÀ NẴNG DÙNG ĐỂ GỢI Ý ===
 const DA_NANG_SCHOOLS = [
+  // ==============================
+  // CẤP 3 (THPT)
+  // ==============================
   "THPT Chuyên Lê Quý Đôn",
   "THPT Phan Châu Trinh",
   "THPT Hoàng Hoa Thám",
@@ -19,6 +22,26 @@ const DA_NANG_SCHOOLS = [
   "THPT Tôn Thất Tùng",
   "THPT Nguyễn Hiền",
   "THPT Thanh Khê",
+  "THPT Hòa Vang",
+  "THPT Cẩm Lệ",
+  "THPT Ngô Quyền",
+  "THPT Liên Chiểu",
+  "THPT Phạm Phú Thứ",
+  "THPT Ông Ích Khiêm",
+  "THPT Phan Thành Tài",
+  "THPT Võ Chí Công",
+  "THPT Sơn Trà",
+  "THPT Tôn Đức Thắng",
+  "THPT Nguyễn Thượng Hiền",
+  "THPT Khâm Đức",
+  "THPT FPT Đà Nẵng",
+  "THPT Sky-Line",
+  "THPT APU",
+  "THPT Chuyên Biệt Tương Lai",
+
+  // ==============================
+  // CẤP 2 (THCS)
+  // ==============================
   "THCS Trưng Vương",
   "THCS Nguyễn Huệ",
   "THCS Tây Sơn",
@@ -26,9 +49,29 @@ const DA_NANG_SCHOOLS = [
   "THCS Chu Văn An",
   "THCS Kim Đồng",
   "THCS Nguyễn Bỉnh Khiêm",
-  "THCS Hoàng Diệu"
+  "THCS Hoàng Diệu",
+  "THCS Lý Thường Kiệt",
+  "THCS Sào Nam",
+  "THCS Lê Độ",
+  "THCS Nguyễn Khuyến",
+  "THCS Huỳnh Thúc Kháng",
+  "THCS Lương Thế Vinh",
+  "THCS Nguyễn Lương Bằng",
+  "THCS Đỗ Đăng Tuyển",
+  "THCS Trần Hưng Đạo",
+  "THCS Lê Hồng Phong",
+  "THCS Nguyễn Thiện Thuật",
+  "THCS Cao Thắng",
+  "THCS Trần Đại Nghĩa",
+  "THCS Nguyễn Đình Chiểu",
+  "THCS Nguyễn Phú Hường",
+  "THCS Nguyễn Văn Linh",
+  "THCS Lê Anh Xuân",
+  "THCS Ngô Thì Nhậm",
+  "THCS Trần Cao Vân",
+  "THCS Phan Đình Phùng",
+  "THCS Nguyễn Hồng Ánh"
 ];
-
 export default function StudentsClient({
   initialStudents,
   classes,
@@ -106,17 +149,45 @@ export default function StudentsClient({
     setViewStudent(s);
   };
 
+  // ====== TẢI FILE CSV MẪU ======
+  const downloadSampleCsv = () => {
+    // Thêm ký tự BOM (\uFEFF) để Excel trên Windows không bị lỗi font Tiếng Việt
+    const BOM = "\uFEFF"; 
+    const csvContent = BOM + "fullname,phonestudent,parentname,phoneparent,gender\nNguyễn Văn A,0901234567,Nguyễn Văn B,0987654321,Nam\nTrần Thị C,,Trần Văn D,,Nữ";
+    
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", "mau_nhap_hoc_sinh.csv");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    toast.success("Đã tải file CSV mẫu!");
+  };
+
   // ====== CSV IMPORT ======
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
+    // 1. Kiểm tra đuôi file có phải .csv không
+    if (!file.name.toLowerCase().endsWith('.csv')) {
+      toast.error("Sai định dạng! Vui lòng chỉ tải lên file có đuôi .csv");
+      e.target.value = ''; // Reset input
+      return;
+    }
+
     const reader = new FileReader();
     reader.onload = async (event) => {
       const text = event.target?.result as string;
-      const lines = text.split('\n');
+      const lines = text.split(/\r?\n/).filter(line => line.trim() !== '');
+      
+      // 2. Kiểm tra file có nội dung không
       if (lines.length < 2) {
-        toast.error("File CSV rỗng hoặc không đúng định dạng!");
+        toast.error("File CSV trống hoặc chưa có dữ liệu học sinh. Vui lòng kiểm tra lại!");
+        e.target.value = '';
         return;
       }
       
@@ -129,39 +200,65 @@ export default function StudentsClient({
       const ppIdx = headers.indexOf('phoneparent');
       const gIdx = headers.indexOf('gender');
 
+      // 3. Cảnh báo lỗi cấu trúc file rõ ràng
       if (fnIdx === -1) {
-        toast.error("Cột 'fullname' bắt buộc phải có trong dòng tiêu đề CSV!");
+        toast.error(
+          "Sai cấu trúc file! Không tìm thấy cột 'fullname'. Vui lòng bấm 'Tải File Mẫu' để xem định dạng chuẩn.",
+          { duration: 5000 }
+        );
+        e.target.value = '';
         return;
       }
 
+      const mapGender = (gStr: string | undefined) => {
+        if (!gStr) return undefined;
+        const lower = gStr.trim().toLowerCase();
+        if (["nam", "male", "m", "trai"].includes(lower)) return "MALE";
+        if (["nữ", "nu", "female", "f", "gái"].includes(lower)) return "FEMALE";
+        if (["khác", "other", "o"].includes(lower)) return "OTHER";
+        return undefined;
+      };
+
       for (let i = 1; i < lines.length; i++) {
-        if (!lines[i].trim()) continue;
-        const cols = lines[i].split(',').map(c => c.trim());
+        const cols = lines[i].split(',').map(c => c.trim().replace(/^"|"$/g, ''));
+        const fullName = cols[fnIdx];
+        if (!fullName) continue; 
+
         dataToImport.push({
-          fullName: cols[fnIdx],
+          fullName: fullName,
           phoneStudent: psIdx !== -1 ? cols[psIdx] : undefined,
           parentName: pnIdx !== -1 ? cols[pnIdx] : undefined,
           phoneParent: ppIdx !== -1 ? cols[ppIdx] : undefined,
-          gender: gIdx !== -1 ? cols[gIdx] : undefined,
+          gender: gIdx !== -1 ? mapGender(cols[gIdx]) : undefined,
         });
       }
 
       if (dataToImport.length > 0) {
         setLoading(true);
-        const res = await importStudentsCsv(dataToImport);
-        if (res.success) {
-          toast.success(`Nhập thành công ${res.count} học sinh!`);
-          router.refresh();
-        } else {
-          toast.error(res.error || "Lỗi nhập file CSV");
+        const loadingToastId = toast.loading(`Đang xử lý ${dataToImport.length} học sinh...`);
+        
+        try {
+          const res = await importStudentsCsv(dataToImport);
+          toast.dismiss(loadingToastId);
+          
+          if (res.success) {
+            toast.success(`Nhập thành công ${res.count} học sinh!`);
+            router.refresh();
+          } else {
+            toast.error(res.error || "Có lỗi xảy ra khi lưu vào hệ thống.");
+          }
+        } catch (error) {
+          toast.dismiss(loadingToastId);
+          toast.error("Lỗi kết nối máy chủ khi import!");
         }
         setLoading(false);
       }
     };
-    reader.readAsText(file);
+    
+    reader.readAsText(file, 'UTF-8');
     e.target.value = ''; 
   };
-
+  
   // ====== FORM SUBMIT ======
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -351,10 +448,20 @@ export default function StudentsClient({
                 <Trash2 size={18} /> Xóa ({selectedIds.size})
               </button>
             )}
-            <label className="transition-all cursor-pointer  hover:bg-emerald-100 text-emerald-700 px-5 py-2.5 rounded-xl font-bold text-sm shadow-sm flex items-center gap-2 border border-emerald-200">
+            
+            <button 
+              onClick={downloadSampleCsv}
+              className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2.5 rounded-xl font-bold text-sm shadow-sm flex items-center gap-2 border border-slate-200 transition-all"
+              title="Tải cấu trúc file CSV chuẩn"
+            >
+              <Download size={18} strokeWidth={3} /> Mẫu CSV
+            </button>
+
+            <label className="transition-all cursor-pointer hover:bg-emerald-100 text-emerald-700 px-5 py-2.5 rounded-xl font-bold text-sm shadow-sm flex items-center gap-2 border border-emerald-200">
               <Upload size={18} strokeWidth={3} /> Import CSV
               <input type="file" accept=".csv" className="hidden" onChange={handleFileUpload} />
             </label>
+            
             <button 
               onClick={openAddModal} 
               className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl font-bold text-sm shadow-sm flex items-center gap-2 transition-all"
@@ -404,7 +511,6 @@ export default function StudentsClient({
 
       {/* Table */}
       <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden mb-4">
-        {/* Xóa min-w-[1100px] để bảng co giãn vừa màn hình Mobile */}
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>

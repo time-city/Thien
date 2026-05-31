@@ -1,7 +1,8 @@
-# Thien - TODO
-
-- [x] Implement PHẦN 1 BACKEND: submitAttendanceAndCalculateFinance trong src/actions/mutations.ts
-- [x] Implement PHẦN 2 BACKEND: updateTeacherProfile trong src/actions/mutations.ts
-- [ ] Implement PHẦN 3 FRONTEND: TeacherSettingsPage (src/app/ta/settings/page.tsx) để dùng props thật, bỏ mock, có loading/toast/validate và format tiền VNĐ (bước tiếp theo)
-
+- [ ] Cập nhật submitAttendanceAndCalculateFinance trong src/actions/mutations.ts
+  - [ ] Xóa salaryCalculated cũ (attendanceData.length * pricePerSession)
+  - [ ] Trong transaction: query enrollments theo classId + studentIds, select {studentId, remainingSessions}
+  - [ ] Tính “giá trị 1 phiếu” = (class.pricePerSession * class.sessionsPerPackage) / remainingSessions (remainingSessions<=0 => 0)
+  - [ ] Cộng salaryCalculated mới = tổng phiếuValue của tất cả học sinh trong attendanceData
+  - [ ] Giữ nguyên logic: trừ roomFee, increment salaryBalance, decrement remainingSessions, feeStatus UNPAID khi remainingSessions <= 0
+- [ ] Typecheck/build (npm run build) hoặc lint nếu có
 

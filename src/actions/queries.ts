@@ -365,7 +365,10 @@ export type TeacherInfo = {
   fullName: string;
   username: string;
   salaryBalance: number;
+  totalRoomFee: number;
+  totalEarned: number;
 };
+
 
 export type TeachingHistory = {
   id: string;
@@ -386,6 +389,17 @@ export async function getTeacherSettingsInfo(teacherId: string) {
     },
   });
 
+  // Tổng phí thuê phòng (room rental) đã ghi nhận
+  const agg = await prisma.roomRentalLog.aggregate({
+    where: { teacherId },
+    _sum: { feeCalculated: true },
+  });
+
+  const totalRoomFee = agg._sum.feeCalculated ?? 0;
+
+  // Tổng thu nhập giảng dạy theo quan hệ: salaryBalance = totalEarned - totalRoomFee
+  const totalEarned = (teacherInfo?.salaryBalance ?? 0) + totalRoomFee;
+
   const sessions = await prisma.classSession.findMany({
     where: { teacherId },
     include: { class: true },
@@ -401,8 +415,62 @@ export async function getTeacherSettingsInfo(teacherId: string) {
   }));
 
   return {
-    teacherInfo,
+    teacherInfo: teacherInfo
+      ? {
+          ...teacherInfo,
+          totalRoomFee,
+          totalEarned,
+        }
+      : (undefined as any),
     teachingHistory,
   };
 }
 
+
+
+// Thêm type này vào actions/queries.ts
+export type TeacherFinanceViewData = {
+  id: string;
+  username: string;
+  fullName: string;
+  salaryBalance: number;
+  totalRoomFee: number;
+  totalEarned: number;
+};
+
+// Viết hàm query mới cho Admin
+export async function getTeachersForFinance(): Promise<TeacherFinanceViewData[]> {
+  const teachers = await prisma.user.findMany({
+    where: { role: "TEACHER" },
+    select: {
+      id: true,
+      username: true,
+      fullName: true,
+      salaryBalance: true,
+    },
+    orderBy: { fullName: "asc" }
+  });
+
+  const result = await Promise.all(
+    teachers.map(async (t) => {
+      // Tính tổng phí phòng đã trừ
+      const roomFeeAggr = await prisma.roomRentalLog.aggregate({
+        where: { teacherId: t.id },
+        _sum: { feeCalculated: true }
+      });
+      const totalRoomFee = roomFeeAggr._sum.feeCalculated || 0;
+      
+      // Tổng thu nhập giảng dạy = Số dư ví hiện tại + Tổng phí phòng đã trừ
+      const totalEarned = t.salaryBalance + totalRoomFee;
+
+      return {
+        ...t,
+        totalRoomFee,
+        totalEarned
+      };
+    })
+  );
+
+  // Sắp xếp ai có số dư ví cao nhất (cần trả lương) lên đầu
+  return result.sort((a, b) => b.salaryBalance - a.salaryBalance);
+}

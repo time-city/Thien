@@ -232,7 +232,7 @@ export default function ClassesClient({
                 <th className="py-3 px-4 w-10 sm:w-12 text-center hidden sm:table-cell">STT</th>
                 <th className="py-3 px-4">Lớp Học</th>
                 <th className="py-3 px-4 w-32 hidden md:table-cell">Danh mục</th>
-                <th className="py-3 px-4 hidden lg:table-cell">Học phí/Buổi</th>
+                <th className="py-3 px-4 hidden lg:table-cell">Học phí/phiếu</th>
                 <th className="py-3 px-4 hidden lg:table-cell">Số buổi/Khóa</th>
                 <th className="py-3 px-4 hidden lg:table-cell">Phí phòng/Ca</th>
                 <th className="py-3 px-4 hidden sm:table-cell">Giáo viên</th>
@@ -383,7 +383,7 @@ export default function ClassesClient({
                     </div>
 
                     <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
-                      <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Học phí/Buổi</div>
+                      <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Học phí/Phiếu</div>
                       <div className="mt-2 font-extrabold text-emerald-700 text-lg">
                         {formatVnCurrency(viewingClassData?.pricePerSession ?? 0)}đ
                       </div>

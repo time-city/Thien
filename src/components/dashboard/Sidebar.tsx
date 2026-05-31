@@ -100,7 +100,7 @@ export default function Sidebar({ userRole, userName, isOpen, onClose }: Sidebar
             <div className="bg-blue-600 p-1.5 rounded-lg">
               <BookOpen size={20} className="text-white" />
             </div>
-            <h2 className="text-lg font-bold text-slate-900 tracking-tight">Trung Tâm ERP</h2>
+            <h2 className="text-sm font-bold text-slate-900 tracking-tight">Trung Tâm Giáo Dục</h2>
           </div>
         </div>
 

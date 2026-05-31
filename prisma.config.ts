@@ -9,6 +9,7 @@ if (!process.env.DIRECT_URL) {
 
 export default defineConfig({
   schema: "prisma/schema.prisma",
+  
   datasource: {
     // Ép kiểu chắc chắn là string để Prisma v7 không càm ràm
     url: "postgresql://postgres.cpzrjkwwnsdymeglwiyh:@nguyenha17022005@aws-1-ap-northeast-1.pooler.supabase.com:5432/postgres"

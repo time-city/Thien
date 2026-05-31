@@ -30,7 +30,6 @@ export type {
   TransactionStatus,
   User,
   SalaryPayment,
-  Subject,
   Class,
   ClassTeacher,
   Student,
@@ -48,7 +47,6 @@ export type {
 
 export type ClassWithRelations = Prisma.ClassGetPayload<{
   include: {
-    subject: true;
     teachers: {
       include: { teacher: true };
     };
@@ -59,7 +57,7 @@ export type ClassWithRelations = Prisma.ClassGetPayload<{
 export type StudentWithRelations = Prisma.StudentGetPayload<{
   include: {
     enrollments: {
-      include: { class: { include: { subject: true } } };
+      include: { class: true };
     };
     attendanceLogs: {
       include: { classSession: true };
@@ -80,7 +78,7 @@ export type SessionWithRelations = Prisma.ClassSessionGetPayload<{
 export type EnrollmentWithRelations = Prisma.EnrollmentGetPayload<{
   include: {
     student: true;
-    class: { include: { subject: true } };
+    class: true;
   };
 }>;
 
@@ -102,7 +100,7 @@ export type TeacherData = {
   fullName: string;
   role: Role;
   isActive: boolean;
-  roomFeePerSession: number;
+  // Đã xóa roomFeePerSession ở đây
 };
 
 // --- LỚP HỌC (Classes) ---
@@ -110,8 +108,9 @@ export type ClassData = {
   id: string;
   name: string;
   category: string;
-  subjectId: string;
-  subjectName: string;
+  roomFeePerSession: number;
+  pricePerSession: number;
+  sessionsPerPackage: number;
   teachers: { teacherId: string; teacherName: string }[];
 };
 
@@ -128,9 +127,8 @@ export type EnrolledCourseData = {
   enrollmentId: string;
   classId: string;
   className: string;
-  subjectName: string;
   remainingSessions: number;
-  feeStatus: string; // Có thể đổi thành FeeStatus Enum nếu DB đồng bộ hoàn toàn
+  feeStatus: string; 
   status: string;
 };
 
@@ -140,6 +138,7 @@ export type StudentData = {
   phone: string | null;
   parentName: string | null;
   parentPhone: string | null;
+  gender: string | null;
   enrolledCourses: EnrolledCourseData[];
   logs: SessionLogData[];
 };
@@ -181,11 +180,14 @@ export type TuitionStudentData = {
 
 export type RentalLogData = {
   id: string;
+  teacherId: string;
   teacherName: string;
+  classSessionId: string | null;
+  className: string | null;
   date: Date;
   slot: number;
   feeCalculated: number;
-  status: string;
+  status: RentalStatus;
 };
 
 // =======================================================================
@@ -207,10 +209,11 @@ export type CheckInStudent = {
   remainingSessions?: number | null;
   feeStatus?: string | null;
 };
-
-export type UISessionInfo = {
+// Sửa lại interface này trong file src/app/types.ts
+export interface UISessionInfo {
+  teacherId: string; // ✅ Thêm dòng này vào
   className: string;
   teacherName: string;
-  date: string; // Để string vì truyền từ Server Component xuống Client sẽ ép thành ISO
+  date: string;
   slot: number;
-};
+}

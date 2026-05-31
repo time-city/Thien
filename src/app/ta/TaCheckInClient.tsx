@@ -6,8 +6,9 @@ import { useRouter, usePathname } from "next/navigation";
 import StudentEvaluationModal from "./StudentEvaluationModal"; 
 import type { CheckInStudent, UISessionInfo } from "../../app/types";
 import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
-import { saveStudentEvaluation } from "@/actions/mutations";
+import { ArrowLeft, Loader2, CheckCircle2, AlertTriangle } from "lucide-react";
+import { saveStudentEvaluation, submitAttendanceAndCalculateFinance } from "@/actions/mutations";
+import { toast } from "sonner";
 
 export default function TaCheckInClient({
   sessionInfo,
@@ -31,11 +32,16 @@ export default function TaCheckInClient({
   const [studentsState, setStudentsState] = useState<CheckInStudent[]>(students);
   const [selectedStudent, setSelectedStudent] = useState<CheckInStudent | null>(null);
   const [search, setSearch] = useState<string>("");
+  
+  // State xử lý loading và hiển thị Modal Chốt ca
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [isSubmittingFinal, setIsSubmittingFinal] = useState(false);
 
   useEffect(() => {
     setStudentsState(students);
   }, [students]);
 
+  // Hàm lưu đánh giá nháp cho từng học sinh
   const handleSaveAssessment = async (id: string, updates: Partial<CheckInStudent>) => {
     try {
       const res = await saveStudentEvaluation({
@@ -50,11 +56,61 @@ export default function TaCheckInClient({
         setStudentsState((prev) => prev.map((st) => (st.id === id ? { ...st, ...updates } : st)));
         setSelectedStudent(null);
       } else {
-        alert(res.error || "Lỗi khi lưu đánh giá");
+        toast.error(res.error || "Lỗi khi lưu đánh giá");
       }
     } catch (err) {
       console.error(err);
-      alert("Đã xảy ra lỗi hệ thống.");
+      toast.error("Đã xảy ra lỗi hệ thống.");
+    }
+  };
+
+  // ==========================================
+  // HÀM MỞ MODAL XÁC NHẬN CHỐT CA
+  // ==========================================
+  const handleFinalizeSession = () => {
+    // Bắt buộc giáo viên phải điểm danh đủ 100% học sinh mới cho chốt
+    const unassessed = studentsState.filter((s) => !s.attendance);
+    if (unassessed.length > 0) {
+      toast.error(`Vui lòng điểm danh toàn bộ học sinh trước khi chốt ca! (Còn ${unassessed.length} bạn chưa đánh giá)`);
+      return;
+    }
+
+    // Mở Modal thay vì dùng window.confirm
+    setShowConfirmModal(true);
+  };
+
+  // ==========================================
+  // HÀM THỰC THI GỌI API CHỐT CA (SAU KHI CONFIRM)
+  // ==========================================
+  const executeFinalize = async () => {
+    setIsSubmittingFinal(true);
+    try {
+      // Gom toàn bộ data của lớp truyền xuống Backend
+      const attendanceData = studentsState.map((s) => ({
+        studentId: s.id,
+        attendanceStatus: s.attendance!,
+        homeworkStatus: s.homework || undefined,
+        note: s.note,
+      }));
+
+      // Gọi Server Action
+      const res = await submitAttendanceAndCalculateFinance(
+        sessionId,
+        sessionInfo.teacherId, // Đảm bảo UISessionInfo truyền xuống có teacherId
+        attendanceData
+      );
+
+      if (res.success) {
+        setShowConfirmModal(false); // Đóng modal
+        toast.success(`Chốt ca thành công! Thực nhận: ${res.netIncome?.toLocaleString('vi-VN')}đ`);
+        router.push("/schedule");
+      } else {
+        toast.error(res.error || "Lỗi khi chốt ca");
+      }
+    } catch (error) {
+      toast.error("Đã xảy ra lỗi hệ thống");
+    } finally {
+      setIsSubmittingFinal(false);
     }
   };
 
@@ -90,6 +146,9 @@ export default function TaCheckInClient({
     router.push(`${pathname}?classId=${classId}&sessionId=${sessionId}&page=${newPage}`);
   };
 
+  // Kiểm tra xem đã điểm danh đủ 100% học sinh trên màn hình này chưa
+  const allAssessed = studentsState.length > 0 && studentsState.every((s) => s.attendance);
+
   return (
     <div className="w-full max-w-5xl mx-auto pb-8 font-sans">
       <div className="bg-white border border-slate-200 shadow-sm rounded-xl py-3 px-4 mb-6">
@@ -114,21 +173,35 @@ export default function TaCheckInClient({
             </p>
           </div>
 
-          <div className="w-full lg:w-auto">
+          <div className="w-full lg:w-auto flex items-center gap-3">
             <input
               type="text"
               placeholder="Tìm theo tên học sinh..."
-              className="w-full lg:w-64 bg-slate-50 border border-slate-200 rounded-lg h-8 px-3 text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-100"
+              className="w-full lg:w-64 bg-slate-50 border border-slate-200 rounded-lg h-9 px-3 text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-100"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
+            
+            {/* NÚT MỞ MODAL CHỐT CA */}
+            <button
+              onClick={handleFinalizeSession}
+              disabled={isSubmittingFinal || !allAssessed}
+              className={`h-9 px-4 flex items-center justify-center gap-2 text-white text-xs font-bold rounded-lg shadow-sm transition-all whitespace-nowrap ${
+                allAssessed 
+                  ? "bg-emerald-600 hover:bg-emerald-700" 
+                  : "bg-slate-300 cursor-not-allowed"
+              }`}
+              title={!allAssessed ? "Vui lòng điểm danh đủ học sinh để chốt ca" : "Chốt ca học và nhận lương"}
+            >
+              <CheckCircle2 size={16} />
+              Chốt Ca Học
+            </button>
           </div>
         </div>
       </div>
       
-
       <div className="flex flex-col gap-4">
-           {totalPages > 1 && (
+        {totalPages > 1 && (
           <div className="flex items-center justify-between bg-white px-4 py-2 border border-slate-200 rounded-xl shadow-sm">
              <span className="text-[13px] text-slate-700 font-medium">
                 Trang <span className="font-bold text-slate-900">{currentPage}</span> / {totalPages}
@@ -138,7 +211,7 @@ export default function TaCheckInClient({
                 currentPage > 1 && (
                   <button 
                     onClick={() => handlePageChange(1)}
-                    className="px-2.5 py-1 border border-slate-200 rounded text-[13px] font-bold text-slate-600 hover:bg-slate-50"
+                    className="px-2.5 py-1 border border-slate-200 rounded text-[13px] font-bold text-slate-600 hover:bg-slate-50 hidden sm:block"
                   >
                     Trang đầu
                   </button>
@@ -162,7 +235,7 @@ export default function TaCheckInClient({
                 currentPage < totalPages  && (
                   <button 
                     onClick={() => handlePageChange(totalPages)}
-                    className="px-2.5 py-1 border border-slate-200 rounded text-[13px] font-bold text-slate-600 hover:bg-slate-50"
+                    className="px-2.5 py-1 border border-slate-200 rounded text-[13px] font-bold text-slate-600 hover:bg-slate-50 hidden sm:block"
                   >
                     Trang cuối
                   </button>
@@ -171,15 +244,16 @@ export default function TaCheckInClient({
              </div>
           </div>
         )}
+        
         <div className="bg-white border border-slate-200 rounded-xl overflow-x-auto shadow-sm">
-          <table className="w-full text-left border-collapse min-w-[600px]">
+          <table className="w-full text-left border-collapse">
             <thead>
-              <tr className="bg-slate-50 border-b border-slate-200 text-[11px] uppercase tracking-widest font-extrabold text-slate-500">
-                <th className="py-2 px-3 w-12 text-center">STT</th>
-                <th className="py-2 px-3">Học sinh</th>
-                <th className="py-2 px-3 w-28">Điểm danh</th>
-                <th className="py-2 px-3 w-28">Bài tập</th>
-                <th className="py-2 px-3 w-24 text-center">Hành động</th>
+              <tr className="bg-slate-50 border-b border-slate-200 text-[10px] sm:text-[11px] uppercase tracking-widest font-extrabold text-slate-500">
+                <th className="py-2 px-2 sm:px-3 w-10 sm:w-12 text-center hidden sm:table-cell">STT</th>
+                <th className="py-2 px-2 sm:px-3">Học sinh</th>
+                <th className="py-2 px-2 sm:px-3 w-20 sm:w-28">Điểm danh</th>
+                <th className="py-2 px-2 sm:px-3 w-20 sm:w-28 hidden md:table-cell">Bài tập</th>
+                <th className="py-2 px-2 sm:px-3 w-20 sm:w-24 text-center">Hành động</th>
               </tr>
             </thead>
             <tbody>
@@ -195,13 +269,13 @@ export default function TaCheckInClient({
                       isAssessed ? "bg-slate-50/50" : "hover:bg-slate-50"
                     }`}
                   >
-                    <td className="py-2 px-3 text-center font-bold text-slate-400 text-[13px]">
+                    <td className="py-2 px-2 sm:px-3 text-center font-bold text-slate-400 text-[13px] hidden sm:table-cell">
                       {student.seat}
                     </td>
-                    <td className="py-2 px-3">
-                      <div className="flex items-center gap-2.5">
+                    <td className="py-2 px-2 sm:px-3">
+                      <div className="flex items-center gap-2 sm:gap-2.5">
                         <div
-                          className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs border ${
+                          className={`w-6 h-6 sm:w-7 sm:h-7 rounded-full flex items-center justify-center font-bold text-[10px] sm:text-xs border ${
                             isAssessed
                               ? "bg-slate-800 text-white border-slate-700"
                               : "bg-slate-100 text-slate-500 border-slate-200"
@@ -210,25 +284,27 @@ export default function TaCheckInClient({
                           {initial}
                         </div>
                         <div className="flex flex-col justify-center">
-                           <div className="font-bold text-slate-800 text-[13px] leading-none mb-1">{student.fullName}</div>
-                           <div className="text-[11px] text-slate-500 font-medium leading-none">Còn {student.remainingSessions} buổi</div>
+                           <div className="font-bold text-slate-800 text-xs sm:text-[13px] leading-none mb-1">{student.fullName}</div>
+                           <div className="text-[10px] sm:text-[11px] text-slate-500 font-medium leading-none">Còn {student.remainingSessions} buổi</div>
                         </div>
                       </div>
                     </td>
-                    <td className="py-2 px-3">
+                    <td className="py-2 px-2 sm:px-3">
                       {student.attendance ? (
-                        <div className="flex items-center gap-1.5 text-xs font-bold text-slate-600">
-                          <div className={`w-2.5 h-2.5 rounded-full ${getAttendanceColor(student.attendance)}`}></div>
-                          {student.attendance === "PRESENT" && "Có mặt"}
-                          {student.attendance === "LATE" && "Trễ"}
-                          {student.attendance === "EXCUSED" && "Phép"}
-                          {student.attendance === "UNEXCUSED" && "Vắng"}
+                        <div className="flex items-center gap-1 sm:gap-1.5 text-[11px] sm:text-xs font-bold text-slate-600">
+                          <div className={`w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full flex-shrink-0 ${getAttendanceColor(student.attendance)}`}></div>
+                          <span>
+                            {student.attendance === "PRESENT" && "Có mặt"}
+                            {student.attendance === "LATE" && "Trễ"}
+                            {student.attendance === "EXCUSED" && "Phép"}
+                            {student.attendance === "UNEXCUSED" && "Vắng"}
+                          </span>
                         </div>
                       ) : (
                         <span className="text-xs font-semibold text-slate-300">-</span>
                       )}
                     </td>
-                    <td className="py-2 px-3">
+                    <td className="py-2 px-2 sm:px-3 hidden md:table-cell">
                       {student.homework ? (
                         <div className="flex items-center gap-1.5 text-xs font-bold text-slate-600">
                           <div className={`w-2.5 h-2.5 rounded-full ${getHomeworkColor(student.homework)}`}></div>
@@ -240,10 +316,10 @@ export default function TaCheckInClient({
                         <span className="text-xs font-semibold text-slate-300">-</span>
                       )}
                     </td>
-                    <td className="py-2 px-3 text-center">
+                    <td className="py-2 px-2 sm:px-3 text-center">
                       <button
                         onClick={() => setSelectedStudent(student)}
-                        className={`px-3 py-1 border rounded-[6px] text-[11px] font-bold shadow-sm transition-all outline-none ${
+                        className={`px-2 py-1 sm:px-3 sm:py-1 border rounded-[6px] text-[10px] sm:text-[11px] font-bold shadow-sm transition-all outline-none whitespace-nowrap ${
                           isAssessed
                             ? "bg-transparent border-slate-200 text-slate-600 hover:border-blue-400 hover:text-blue-600 hover:bg-blue-50"
                             : "bg-transparent border-blue-200 text-blue-600 hover:bg-blue-50 hover:border-blue-300"
@@ -266,9 +342,6 @@ export default function TaCheckInClient({
             </tbody>
           </table>
         </div>
-        
-     
-
       </div>
 
       {selectedStudent && (
@@ -277,6 +350,47 @@ export default function TaCheckInClient({
           onClose={() => setSelectedStudent(null)}
           onSave={handleSaveAssessment}
         />
+      )}
+
+      {/* ========================================== */}
+      {/* MODAL XÁC NHẬN CHỐT CA HỌC */}
+      {/* ========================================== */}
+      {showConfirmModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden flex flex-col animate-in zoom-in-95 duration-200">
+            <div className="p-6 flex flex-col items-center text-center">
+              <div className="w-14 h-14 bg-rose-100 text-rose-600 rounded-full flex items-center justify-center mb-4">
+                <AlertTriangle size={28} strokeWidth={2.5} />
+              </div>
+              <h3 className="text-lg font-extrabold text-slate-900 mb-2">Xác Nhận Chốt Ca</h3>
+              <p className="text-[13px] text-slate-500 font-medium leading-relaxed">
+                Bạn có chắc chắn muốn chốt ca học này? Hệ thống sẽ tự động <b>trừ phiếu học sinh</b>, <b>tính lương</b> vào ví giáo viên và <b className="text-rose-600">không thể hoàn tác</b>.
+              </p>
+            </div>
+            
+            <div className="p-4 border-t border-slate-100 flex gap-3 bg-slate-50">
+              <button
+                onClick={() => setShowConfirmModal(false)}
+                disabled={isSubmittingFinal}
+                className="flex-1 px-4 py-2.5 rounded-xl font-bold text-sm text-slate-600 bg-white border border-slate-200 hover:bg-slate-100 transition-colors disabled:opacity-50"
+              >
+                Hủy
+              </button>
+              <button
+                onClick={executeFinalize}
+                disabled={isSubmittingFinal}
+                className="flex-1 px-4 py-2.5 rounded-xl font-bold text-sm bg-emerald-600 text-white hover:bg-emerald-700 transition-colors shadow-sm flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
+              >
+                {isSubmittingFinal ? (
+                  <Loader2 size={16} className="animate-spin" />
+                ) : (
+                  <CheckCircle2 size={16} />
+                )}
+                {isSubmittingFinal ? "Đang xử lý..." : "Chốt Ngay"}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

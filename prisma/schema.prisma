@@ -90,8 +90,8 @@ model User {
   passwordHash      String
   fullName          String
   role              Role           @default(TEACHER)
-  roomFeePerSession Float          @default(0)
   isActive          Boolean        @default(true)
+
 
   salaryBalance     Float          @default(0)
   createdAt         DateTime       @default(now())
@@ -119,31 +119,22 @@ model SalaryPayment {
   @@schema("public")
 }
 
-model Subject {
-  id                   String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  name                 String
-  pricePerSession      Float     @default(0)
-  sessionsPerPackage   Int       @default(12)
-  createdAt            DateTime  @default(now())
 
-  classes              Class[]
-
-  @@map("subjects")
-  @@schema("public")
-}
 
 model Class {
-  id           String         @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  subjectId    String         @db.Uuid
-  name         String
-  category     String
-  createdAt    DateTime       @default(now())
+  id                String         @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  name              String
+  category          String
+  roomFeePerSession Float          @default(0)
+  pricePerSession   Float          @default(0)
+  sessionsPerPackage Int          @default(12)
+  createdAt         DateTime       @default(now())
 
-  subject      Subject        @relation(fields: [subjectId], references: [id], onDelete: Cascade)
   teachers     ClassTeacher[]
   enrollments  Enrollment[]
   sessions     ClassSession[]
   payments     PaymentHistory[]
+
 
   @@map("classes")
   @@schema("public")

@@ -51,7 +51,7 @@ const menuItems: MenuItem[] = [
     roles: ["SUPER_ADMIN"],
   },
   {
-    title: "Lớp Học & Môn Học",
+    title: "Lớp Học",
     href: "/admin/classes", // Hoặc /admin/subjects tuỳ ông đặt
     icon: Layers,
     roles: ["SUPER_ADMIN"],

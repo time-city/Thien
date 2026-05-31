@@ -98,13 +98,14 @@ export default async function ClassRosterPage({
       parentName: e.student.parentName,
       parentPhone: e.student.phoneParent,
       remainingSessions: e.remainingSessions,
-      feeStatus: e.feeStatus,
+      feeStatus: e.remainingSessions <= 0 ? "UNPAID" : e.feeStatus,
     };
   });
 
   return (
     <TaCheckInClient
       sessionInfo={{
+        teacherId: sessionInfo.teacherId, // ✅ Bổ sung ID của giáo viên vào đây
         className: sessionInfo.class.name,
         teacherName: sessionInfo.teacher.fullName,
         date: sessionInfo.date.toISOString(),

@@ -14,7 +14,7 @@ import {
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 
-import { useConfirm } from "@/hooks/useconfirm"; // Đã sửa lỗi chữ hoa/thường: useConfirm
+import { useConfirm } from "@/hooks/useconfirm"; // Đã sửa tên file chuẩn
 import {
   createTeacher,
   updateTeacher,
@@ -40,8 +40,6 @@ export default function TeachersClient({
   const router = useRouter();
   const { confirm } = useConfirm();
 
-  // BỎ: const [teachers, setTeachers] = useState<TeacherData[]>(initialTeachers);
-
   const [search, setSearch] = useState("");
   const [isCheckingImpact, setIsCheckingImpact] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -51,7 +49,7 @@ export default function TeachersClient({
 
   const [username, setUsername] = useState("");
   const [fullName, setFullName] = useState("");
-  const [roomFeePerSession, setRoomFeePerSession] = useState<number>(0);
+
   const [isActive, setIsActive] = useState(true);
   const [password, setPassword] = useState("");
 
@@ -71,7 +69,6 @@ export default function TeachersClient({
     setEditingTeacher(null);
     setUsername("");
     setFullName("");
-    setRoomFeePerSession(0);
     setIsActive(true);
     setPassword("");
     setIsModalOpen(true);
@@ -81,7 +78,7 @@ export default function TeachersClient({
     setEditingTeacher(t);
     setUsername(t.username);
     setFullName(t.fullName);
-    setRoomFeePerSession(t.roomFeePerSession ?? 0);
+
     setIsActive(t.isActive);
     setPassword("");
     setIsModalOpen(true);
@@ -99,16 +96,11 @@ export default function TeachersClient({
       if (editingTeacher) {
         const res = await updateTeacher(editingTeacher.id, {
           fullName,
-          roomFeePerSession,
           isActive,
-          // username không đổi ở edit mode
         });
 
         if (res?.success) {
           toast.success("Cập nhật giáo viên thành công");
-          
-          // BỎ: setTeachers(...)
-
           setIsModalOpen(false);
           router.refresh(); 
         } else {
@@ -123,7 +115,6 @@ export default function TeachersClient({
           username,
           password,
           fullName,
-          roomFeePerSession,
           isActive,
         });
 
@@ -181,7 +172,6 @@ export default function TeachersClient({
                 {(impact.roomRentalLogsCount || 0) > 0 && (
                   <li>{impact.roomRentalLogsCount} bản ghi thuê phòng vẫn được giữ nguyên.</li>
                 )}
-
               </ul>
               Không mất dữ liệu lịch sử.
             </div>
@@ -191,7 +181,7 @@ export default function TeachersClient({
         cancelText: "Hủy bỏ",
         isDestructive: true,
         onConfirm: async () => {
-          const t = initialTeachers.find((x) => x.id === teacherId); // Đổi teachers thành initialTeachers
+          const t = initialTeachers.find((x) => x.id === teacherId); 
           const res2 = await banTeacher(teacherId);
           if (res2?.success) {
             toast.success(`Đã ban giáo viên: ${t?.fullName || "(không rõ)"}`);
@@ -255,7 +245,6 @@ export default function TeachersClient({
                   {(impact.classTeacherLinksCount || 0) > 0 && (
                     <li>{impact.classTeacherLinksCount} quan hệ lớp–giáo viên</li>
                   )}
-
                 </ul>
                 Hành động này <strong>KHÔNG THỂ hoàn tác!</strong>
               </div>
@@ -266,7 +255,7 @@ export default function TeachersClient({
         cancelText: "Hủy bỏ",
         isDestructive: true,
         onConfirm: async () => {
-          const t = initialTeachers.find((x) => x.id === teacherId); // Đổi teachers thành initialTeachers
+          const t = initialTeachers.find((x) => x.id === teacherId); 
           const res2 = await deleteTeacher(teacherId);
           if (res2?.success) {
             toast.success(`Đã xóa giáo viên: ${t?.fullName || "(không rõ)"}`);
@@ -295,19 +284,19 @@ export default function TeachersClient({
           </div>
 
           <div className="flex flex-wrap gap-2 items-center">
-            <label className="relative flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 h-10">
+            <label className="relative flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 h-10 w-full sm:w-auto">
               <Search size={16} className="text-slate-400" />
               <input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Tìm theo tên hoặc username..."
-                className="w-[220px] outline-none bg-transparent text-sm font-semibold placeholder:text-slate-400"
+                className="w-full sm:w-[220px] outline-none bg-transparent text-sm font-semibold placeholder:text-slate-400"
               />
             </label>
 
             <button
               onClick={openAddModal}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl font-bold text-sm shadow-sm flex items-center gap-2 transition-all"
+              className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl font-bold text-sm shadow-sm flex items-center gap-2 transition-all w-full sm:w-auto justify-center"
             >
               <Plus size={18} strokeWidth={3} /> Thêm Giáo Viên
             </button>
@@ -317,22 +306,24 @@ export default function TeachersClient({
 
       <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden mb-4">
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse min-w-[900px]">
+          {/* Bỏ min-w-[900px] để bảng co lại trên Mobile */}
+          <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-slate-50 border-b border-slate-200 text-[11px] uppercase tracking-widest font-extrabold text-slate-500">
-                <th className="py-3 px-4 w-14 text-center">#</th>
+                <th className="py-3 px-4 w-10 sm:w-14 text-center">#</th>
                 <th className="py-3 px-4">Họ và Tên</th>
-                <th className="py-3 px-4 w-52">Username</th>
-                <th className="py-3 px-4 w-40">Vai trò</th>
-                <th className="py-3 px-4 w-52">Thu tiền phòng/buổi</th>
-                <th className="py-3 px-4 w-32 text-center">Trạng thái</th>
-                <th className="py-3 px-4 w-28 text-center">Thao tác</th>
+                {/* Ẩn trên Mobile, hiện từ PC trở lên */}
+                <th className="py-3 px-4 hidden md:table-cell w-40 lg:w-52">Username</th>
+                {/* Ẩn trên Mobile, hiện từ Tablet trở lên */}
+                <th className="py-3 px-4 hidden sm:table-cell w-32 lg:w-40">Vai trò</th>
+                <th className="py-3 px-4 w-28 sm:w-32 text-center">Trạng thái</th>
+                <th className="py-3 px-4 w-24 sm:w-28 text-center">Thao tác</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-12 text-center text-slate-500 font-medium">
+                  <td colSpan={6} className="px-4 py-12 text-center text-slate-500 font-medium">
                     Không tìm thấy giáo viên.
                   </td>
                 </tr>
@@ -343,24 +334,24 @@ export default function TeachersClient({
                       {idx + 1}
                     </td>
                     <td className="py-3 px-4">
-                      <div className="font-bold text-slate-800 text-sm">{t.fullName}</div>
+                      <div className="font-bold text-slate-800 text-sm whitespace-nowrap">{t.fullName}</div>
+                      {/* Trên Mobile, hiển thị luôn Username ở dưới tên cho gọn */}
+                      <div className="text-[11px] text-slate-500 md:hidden mt-0.5 font-medium tracking-wide">
+                        @{t.username}
+                      </div>
                     </td>
-                    <td className="py-3 px-4">
-                      <span className="text-sm font-semibold text-slate-700">{t.username}</span>
+                    <td className="py-3 px-4 hidden md:table-cell">
+                      <span className="text-sm font-semibold text-slate-700">@{t.username}</span>
                     </td>
-                    <td className="py-3 px-4">
-                      <span className="inline-flex items-center gap-2 px-2 py-1 rounded-md bg-slate-100 text-slate-700 border border-slate-200 text-xs font-bold">
+                    <td className="py-3 px-4 hidden sm:table-cell">
+                      <span className="inline-flex items-center gap-2 px-2 py-1 rounded-md bg-slate-100 text-slate-700 border border-slate-200 text-[11px] font-bold">
                         {formatRole(t.role)}
                       </span>
                     </td>
-                    <td className="py-3 px-4">
-                      <span className="text-sm font-bold text-blue-700">
-                        {Number(t.roomFeePerSession || 0).toLocaleString("vi-VN")}đ
-                      </span>
-                    </td>
+
                     <td className="py-3 px-4 text-center">
                       <span
-                        className={`inline-flex items-center justify-center px-2 py-1 rounded-md text-xs font-bold border ${
+                        className={`inline-flex items-center justify-center px-2 py-1 rounded-md text-[10px] sm:text-xs font-bold border whitespace-nowrap ${
                           t.isActive
                             ? "bg-emerald-50 text-emerald-700 border-emerald-200"
                             : "bg-rose-50 text-rose-700 border-rose-200"
@@ -370,7 +361,7 @@ export default function TeachersClient({
                       </span>
                     </td>
                     <td className="py-3 px-4">
-                      <div className="flex items-center justify-center gap-1 transition-opacity">
+                      <div className="flex items-center justify-center gap-1 sm:gap-1.5 transition-opacity">
                         <button
                           onClick={() => openEditModal(t)}
                           className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
@@ -384,9 +375,9 @@ export default function TeachersClient({
                           onClick={() => confirmBan(t.id)}
                           disabled={isCheckingImpact === t.id}
                           className="p-1.5 text-amber-600 hover:bg-amber-50 rounded-md transition-colors disabled:opacity-50"
-                          title="Ban tài khoản"
+                          title={t.isActive ? "Ban tài khoản" : "Mở ban tài khoản"}
                         >
-                          <Ban size={16} />
+                          <Ban size={16} className={!t.isActive ? "text-slate-400" : ""} />
                         </button>
 
                         <button
@@ -489,20 +480,7 @@ export default function TeachersClient({
                 />
               </div>
 
-              <div className="space-y-1.5">
-                <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                  Thu tiền phòng/buổi
-                </label>
-                <input
-                  type="number"
-                  min={0}
-                  value={roomFeePerSession}
-                  onChange={(e) => setRoomFeePerSession(Number(e.target.value))}
-                  className="w-full h-10 px-3 border border-slate-200 rounded-xl bg-slate-50 text-sm font-semibold focus:ring-2 focus:ring-blue-100 outline-none transition-all"
-                />
-              </div>
-
-              <div className="pt-3 border-t border-slate-100 flex justify-end gap-3">
+              <div className="pt-3 border-t border-slate-100 flex justify-end gap-3 mt-6">
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
@@ -517,7 +495,7 @@ export default function TeachersClient({
                 >
                   {loading ? (
                     <>
-                      <Loader2 size={16} className="animate-spin" /> Đang xử lý...
+                      <Loader2 size={16} className="animate-spin mr-2" /> Đang xử lý...
                     </>
                   ) : (
                     <> {editingTeacher ? "Lưu Thay Đổi" : "Tạo Giáo Viên"} </>

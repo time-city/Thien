@@ -1,19 +1,17 @@
-import { getAllClasses, getAllSubjects, getTeachers } from "@/actions/queries";
+// src/app/admin/classes/page.tsx
+import { getAllClasses, getAllAvailableTeachers } from "@/actions/queries";
+
 import ClassesClient from "./ClassesClient";
 
 export default async function ClassesPage() {
-  const [classes, subjects, teachers] = await Promise.all([
+  // Gọi đồng thời cả 3 hàm lấy dữ liệu từ DB
+  const [initialClasses, availableTeachers] = await Promise.all([
     getAllClasses(),
-    getAllSubjects(),
-    getTeachers(),
+    getAllAvailableTeachers() // Gọi hàm mới lấy cả Admin + GV
   ]);
 
   return (
-    <ClassesClient
-      initialClasses={classes}
-      subjects={subjects}
-      teachers={teachers.map((t) => ({ id: t.id, fullName: t.fullName }))}
-    />
+    <ClassesClient initialClasses={initialClasses} teachers={availableTeachers} />
   );
 }
 

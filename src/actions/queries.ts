@@ -4,34 +4,19 @@ import {
   AttendanceStatus, 
   HomeworkStatus, 
   RentalStatus,
-
 } from "@prisma/client";
 
 // ==========================================
-// 1. MÔN HỌC (SUBJECTS)
+// 1. TÀI KHOẢN (USERS / TEACHERS / ADMINS)
 // ==========================================
-export async function getAllSubjects() {
-  return await prisma.subject.findMany({
-    orderBy: { createdAt: "desc" }
-  });
-}
 
-export async function getSubjectById(id: string) {
-  return await prisma.subject.findUnique({
-    where: { id },
-  });
-}
-
-// ==========================================
-// 2. TÀI KHOẢN (USERS / TEACHERS / ADMINS)
-// ==========================================
 export type TeacherData = {
   id: string;
   username: string;
   fullName: string;
   role: Role;
   isActive: boolean;
-  roomFeePerSession: number;
+  salaryBalance?: number;
 };
 
 export type RentalLogData = {
@@ -54,7 +39,6 @@ export async function getAllUsers(): Promise<TeacherData[]> {
       fullName: true,
       role: true,
       isActive: true,
-      roomFeePerSession: true,
     },
     orderBy: { createdAt: "desc" }
   });
@@ -63,21 +47,39 @@ export async function getAllUsers(): Promise<TeacherData[]> {
 export async function getUserById(id: string) {
   return await prisma.user.findUnique({
     where: { id },
-    select: { id: true, username: true, fullName: true, role: true, isActive: true, roomFeePerSession: true }
+    select: { id: true, username: true, fullName: true, role: true, isActive: true }
   });
 }
 
 export async function getTeachers() {
   return await prisma.user.findMany({
     where: { 
-      role: "TEACHER" // Ép Database chỉ tìm giáo viên, không quan tâm bọn khác
+      role: "TEACHER" 
     },
     orderBy: { createdAt: "desc" },
   });
 }
 
+export async function getAllAvailableTeachers() {
+  return await prisma.user.findMany({
+    where: {
+      role: {
+        in: ["TEACHER", "SUPER_ADMIN"], 
+      },
+      isActive: true, 
+    },
+    select: {
+      id: true,
+      fullName: true,
+    },
+    orderBy: {
+      fullName: "asc", 
+    },
+  });
+}
+
 // ==========================================
-// 3. LỚP HỌC (CLASSES)
+// 2. LỚP HỌC (CLASSES)
 // ==========================================
 
 export type TuitionStudentData = {
@@ -96,7 +98,7 @@ export async function getTuitionData(): Promise<TuitionStudentData[]> {
   const students = await prisma.student.findMany({
     include: {
       enrollments: {
-        include: { class: { include: { subject: true } } }
+        include: { class: true } // Đã xóa include subject
       }
     }
   });
@@ -109,8 +111,8 @@ export async function getTuitionData(): Promise<TuitionStudentData[]> {
       className: e.class.name,
       feeStatus: e.feeStatus,
       remainingSessions: e.remainingSessions,
-      // Tính giá của gói học (Giá 1 buổi x Số buổi)
-      price: e.class.subject.pricePerSession * e.class.subject.sessionsPerPackage
+      // Tính giá của gói học (Giá 1 buổi x Số buổi) lấy thẳng từ Class
+      price: e.class.pricePerSession * e.class.sessionsPerPackage
     }))
   }));
 }
@@ -119,15 +121,16 @@ export type ClassData = {
   id: string;
   name: string;
   category: string;
-  subjectId: string;
-  subjectName: string;
+  subjectName?: string;
+  roomFeePerSession: number;
+  pricePerSession: number;
+  sessionsPerPackage: number;
   teachers: { teacherId: string; teacherName: string }[];
 };
 
 export async function getAllClasses(): Promise<ClassData[]> {
   const classes = await prisma.class.findMany({
     include: {
-      subject: true,
       teachers: { include: { teacher: true } }
     },
     orderBy: { createdAt: "desc" }
@@ -137,8 +140,10 @@ export async function getAllClasses(): Promise<ClassData[]> {
     id: c.id,
     name: c.name,
     category: c.category,
-    subjectId: c.subjectId,
-    subjectName: c.subject.name,
+    subjectName: (c as any).subjectName ?? undefined,
+    roomFeePerSession: c.roomFeePerSession,
+    pricePerSession: c.pricePerSession,
+    sessionsPerPackage: c.sessionsPerPackage,
     teachers: c.teachers.map(ct => ({
       teacherId: ct.teacherId,
       teacherName: ct.teacher.fullName
@@ -150,15 +155,29 @@ export async function getClassById(id: string) {
   return await prisma.class.findUnique({
     where: { id },
     include: {
-      subject: true,
       teachers: { include: { teacher: true } },
-      enrollments: { include: { student: true } } // Lấy luôn danh sách hs của lớp
-    }
+      enrollments: { include: { student: true } },
+    },
   });
 }
 
+export async function fetchClassDetailsForView(classId: string) {
+  return await prisma.class.findUnique({
+    where: { id: classId },
+    include: {
+      teachers: { include: { teacher: true } },
+      enrollments: { include: { student: true } },
+    },
+  });
+}
+
+
+
+
+
+
 // ==========================================
-// 4. HỌC SINH & GHI DANH (STUDENTS & ENROLLMENTS)
+// 3. HỌC SINH & GHI DANH (STUDENTS & ENROLLMENTS)
 // ==========================================
 export type SessionLogData = {
   id: string;
@@ -172,11 +191,11 @@ export type EnrolledCourseData = {
   enrollmentId: string;
   classId: string;
   className: string;
-  subjectName: string;
+  subjectName?: string | null;
   remainingSessions: number;
   feeStatus: string;
   status: string;
-  teachers: string[]; // Tên các giáo viên phụ trách lớp
+  teachers: string[]; 
 };
 
 export type StudentData = {
@@ -186,6 +205,8 @@ export type StudentData = {
   parentName: string | null;
   parentPhone: string | null;
   gender: string | null;
+  dob: Date | null;
+  school: string | null;
   enrolledCourses: EnrolledCourseData[];
   logs: SessionLogData[];
 };
@@ -194,48 +215,49 @@ export async function getStudentsDetailed(): Promise<StudentData[]> {
   const students = await prisma.student.findMany({
     include: {
       enrollments: {
-        include: { 
-          class: { 
-            include: { 
-              subject: true,
-              teachers: { include: { teacher: true } }
-            } 
-          } 
-        }
+        include: {
+          class: {
+            include: {
+              teachers: { include: { teacher: true } },
+            },
+          },
+        },
       },
       attendanceLogs: {
         include: { classSession: true },
         orderBy: { classSession: { date: "desc" } },
-        take: 10 
-      }
+        take: 10,
+      },
     },
-    orderBy: { createdAt: "desc" }
+    orderBy: { createdAt: "desc" },
   });
 
-  return students.map(s => ({
+  return students.map((s) => ({
     id: s.id,
     fullName: s.fullName,
     phone: s.phoneStudent,
     parentName: s.parentName,
     parentPhone: s.phoneParent,
     gender: s.gender,
-    enrolledCourses: s.enrollments.map(e => ({
+    dob: s.dob,
+    school: s.school,
+    enrolledCourses: s.enrollments.map((e) => ({
       enrollmentId: e.id,
       classId: e.classId,
       className: e.class.name,
-      subjectName: e.class.subject.name,
+      subjectName: (e.class as any).subjectName ?? null,
       remainingSessions: e.remainingSessions,
       feeStatus: e.feeStatus,
       status: e.status,
-      teachers: e.class.teachers.map(t => t.teacher.fullName)
+      teachers: e.class.teachers.map((t) => t.teacher.fullName),
     })),
-    logs: s.attendanceLogs.map(log => ({
+    logs: s.attendanceLogs.map((log) => ({
       id: log.id,
       date: log.classSession.date,
       attendanceStatus: log.attendanceStatus,
       homeworkStatus: log.homeworkStatus,
-      note: log.note
-    }))
+      note: log.note,
+    })),
   }));
 }
 
@@ -249,7 +271,7 @@ export async function getStudentById(id: string) {
 }
 
 // ==========================================
-// 5. LỊCH DẠY (SCHEDULE & SESSIONS)
+// 4. LỊCH DẠY (SCHEDULE & SESSIONS)
 // ==========================================
 export type ScheduleItemData = {
   id: string;
@@ -265,7 +287,7 @@ export type ScheduleItemData = {
 
 export async function getSchedule(teacherId?: string): Promise<ScheduleItemData[]> {
   const sessions = await prisma.classSession.findMany({
-    where: teacherId ? { teacherId } : undefined, // Truyền ID giáo viên thì chỉ lấy lịch người đó
+    where: teacherId ? { teacherId } : undefined, 
     include: { class: true, teacher: true },
     orderBy: [{ date: "asc" }, { slot: "asc" }]
   });
@@ -291,13 +313,13 @@ export async function getSessionById(id: string) {
 }
 
 // ==========================================
-// 6. TÀI CHÍNH (FINANCE - THU HỌC PHÍ, TRẢ LƯƠNG, THUÊ PHÒNG)
+// 5. TÀI CHÍNH (FINANCE - THU HỌC PHÍ, TRẢ LƯƠNG, THUÊ PHÒNG)
 // ==========================================
 export async function getTuitionEnrollments() {
   return await prisma.enrollment.findMany({
     include: {
       student: true,
-      class: { include: { subject: true } }
+      class: true // Đã xóa include subject
     },
     orderBy: { createdAt: "desc" }
   });
@@ -308,7 +330,7 @@ export async function getRentalLogs(): Promise<RentalLogData[]> {
     include: {
       teacher: true,
       classSession: {
-        include: { class: true } // Phải include class thì mới lấy được className
+        include: { class: true } 
       }
     },
     orderBy: { createdAt: "desc" }
@@ -319,7 +341,7 @@ export async function getRentalLogs(): Promise<RentalLogData[]> {
     teacherId: log.teacherId,
     teacherName: log.teacher.fullName,
     classSessionId: log.classSessionId,
-    className: log.classSession.class.name, // Lấy tên lớp từ bảng lồng
+    className: log.classSession.class.name, 
     date: log.classSession.date,
     slot: log.classSession.slot,
     feeCalculated: log.feeCalculated,
@@ -333,3 +355,54 @@ export async function getPaymentHistory() {
     orderBy: { paymentDate: "desc" }
   });
 }
+
+// ==========================================
+// 6. TEACHER SETTINGS
+// ==========================================
+
+export type TeacherInfo = {
+  id: string;
+  fullName: string;
+  username: string;
+  salaryBalance: number;
+};
+
+export type TeachingHistory = {
+  id: string;
+  date: Date;
+  slot: number;
+  className: string;
+  status: "completed" | "scheduled";
+};
+
+export async function getTeacherSettingsInfo(teacherId: string) {
+  const teacherInfo = await prisma.user.findUnique({
+    where: { id: teacherId },
+    select: {
+      id: true,
+      fullName: true,
+      username: true,
+      salaryBalance: true,
+    },
+  });
+
+  const sessions = await prisma.classSession.findMany({
+    where: { teacherId },
+    include: { class: true },
+    orderBy: { date: "desc" },
+  });
+
+  const teachingHistory: TeachingHistory[] = sessions.map((s) => ({
+    id: s.id,
+    date: s.date,
+    slot: s.slot,
+    className: s.class.name,
+    status: s.status === "COMPLETED" ? "completed" : "scheduled",
+  }));
+
+  return {
+    teacherInfo,
+    teachingHistory,
+  };
+}
+

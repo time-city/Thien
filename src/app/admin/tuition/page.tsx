@@ -10,7 +10,7 @@ export default async function TuitionPage() {
   return (
     <TuitionClient
       initialStudents={initialStudents}
-      initialRentalLogs={initialRentalLogs}
+      initialTeachers={[]} 
     />
   );
 }

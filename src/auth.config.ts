@@ -21,6 +21,7 @@ export const authConfig = {
         return false; 
       }
       
+      // Chỗ này nếu web của ông dùng prefix "/ta" thay vì "/teacher" thì nhớ đổi lại nhé
       if (pathname.startsWith("/teacher")) {
         if (isLoggedIn) return true;
         return false;
@@ -28,15 +29,25 @@ export const authConfig = {
 
       return true; 
     },
+    
     // 2. Nhét data vào JWT
-    async jwt({ token, user }) {
+    // ✅ BỔ SUNG: Thêm `trigger` và `session` vào tham số truyền vào
+    async jwt({ token, user, trigger, session }) {
+      // Khi user vừa đăng nhập thành công
       if (user) {
         token.id = user.id;
         token.role = user.role;
         token.fullName = user.fullName;
       }
+
+      // ✅ BỔ SUNG: Bắt sự kiện khi Client gọi hàm `update({ fullName: "..." })`
+      if (trigger === "update" && session?.fullName) {
+        token.fullName = session.fullName;
+      }
+
       return token;
     },
+
     // 3. Đẩy data từ JWT ra Session cho Client dùng
     async session({ session, token }) {
       if (token) {

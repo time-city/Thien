@@ -1,12 +1,33 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
-import { Plus, Edit2, Trash2, X, Search, User as UserIcon, Phone, CheckSquare, Square, Loader2, Eye, Filter, ChevronLeft, ChevronRight, BookOpen, Upload } from "lucide-react";
+import { Plus, Edit2, Trash2, X, Search, User as UserIcon, Phone, CheckSquare, Square, Loader2, Eye, Filter, ChevronLeft, ChevronRight, BookOpen, Upload, Calendar, School } from "lucide-react";
 import { createStudent, updateStudent, deleteStudent, deleteStudents, getStudentDeletionImpact, importStudentsCsv } from "@/actions/mutations";
 import { StudentData, ClassData } from "@/actions/queries";
 import { toast } from "sonner";
-import { useConfirm } from "@/hooks/useconfirm"; // <-- Import hook mới
+import { useConfirm } from "@/hooks/useconfirm"; 
 import { useRouter } from "next/navigation";
+
+// === DATA CỨNG: DANH SÁCH TRƯỜNG ĐÀ NẴNG DÙNG ĐỂ GỢI Ý ===
+const DA_NANG_SCHOOLS = [
+  "THPT Chuyên Lê Quý Đôn",
+  "THPT Phan Châu Trinh",
+  "THPT Hoàng Hoa Thám",
+  "THPT Trần Phú",
+  "THPT Thái Phiên",
+  "THPT Nguyễn Trãi",
+  "THPT Tôn Thất Tùng",
+  "THPT Nguyễn Hiền",
+  "THPT Thanh Khê",
+  "THCS Trưng Vương",
+  "THCS Nguyễn Huệ",
+  "THCS Tây Sơn",
+  "THCS Lê Lợi",
+  "THCS Chu Văn An",
+  "THCS Kim Đồng",
+  "THCS Nguyễn Bỉnh Khiêm",
+  "THCS Hoàng Diệu"
+];
 
 export default function StudentsClient({
   initialStudents,
@@ -16,7 +37,7 @@ export default function StudentsClient({
   classes: ClassData[];
 }) {
   const router = useRouter();
-  const { confirm } = useConfirm(); // <-- Khởi tạo hook
+  const { confirm } = useConfirm();
 
   // ====== STATE ======
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -28,6 +49,8 @@ export default function StudentsClient({
   const [parentName, setParentName] = useState("");
   const [phoneParent, setPhoneParent] = useState("");
   const [gender, setGender] = useState("");
+  const [dob, setDob] = useState("");
+  const [school, setSchool] = useState("");
   const [selectedClassIds, setSelectedClassIds] = useState<string[]>([]);
   
   const [loading, setLoading] = useState(false);
@@ -48,7 +71,6 @@ export default function StudentsClient({
   // View Details
   const [viewStudent, setViewStudent] = useState<StudentData | null>(null);
 
-  // Reset page when filter changes
   useEffect(() => {
     setCurrentPage(1);
   }, [search, classFilter, teacherFilter]);
@@ -61,6 +83,8 @@ export default function StudentsClient({
     setParentName("");
     setPhoneParent("");
     setGender("");
+    setDob("");
+    setSchool("");
     setSelectedClassIds([]);
     setIsModalOpen(true);
   };
@@ -72,6 +96,8 @@ export default function StudentsClient({
     setParentName(s.parentName || "");
     setPhoneParent(s.parentPhone || "");
     setGender(s.gender || "");
+    setDob(s.dob ? new Date(s.dob).toISOString().slice(0, 10) : "");
+    setSchool(s.school || "");
     setSelectedClassIds(s.enrolledCourses.map(c => c.classId));
     setIsModalOpen(true);
   };
@@ -147,6 +173,8 @@ export default function StudentsClient({
       parentName: parentName || undefined,
       phoneParent: phoneParent || undefined,
       gender: gender || undefined,
+      dob: dob || undefined,
+      school: school || undefined,
       classIds: selectedClassIds,
     };
 
@@ -236,7 +264,6 @@ export default function StudentsClient({
           }
         },
       });
-
     } catch {
       toast.error("Lỗi khi kiểm tra dữ liệu ảnh hưởng.");
     } finally {
@@ -377,8 +404,9 @@ export default function StudentsClient({
 
       {/* Table */}
       <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden mb-4">
+        {/* Xóa min-w-[1100px] để bảng co giãn vừa màn hình Mobile */}
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse min-w-[900px]">
+          <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-slate-50 border-b border-slate-200 text-[11px] uppercase tracking-widest font-extrabold text-slate-500">
                 <th className="py-3 px-4 w-10 text-center">
@@ -387,16 +415,20 @@ export default function StudentsClient({
                   </button>
                 </th>
                 <th className="py-3 px-4">Học Sinh</th>
-                <th className="py-3 px-4">Liên Hệ</th>
-                <th className="py-3 px-4">Phụ Huynh</th>
-                <th className="py-3 px-4">Lớp Đang Học</th>
+                {/* Ẩn trên Mobile & Tablet, chỉ hiện trên PC */}
+                <th className="py-3 px-4 hidden lg:table-cell">Ngày Sinh</th>
+                <th className="py-3 px-4 hidden lg:table-cell">Trường Học</th>
+                {/* Ẩn trên Mobile, hiện từ Tablet trở lên */}
+                <th className="py-3 px-4 hidden md:table-cell">Liên Hệ</th>
+                <th className="py-3 px-4 hidden lg:table-cell">Phụ Huynh</th>
+                <th className="py-3 px-4 hidden md:table-cell min-w-[150px]">Lớp Đang Học</th>
                 <th className="py-3 px-4 w-32 text-center">Thao tác</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {paginatedStudents.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-4 py-12 text-center text-slate-500 font-medium">
+                  <td colSpan={8} className="px-4 py-12 text-center text-slate-500 font-medium">
                     Không tìm thấy học sinh nào phù hợp.
                   </td>
                 </tr>
@@ -408,34 +440,65 @@ export default function StudentsClient({
                         {selectedIds.has(s.id) ? <CheckSquare size={16} className="text-blue-600" /> : <Square size={16} />}
                       </button>
                     </td>
+                    
                     <td className="py-3 px-4">
-                      <div className="font-bold text-slate-800 text-sm">{s.fullName}</div>
-                      {s.gender && <span className="text-xs text-slate-500">{s.gender === "MALE" ? "Nam" : s.gender === "FEMALE" ? "Nữ" : "Khác"}</span>}
+                      <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
+                        <span className="font-bold text-slate-800 text-sm whitespace-nowrap">{s.fullName}</span>
+                        {s.gender && (
+                          <span className={`w-fit px-2 py-0.5 rounded text-[10px] font-bold ${
+                            s.gender === "MALE" ? "bg-blue-100 text-blue-700" : 
+                            s.gender === "FEMALE" ? "bg-pink-100 text-pink-700" : 
+                            "bg-slate-100 text-slate-700"
+                          }`}>
+                            {s.gender === "MALE" ? "Nam" : s.gender === "FEMALE" ? "Nữ" : "Khác"}
+                          </span>
+                        )}
+                      </div>
                     </td>
-                    <td className="py-3 px-4">
+
+                    <td className="py-3 px-4 hidden lg:table-cell">
+                      {s.dob ? (
+                        <span className="text-sm font-medium text-slate-600 whitespace-nowrap">
+                          {new Date(s.dob).toLocaleDateString("vi-VN")}
+                        </span>
+                      ) : <span className="text-xs text-slate-400 italic">Chưa cập nhật</span>}
+                    </td>
+
+                    <td className="py-3 px-4 hidden lg:table-cell">
+                      {s.school ? (
+                        <span className="text-sm font-medium text-slate-600">
+                          {s.school}
+                        </span>
+                      ) : <span className="text-xs text-slate-400 italic">Chưa cập nhật</span>}
+                    </td>
+
+                    <td className="py-3 px-4 hidden md:table-cell">
                       {s.phone ? (
-                        <div className="flex items-center gap-1 text-sm font-medium text-slate-600">
+                        <div className="flex items-center gap-1 text-sm font-medium text-slate-600 whitespace-nowrap">
                           <Phone size={14} className="text-slate-400" /> {s.phone}
                         </div>
                       ) : <span className="text-xs text-slate-400 italic">Chưa cập nhật</span>}
                     </td>
-                    <td className="py-3 px-4">
+                    
+                    <td className="py-3 px-4 hidden lg:table-cell">
                       {s.parentName ? (
                         <div>
-                          <div className="font-bold text-slate-800 text-sm">{s.parentName}</div>
-                          {s.parentPhone && <div className="text-xs text-slate-500 flex items-center gap-1 mt-0.5"><Phone size={12}/> {s.parentPhone}</div>}
+                          <div className="font-bold text-slate-800 text-sm whitespace-nowrap">{s.parentName}</div>
+                          {s.parentPhone && <div className="text-xs text-slate-500 flex items-center gap-1 mt-0.5 whitespace-nowrap"><Phone size={12}/> {s.parentPhone}</div>}
                         </div>
                       ) : <span className="text-xs text-slate-400 italic">Chưa cập nhật</span>}
                     </td>
-                    <td className="py-3 px-4">
+                    
+                    <td className="py-3 px-4 hidden md:table-cell">
                       <div className="flex flex-wrap gap-1">
                         {s.enrolledCourses.map((c, i) => (
-                          <span key={i} className="text-xs font-semibold text-blue-700 bg-blue-50 px-2 py-1 rounded-md border border-blue-100 flex items-center gap-1">
+                          <span key={i} className="text-xs font-semibold text-blue-700 bg-blue-50 px-2 py-1 rounded-md border border-blue-100 flex items-center gap-1 whitespace-nowrap">
                             <BookOpen size={12} /> {c.className}
                           </span>
                         ))}
                       </div>
                     </td>
+                    
                     <td className="py-3 px-4">
                       <div className="flex items-center justify-center gap-1">
                         <button onClick={() => openViewModal(s)} className="p-1.5 text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-md transition-colors" title="Xem chi tiết">
@@ -459,9 +522,9 @@ export default function StudentsClient({
 
       {/* Pagination */}
       {totalPages > 1 && (
-        <div className="flex justify-between items-center bg-white border border-slate-200 rounded-xl p-3 shadow-sm">
+        <div className="flex justify-between items-center bg-white border border-slate-200 rounded-xl p-3 shadow-sm flex-wrap gap-2">
           <div className="text-sm font-medium text-slate-500">
-            Hiển thị <span className="font-bold text-slate-800">{(currentPage - 1) * ITEMS_PER_PAGE + 1}</span> đến <span className="font-bold text-slate-800">{Math.min(currentPage * ITEMS_PER_PAGE, filteredStudents.length)}</span> trong số <span className="font-bold text-slate-800">{filteredStudents.length}</span> học sinh
+            Hiển thị <span className="font-bold text-slate-800">{(currentPage - 1) * ITEMS_PER_PAGE + 1}</span> đến <span className="font-bold text-slate-800">{Math.min(currentPage * ITEMS_PER_PAGE, filteredStudents.length)}</span> trong số <span className="font-bold text-slate-800">{filteredStudents.length}</span> HS
           </div>
           <div className="flex gap-1">
             <button 
@@ -488,7 +551,7 @@ export default function StudentsClient({
       {/* Modal Thêm/Sửa */}
       {isModalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-white w-full max-w-lg rounded-2xl shadow-xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
+          <div className="bg-white w-full max-w-lg rounded-2xl shadow-xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-200 max-h-[95vh]">
             <div className="flex justify-between items-center p-5 border-b border-slate-100 bg-slate-50">
               <h2 className="text-lg font-extrabold text-slate-800">
                 {editingStudent ? "Sửa Học Sinh" : "Thêm Học Sinh Mới"}
@@ -497,7 +560,7 @@ export default function StudentsClient({
                 <X size={18} />
               </button>
             </div>
-            <form onSubmit={handleSubmit} className="p-6 space-y-4">
+            <form onSubmit={handleSubmit} className="p-6 overflow-y-auto space-y-4">
               <div className="space-y-1.5">
                 <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Họ và Tên *</label>
                 <input required value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="Nhập tên học sinh" className="w-full h-10 px-3 border border-slate-200 rounded-xl bg-slate-50 text-sm font-semibold focus:ring-2 focus:ring-blue-100 outline-none transition-all" />
@@ -516,6 +579,36 @@ export default function StudentsClient({
                     <option value="FEMALE">Nữ</option>
                     <option value="OTHER">Khác</option>
                   </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-2">
+                    <Calendar size={14} className="text-slate-400" /> Ngày sinh
+                  </label>
+                  <input
+                    type="date"
+                    value={dob}
+                    onChange={(e) => setDob(e.target.value)}
+                    className="w-full h-10 px-3 border border-slate-200 rounded-xl bg-slate-50 text-sm font-semibold focus:ring-2 focus:ring-blue-100 outline-none transition-all"
+                  />
+                </div>
+                
+                <div className="space-y-1.5">
+                  <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-2">
+                    <School size={14} className="text-slate-400" /> Trường học
+                  </label>
+                  <input
+                    list="danang-schools"
+                    value={school}
+                    onChange={(e) => setSchool(e.target.value)}
+                    placeholder="Chọn hoặc nhập trường..."
+                    className="w-full h-10 px-3 border border-slate-200 rounded-xl bg-slate-50 text-sm font-semibold focus:ring-2 focus:ring-blue-100 outline-none transition-all"
+                  />
+                  <datalist id="danang-schools">
+                    {DA_NANG_SCHOOLS.map(s => <option key={s} value={s} />)}
+                  </datalist>
                 </div>
               </div>
 
@@ -549,7 +642,6 @@ export default function StudentsClient({
                       />
                       <div className="flex flex-col">
                         <span className="text-sm font-bold text-slate-800">{c.name}</span>
-                        <span className="text-[11px] text-slate-500">Môn: {c.subjectName} | GV: {c.teachers.map(t => t.teacherName).join(", ") || "Chưa phân công"}</span>
                       </div>
                     </label>
                   ))}
@@ -591,9 +683,11 @@ export default function StudentsClient({
                   <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
                     <h3 className="text-sm font-bold text-slate-800 mb-3 border-b border-slate-200 pb-2">Thông tin cá nhân</h3>
                     <div className="space-y-2 text-sm">
-                      <p><span className="text-slate-500 font-medium inline-block w-24">Họ và tên:</span> <span className="font-bold text-slate-800">{viewStudent.fullName}</span></p>
-                      <p><span className="text-slate-500 font-medium inline-block w-24">Giới tính:</span> <span className="font-semibold text-slate-700">{viewStudent.gender === "MALE" ? "Nam" : viewStudent.gender === "FEMALE" ? "Nữ" : viewStudent.gender === "OTHER" ? "Khác" : "Chưa cập nhật"}</span></p>
-                      <p><span className="text-slate-500 font-medium inline-block w-24">Điện thoại:</span> <span className="font-semibold text-slate-700">{viewStudent.phone || "Chưa cập nhật"}</span></p>
+                      <p className="flex justify-between sm:block"><span className="text-slate-500 font-medium inline-block w-24">Họ và tên:</span> <span className="font-bold text-slate-800">{viewStudent.fullName}</span></p>
+                      <p className="flex justify-between sm:block"><span className="text-slate-500 font-medium inline-block w-24">Giới tính:</span> <span className="font-semibold text-slate-700">{viewStudent.gender === "MALE" ? "Nam" : viewStudent.gender === "FEMALE" ? "Nữ" : viewStudent.gender === "OTHER" ? "Khác" : "Chưa cập nhật"}</span></p>
+                      <p className="flex justify-between sm:block"><span className="text-slate-500 font-medium inline-block w-24">Điện thoại:</span> <span className="font-semibold text-slate-700">{viewStudent.phone || "Chưa cập nhật"}</span></p>
+                      <p className="flex justify-between sm:block"><span className="text-slate-500 font-medium inline-block w-24">Ngày sinh:</span> <span className="font-semibold text-slate-700">{viewStudent.dob ? new Date(viewStudent.dob).toLocaleDateString("vi-VN") : "Chưa cập nhật"}</span></p>
+                      <p className="flex justify-between sm:block"><span className="text-slate-500 font-medium inline-block w-24">Trường:</span> <span className="font-semibold text-slate-700">{viewStudent.school || "Chưa cập nhật"}</span></p>
                     </div>
                   </div>
                 </div>
@@ -601,8 +695,8 @@ export default function StudentsClient({
                   <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 h-full">
                     <h3 className="text-sm font-bold text-slate-800 mb-3 border-b border-slate-200 pb-2">Thông tin Phụ huynh</h3>
                     <div className="space-y-2 text-sm">
-                      <p><span className="text-slate-500 font-medium inline-block w-24">Họ và tên:</span> <span className="font-bold text-slate-800">{viewStudent.parentName || "Chưa cập nhật"}</span></p>
-                      <p><span className="text-slate-500 font-medium inline-block w-24">Điện thoại:</span> <span className="font-semibold text-slate-700">{viewStudent.parentPhone || "Chưa cập nhật"}</span></p>
+                      <p className="flex justify-between sm:block"><span className="text-slate-500 font-medium inline-block w-24">Họ và tên:</span> <span className="font-bold text-slate-800">{viewStudent.parentName || "Chưa cập nhật"}</span></p>
+                      <p className="flex justify-between sm:block"><span className="text-slate-500 font-medium inline-block w-24">Điện thoại:</span> <span className="font-semibold text-slate-700">{viewStudent.parentPhone || "Chưa cập nhật"}</span></p>
                     </div>
                   </div>
                 </div>
@@ -620,7 +714,6 @@ export default function StudentsClient({
                       <div key={i} className="p-3 border border-slate-200 rounded-xl bg-white shadow-sm flex flex-col gap-1.5">
                         <div className="font-bold text-slate-800 text-sm">{c.className}</div>
                         <div className="text-xs text-slate-500 flex justify-between">
-                          <span>Môn: <b>{c.subjectName}</b></span>
                           <span className={c.feeStatus === "PAID" ? "text-emerald-600 font-bold" : "text-rose-600 font-bold"}>{c.feeStatus === "PAID" ? "Đã nộp học phí" : "Chưa nộp"}</span>
                         </div>
                         <div className="text-xs text-slate-500">Giáo viên: <b>{c.teachers.join(", ") || "Chưa phân công"}</b></div>

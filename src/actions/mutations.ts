@@ -13,77 +13,36 @@ async function checkSuperAdmin() {
 }
 
 // ==========================================
-// 1. ACTIONS CHO MÔN HỌC (SUBJECTS)
+// 1. ACTIONS CHO HỌC SINH (STUDENTS)
 // ==========================================
-export async function createSubject(data: { name: string; pricePerSession: number; sessionsPerPackage: number }) {
-  await checkSuperAdmin();
-  
-  try {
-    await prisma.subject.create({ data });
-    revalidatePath("/admin/subjects");
-    revalidatePath("/admin/classes"); // Cập nhật lại UI trang admin
-    return { success: true };
-  } catch (error) {
-    return { success: false, error: "Lỗi tạo môn học" };
+type StudentDobInput = string | Date | null | undefined;
+
+function parseDobToUtcDate(dob: StudentDobInput): Date | null {
+  if (!dob) return null;
+  if (dob instanceof Date) {
+    return isNaN(dob.getTime()) ? null : dob;
   }
+
+  // Expected format: YYYY-MM-DD from <input type="date" />
+  const match = /^\d{4}-\d{2}-\d{2}$/.exec(dob);
+  if (!match) {
+    const parsed = new Date(dob);
+    return isNaN(parsed.getTime()) ? null : parsed;
+  }
+
+  const [y, m, d] = dob.split("-").map(Number);
+  // Create midnight UTC to avoid timezone shift
+  return new Date(Date.UTC(y, m - 1, d));
 }
 
-export async function updateSubject(id: string, data: { name?: string; pricePerSession?: number; sessionsPerPackage?: number }) {
-  await checkSuperAdmin();
-  try {
-    await prisma.subject.update({ where: { id }, data });
-    revalidatePath("/admin/subjects");
-    revalidatePath("/admin/classes");
-    return { success: true };
-  } catch (error) {
-    return { success: false, error: "Lỗi cập nhật môn học" };
-  }
-}
-export async function getSubjectDeletionImpact(subjectId: string) {
-  await checkSuperAdmin();
-  try {
-    const classCount = await prisma.class.count({ where: { subjectId } });
-    const classes = await prisma.class.findMany({ where: { subjectId }, select: { id: true } });
-    const classIds = classes.map((c) => c.id);
-
-    const enrollmentCount = await prisma.enrollment.count({ where: { classId: { in: classIds } } });
-    const sessionCount = await prisma.classSession.count({ where: { classId: { in: classIds } } });
-
-    return { success: true, impact: { classCount, enrollmentCount, sessionCount } };
-  } catch (error) {
-    console.error("Lỗi khi kiểm tra dữ liệu ảnh hưởng của môn học:", error);
-    return { success: false, error: "Lỗi hệ thống khi kiểm tra dữ liệu môn học." };
-  }
-}
-
-export async function deleteSubject(id: string) {
-  try {
-    // Nhờ tính năng onDelete: Cascade trong Schema, 
-    // lệnh này sẽ tự động xóa sạch Class, ClassSession, Enrollment... của môn này.
-    // Dữ liệu User (Giáo viên) không bị ảnh hưởng vì nó không phải là bảng con của Subject.
-    await prisma.subject.delete({
-      where: { id },
-    });
-
-    revalidatePath("/admin/classes"); // Sửa lại đúng đường dẫn trang của ông nếu cần
-    return { success: true };
-  } catch (error) {
-    console.error("Lỗi khi xóa môn học:", error);
-    return { 
-      success: false, 
-      error: "Đã xảy ra lỗi hệ thống khi xóa môn học và các dữ liệu liên quan." 
-    };
-  }
-}
-// ==========================================
-// 2. ACTIONS CHO HỌC SINH (STUDENTS)
-// ==========================================
 export async function createStudent(data: { 
   fullName: string; 
   phoneStudent?: string; 
   parentName?: string; 
   phoneParent?: string; 
   gender?: string;
+  dob?: StudentDobInput;
+  school?: string | null;
   classIds?: string[];
 }) {
   await checkSuperAdmin();
@@ -95,6 +54,8 @@ export async function createStudent(data: {
         parentName: data.parentName,
         phoneParent: data.phoneParent,
         gender: data.gender === "MALE" || data.gender === "FEMALE" || data.gender === "OTHER" ? data.gender : null,
+        dob: parseDobToUtcDate(data.dob),
+        school: data.school ?? null,
         enrollments: data.classIds?.length ? {
           create: data.classIds.map(classId => ({
             classId,
@@ -112,8 +73,14 @@ export async function createStudent(data: {
 export async function updateStudent(id: string, data: any) {
   await checkSuperAdmin();
   try {
-    const { classIds, ...updateData } = data;
-    
+    const { classIds, dob, school, ...rest } = data;
+
+    const updateData: any = {
+      ...rest,
+      dob: parseDobToUtcDate(dob),
+      school: school ?? null,
+    };
+
     await prisma.student.update({ where: { id }, data: updateData });
 
     // Handle class enrollments if classIds are provided
@@ -214,7 +181,7 @@ export async function getStudentDeletionImpact(studentId: string) {
 }
 
 // ==========================================
-// 3. ACTIONS CHO ĐÁNH GIÁ/ĐIỂM DANH (ATTENDANCE & EVALUATION)
+// 2. ACTIONS CHO ĐÁNH GIÁ/ĐIỂM DANH (ATTENDANCE & EVALUATION)
 // ==========================================
 
 export async function saveStudentEvaluation(data: {
@@ -230,7 +197,6 @@ export async function saveStudentEvaluation(data: {
   }
 
   try {
-    // Kiểm tra xem đã có bản ghi điểm danh/đánh giá cho học sinh này trong buổi học này chưa
     const existingLog = await prisma.attendanceLog.findFirst({
       where: {
         classSessionId: data.classSessionId,
@@ -239,7 +205,6 @@ export async function saveStudentEvaluation(data: {
     });
 
     if (existingLog) {
-      // Sửa đánh giá (Update)
       await prisma.attendanceLog.update({
         where: { id: existingLog.id },
         data: {
@@ -249,7 +214,6 @@ export async function saveStudentEvaluation(data: {
         },
       });
     } else {
-      // Tạo đánh giá (Create)
       await prisma.attendanceLog.create({
         data: {
           classSessionId: data.classSessionId,
@@ -271,16 +235,13 @@ export async function saveStudentEvaluation(data: {
   }
 }
 
-
-
 // ==========================================
-// 4. ACTIONS CHO GIÁO VIÊN (TEACHERS)
+// 3. ACTIONS CHO GIÁO VIÊN (TEACHERS)
 // ==========================================
 export async function createTeacher(data: {
   username: string;
   password: string;
   fullName: string;
-  roomFeePerSession?: number;
   isActive?: boolean;
 }) {
   await checkSuperAdmin();
@@ -297,7 +258,6 @@ export async function createTeacher(data: {
         passwordHash: hashed,
         fullName: data.fullName,
         role: "TEACHER",
-        roomFeePerSession: data.roomFeePerSession ?? 0,
         isActive: data.isActive ?? true,
       },
     });
@@ -313,7 +273,6 @@ export async function updateTeacher(
   teacherId: string,
   data: {
     fullName?: string;
-    roomFeePerSession?: number;
     isActive?: boolean;
   }
 ) {
@@ -323,7 +282,6 @@ export async function updateTeacher(
       where: { id: teacherId },
       data: {
         fullName: data.fullName,
-        roomFeePerSession: data.roomFeePerSession,
         isActive: data.isActive,
       },
     });
@@ -410,9 +368,7 @@ export async function getTeacherDeletionImpact(teacherId: string) {
 export async function deleteTeacher(teacherId: string) {
   await checkSuperAdmin();
   try {
-    // Prisma onDelete Cascade sẽ tự xóa các bảng phụ thuộc theo schema.
     await prisma.user.delete({ where: { id: teacherId } });
-
     revalidatePath("/admin/teachers");
     return { success: true };
   } catch (error) {
@@ -421,16 +377,25 @@ export async function deleteTeacher(teacherId: string) {
 }
 
 // ==========================================
-// 5. ACTIONS CHO LỚP HỌC (CLASSES)
+// 4. ACTIONS CHO LỚP HỌC (CLASSES)
 // ==========================================
-export async function createClass(data: { name: string; category: string; subjectId: string; teacherId?: string }) {
+export async function createClass(data: { 
+  name: string; 
+  category: string; 
+  roomFeePerSession: number; 
+  pricePerSession: number;
+  sessionsPerPackage: number;
+  teacherId?: string 
+}) {
   await checkSuperAdmin();
   try {
     await prisma.class.create({
       data: {
         name: data.name,
         category: data.category,
-        subjectId: data.subjectId,
+        roomFeePerSession: data.roomFeePerSession,
+        pricePerSession: data.pricePerSession,
+        sessionsPerPackage: data.sessionsPerPackage,
         teachers: data.teacherId
           ? {
               create: {
@@ -450,12 +415,18 @@ export async function createClass(data: { name: string; category: string; subjec
 
 export async function updateClass(
   id: string,
-  data: { name?: string; category?: string; subjectId?: string; teacherId?: string }
+  data: { 
+    name?: string; 
+    category?: string; 
+    roomFeePerSession?: number; 
+    pricePerSession?: number;
+    sessionsPerPackage?: number;
+    teacherId?: string 
+  }
 ) {
   await checkSuperAdmin();
   try {
     await prisma.$transaction(async (tx) => {
-      // Ép mỗi class chỉ có đúng 1 record ClassTeacher (nếu có teacherId)
       await tx.classTeacher.deleteMany({ where: { classId: id } });
 
       await tx.class.update({
@@ -463,7 +434,9 @@ export async function updateClass(
         data: {
           name: data.name,
           category: data.category,
-          subjectId: data.subjectId,
+          roomFeePerSession: data.roomFeePerSession,
+          pricePerSession: data.pricePerSession,
+          sessionsPerPackage: data.sessionsPerPackage,
         },
       });
 
@@ -483,6 +456,7 @@ export async function updateClass(
     return { success: false, error: "Lỗi cập nhật lớp học" };
   }
 }
+
 export async function getClassDeletionImpact(classId: string) {
   await checkSuperAdmin();
   try {
@@ -508,5 +482,251 @@ export async function deleteClass(id: string) {
   } catch (error) {
     console.error("Lỗi khi xóa lớp học:", error);
     return { success: false, error: "Đã xảy ra lỗi khi xóa lớp học." };
+  }
+}
+
+// ==========================================
+// 5. TEACHER: SUBMIT ATTENDANCE & CALCULATE FINANCE
+// ==========================================
+
+type AttendanceInput = {
+  studentId: string;
+  attendanceStatus: "PRESENT" | "LATE" | "EXCUSED" | "UNEXCUSED";
+  homeworkStatus?: "GOOD" | "DONE" | "NOT_DONE" | null;
+  note?: string | null;
+};
+
+export async function submitAttendanceAndCalculateFinance(
+  classSessionId: string,
+  teacherId: string,
+  attendanceData: AttendanceInput[]
+) {
+  try {
+    if (!attendanceData?.length) {
+      return { success: false, error: "attendanceData rỗng" };
+    }
+
+    const sessionInfo = await prisma.classSession.findUnique({
+      where: { id: classSessionId },
+      include: { class: true },
+    });
+
+    if (!sessionInfo) {
+      return { success: false, error: "Không tìm thấy classSession" };
+    }
+
+    // Báo lỗi nếu session đã được chốt
+    if (sessionInfo.isAttendanceSubmitted || sessionInfo.status === "COMPLETED") {
+      return { success: false, error: "Ca học đã được chốt điểm danh" };
+    }
+
+    const classId = sessionInfo.classId;
+    const roomFee = sessionInfo.class.roomFeePerSession;
+    const salaryCalculated = attendanceData.length * sessionInfo.class.pricePerSession;
+    const netIncome = salaryCalculated - roomFee;
+
+    const now = new Date();
+    
+    // Lấy ra danh sách ID học sinh để xử lý trừ phiếu
+    const studentIds = attendanceData.map((r) => r.studentId);
+
+    await prisma.$transaction(async (tx) => {
+      // 1) Tạo lịch sử điểm danh (AttendanceLogs)
+      await tx.attendanceLog.createMany({
+        data: attendanceData.map((row) => ({
+          classSessionId,
+          studentId: row.studentId,
+          attendanceStatus: row.attendanceStatus,
+          homeworkStatus: row.homeworkStatus,
+          note: row.note,
+        })),
+      });
+
+      // 2) Đóng sổ buổi học này
+      await tx.classSession.update({
+        where: { id: classSessionId },
+        data: {
+          isAttendanceSubmitted: true,
+          status: "COMPLETED",
+          attendanceSubmittedAt: now,
+        },
+      });
+
+      // 3) Ghi nhận tiền phòng (nếu có thu phí)
+      if (roomFee > 0) {
+        await tx.roomRentalLog.create({
+          data: {
+            teacherId,
+            classSessionId,
+            feeCalculated: roomFee,
+            status: "PAID",
+          },
+        });
+      }
+
+      // 4) Cộng/trừ tiền trực tiếp vào ví giáo viên
+      await tx.user.update({
+        where: { id: teacherId },
+        data: {
+          salaryBalance: { increment: netIncome },
+        },
+      });
+
+      // 5) Xử lý Học phí & Phiếu học sinh
+      if (studentIds.length > 0) {
+        // 5.1: Trừ đi 1 buổi học của TẤT CẢ học sinh có trong danh sách điểm danh
+        await tx.enrollment.updateMany({
+          where: {
+            classId: classId,
+            studentId: { in: studentIds },
+          },
+          data: {
+            remainingSessions: { decrement: 1 },
+          },
+        });
+
+        // 5.2: Tự động chuyển trạng thái sang UNPAID nếu số buổi bị rớt xuống <= 0
+        await tx.enrollment.updateMany({
+          where: {
+            classId: classId,
+            studentId: { in: studentIds },
+            remainingSessions: { lte: 0 },
+          },
+          data: {
+            feeStatus: "UNPAID",
+          },
+        });
+      }
+    });
+
+    // Làm mới lại dữ liệu hiển thị trên các trang liên quan
+    revalidatePath("/ta/settings");
+    revalidatePath("/ta");
+
+    return { success: true, salaryCalculated, roomFee, netIncome };
+  } catch (error) {
+    console.error("submitAttendanceAndCalculateFinance error:", error);
+    return { success: false, error: "Lỗi khi chốt ca và tính lương" };
+  }
+}
+
+// ==========================================
+// 6. TEACHER: UPDATE PROFILE
+// ==========================================
+
+export async function updateTeacherProfile(
+  teacherId: string,
+  data: { fullName: string; oldPassword?: string; newPassword?: string }
+) {
+  try {
+    const updateData: { fullName: string; passwordHash?: string } = {
+      fullName: data.fullName,
+    };
+
+    // If user wants to change password, oldPassword must be provided and verified.
+    if (data.newPassword && data.newPassword.trim().length > 0) {
+      if (!data.oldPassword || !data.oldPassword.trim()) {
+        return { success: false, error: "Bạn cần nhập mật khẩu cũ để đổi mật khẩu." };
+      }
+
+      const bcrypt = await import("bcryptjs");
+
+      const currentUser = await prisma.user.findUnique({
+        where: { id: teacherId },
+        select: { passwordHash: true },
+      });
+
+      if (!currentUser) {
+        return { success: false, error: "Không tìm thấy tài khoản." };
+      }
+
+      const isMatch = await bcrypt.compare(data.oldPassword, currentUser.passwordHash);
+      if (!isMatch) {
+        return { success: false, error: "Mật khẩu cũ không đúng." };
+      }
+
+      const hashed = await bcrypt.hash(data.newPassword, 10);
+      updateData.passwordHash = hashed;
+    }
+
+    if (updateData.passwordHash) {
+      await prisma.user.update({
+        where: { id: teacherId },
+        data: {
+          fullName: updateData.fullName,
+          passwordHash: updateData.passwordHash,
+        },
+      });
+    } else {
+      await prisma.user.update({
+        where: { id: teacherId },
+        data: {
+          fullName: updateData.fullName,
+        },
+      });
+    }
+
+    revalidatePath("/ta/settings");
+    return { success: true };
+  } catch (error) {
+    console.error("updateTeacherProfile error:", error);
+    return { success: false, error: "Lỗi cập nhật hồ sơ giáo viên" };
+  }
+}
+
+
+
+// ==========================================
+// 7. GIA HẠN / THU HỌC PHÍ HỌC SINH
+// ==========================================
+export async function processStudentTuitionPayment(
+  studentId: string,
+  classIds: string[] // Mảng các lớp mà học sinh đóng tiền
+) {
+  try {
+    await checkSuperAdmin(); // Chỉ admin/kế toán mới được thu tiền
+
+    await prisma.$transaction(async (tx) => {
+      for (const classId of classIds) {
+        // 1. Lấy thông tin lớp học để biết giá tiền và số buổi của 1 khóa
+        const classInfo = await tx.class.findUnique({
+          where: { id: classId },
+        });
+
+        if (!classInfo) continue;
+
+        const amount = classInfo.pricePerSession * classInfo.sessionsPerPackage;
+
+        // 2. Tạo lịch sử giao dịch (PaymentHistory)
+        await tx.paymentHistory.create({
+          data: {
+            studentId: studentId,
+            classId: classId,
+            amount: amount,
+            paymentMethod: "BANK_TRANSFER", // Hoặc CASH tùy ông
+            status: "SUCCESS",
+          },
+        });
+
+        // 3. Gia hạn buổi học (Cộng thêm buổi và đổi thành PAID)
+        await tx.enrollment.updateMany({
+          where: {
+            studentId: studentId,
+            classId: classId,
+          },
+          data: {
+            // Cộng thêm số buổi của gói (VD: gói 12 buổi thì cộng thêm 12)
+            remainingSessions: { increment: classInfo.sessionsPerPackage },
+            feeStatus: "PAID",
+          },
+        });
+      }
+    });
+
+    revalidatePath("/admin/tuition");
+    return { success: true };
+  } catch (error) {
+    console.error("Lỗi khi thu học phí:", error);
+    return { success: false, error: "Đã xảy ra lỗi khi gia hạn học phí" };
   }
 }

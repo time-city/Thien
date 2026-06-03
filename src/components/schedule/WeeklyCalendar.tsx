@@ -44,6 +44,7 @@ type ScheduleSession = {
   date: Date;
   slot: number;
   status: string;
+  isAttendanceSubmitted?: boolean;
 };
 
 type WeeklyCalendarProps = {
@@ -61,6 +62,7 @@ type CellSession = {
   slot: number;
   attendanceConflict: boolean;
   teacherId: string;
+  isCompleted?: boolean;
 };
 
 function toISODate(d: Date): string {
@@ -303,6 +305,7 @@ export default function WeeklyCalendar({ userRole, sessions }: WeeklyCalendarPro
                         dateISO,
                         slot: s.slot,
                         attendanceConflict,
+                        isCompleted: Boolean((s as any).isAttendanceSubmitted) || s.status === "COMPLETED",
                         teacherId: s.teacherId,
                       };
                     })
@@ -326,6 +329,8 @@ export default function WeeklyCalendar({ userRole, sessions }: WeeklyCalendarPro
                             } ${
                               isSelected
                                 ? "bg-blue-600 border-blue-600 text-white z-10 shadow-blue-500/30"
+                                : ev.isCompleted
+                                ? "border-slate-100 bg-slate-50 text-slate-400"
                                 : ev.attendanceConflict
                                 ? "border-rose-300 bg-rose-50 text-rose-900"
                                 : "border-slate-200 bg-white text-slate-700"
@@ -334,14 +339,14 @@ export default function WeeklyCalendar({ userRole, sessions }: WeeklyCalendarPro
                             const content = (
                               <>
                                 <div className="flex items-start justify-between gap-1">
-                                  <span className={`font-extrabold line-clamp-2 ${isSelected ? "text-white" : "text-slate-900"}`}>
+                                  <span className={`font-extrabold line-clamp-2 ${isSelected ? "text-white" : ev.isCompleted ? "text-slate-400" : "text-slate-900"}`}>
                                     {ev.className}
                                   </span>
                                 </div>
-                                <span className={`font-semibold flex items-center gap-1 mt-0.5 ${isSelected ? "text-blue-100" : ev.attendanceConflict ? "text-rose-600" : "text-blue-600"}`}>
+                                <span className={`font-semibold flex items-center gap-1 mt-0.5 ${isSelected ? "text-blue-100" : ev.isCompleted ? "text-slate-400" : ev.attendanceConflict ? "text-rose-600" : "text-blue-600"}`}>
                                   <MapPin size={10} strokeWidth={2.5} className="shrink-0" /> {ev.room}
                                 </span>
-                                <span className={`border-t pt-1 mt-1 line-clamp-1 font-medium ${isSelected ? "border-blue-400/50 text-blue-100" : "border-slate-100 text-slate-500"}`}>
+                                <span className={`border-t pt-1 mt-1 line-clamp-1 font-medium ${isSelected ? "border-blue-400/50 text-blue-100" : ev.isCompleted ? "border-transparent text-slate-400" : "border-slate-100 text-slate-500"}`}>
                                   {ev.teacherFullName}
                                 </span>
                               </>

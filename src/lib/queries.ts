@@ -5,6 +5,8 @@ export {
   getTuitionData,
   getRentalLogs,
   getSchedule,
+  getCompletedSessions,
+  getRooms,
 } from "@/actions/queries";
 
 export type {

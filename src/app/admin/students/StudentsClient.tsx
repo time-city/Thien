@@ -1,77 +1,24 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
-import { Plus, Edit2, Trash2, X, Search, User as UserIcon, Phone, CheckSquare, Square, Loader2, Eye, Filter, ChevronLeft, ChevronRight, BookOpen, Upload, Calendar, School, Download } from "lucide-react";
+import { Plus, Edit2, Trash2, X, Search, User as UserIcon, Phone, CheckSquare, Square, Loader2, Eye, Filter, ChevronLeft, ChevronRight, BookOpen, Upload, Calendar, School, Download, AlertCircle } from "lucide-react";
 import { createStudent, updateStudent, deleteStudent, deleteStudents, getStudentDeletionImpact, importStudentsCsv } from "@/actions/mutations";
 import { StudentData, ClassData } from "@/actions/queries";
 import { toast } from "sonner";
 import { useConfirm } from "@/hooks/useconfirm"; 
 import { useRouter } from "next/navigation";
 
-// === DATA CỨNG: DANH SÁCH TRƯỜNG ĐÀ NẴNG DÙNG ĐỂ GỢI Ý ===
 const DA_NANG_SCHOOLS = [
-  // ==============================
-  // CẤP 3 (THPT)
-  // ==============================
-  "THPT Chuyên Lê Quý Đôn",
-  "THPT Phan Châu Trinh",
-  "THPT Hoàng Hoa Thám",
-  "THPT Trần Phú",
-  "THPT Thái Phiên",
-  "THPT Nguyễn Trãi",
-  "THPT Tôn Thất Tùng",
-  "THPT Nguyễn Hiền",
-  "THPT Thanh Khê",
-  "THPT Hòa Vang",
-  "THPT Cẩm Lệ",
-  "THPT Ngô Quyền",
-  "THPT Liên Chiểu",
-  "THPT Phạm Phú Thứ",
-  "THPT Ông Ích Khiêm",
-  "THPT Phan Thành Tài",
-  "THPT Võ Chí Công",
-  "THPT Sơn Trà",
-  "THPT Tôn Đức Thắng",
-  "THPT Nguyễn Thượng Hiền",
-  "THPT Khâm Đức",
-  "THPT FPT Đà Nẵng",
-  "THPT Sky-Line",
-  "THPT APU",
-  "THPT Chuyên Biệt Tương Lai",
-
-  // ==============================
-  // CẤP 2 (THCS)
-  // ==============================
-  "THCS Trưng Vương",
-  "THCS Nguyễn Huệ",
-  "THCS Tây Sơn",
-  "THCS Lê Lợi",
-  "THCS Chu Văn An",
-  "THCS Kim Đồng",
-  "THCS Nguyễn Bỉnh Khiêm",
-  "THCS Hoàng Diệu",
-  "THCS Lý Thường Kiệt",
-  "THCS Sào Nam",
-  "THCS Lê Độ",
-  "THCS Nguyễn Khuyến",
-  "THCS Huỳnh Thúc Kháng",
-  "THCS Lương Thế Vinh",
-  "THCS Nguyễn Lương Bằng",
-  "THCS Đỗ Đăng Tuyển",
-  "THCS Trần Hưng Đạo",
-  "THCS Lê Hồng Phong",
-  "THCS Nguyễn Thiện Thuật",
-  "THCS Cao Thắng",
-  "THCS Trần Đại Nghĩa",
-  "THCS Nguyễn Đình Chiểu",
-  "THCS Nguyễn Phú Hường",
-  "THCS Nguyễn Văn Linh",
-  "THCS Lê Anh Xuân",
-  "THCS Ngô Thì Nhậm",
-  "THCS Trần Cao Vân",
-  "THCS Phan Đình Phùng",
-  "THCS Nguyễn Hồng Ánh"
+  "THPT Chuyên Lê Quý Đôn", "THPT Phan Châu Trinh", "THPT Hoàng Hoa Thám", "THPT Trần Phú", "THPT Thái Phiên", "THPT Nguyễn Trãi", "THPT Tôn Thất Tùng", "THPT Nguyễn Hiền", "THPT Thanh Khê", "THPT Hòa Vang", "THPT Cẩm Lệ", "THPT Ngô Quyền", "THPT Liên Chiểu", "THPT Phạm Phú Thứ", "THPT Ông Ích Khiêm", "THPT Phan Thành Tài", "THPT Võ Chí Công", "THPT Sơn Trà", "THPT Tôn Đức Thắng", "THPT Nguyễn Thượng Hiền", "THPT Khâm Đức", "THPT FPT Đà Nẵng", "THPT Sky-Line", "THPT APU", "THPT Chuyên Biệt Tương Lai",
+  "THCS Trưng Vương", "THCS Nguyễn Huệ", "THCS Tây Sơn", "THCS Lê Lợi", "THCS Chu Văn An", "THCS Kim Đồng", "THCS Nguyễn Bỉnh Khiêm", "THCS Hoàng Diệu", "THCS Lý Thường Kiệt", "THCS Sào Nam", "THCS Lê Độ", "THCS Nguyễn Khuyến", "THCS Huỳnh Thúc Kháng", "THCS Lương Thế Vinh", "THCS Nguyễn Lương Bằng", "THCS Đỗ Đăng Tuyển", "THCS Trần Hưng Đạo", "THCS Lê Hồng Phong", "THCS Nguyễn Thiện Thuật", "THCS Cao Thắng", "THCS Trần Đại Nghĩa", "THCS Nguyễn Đình Chiểu", "THCS Nguyễn Phú Hường", "THCS Nguyễn Văn Linh", "THCS Lê Anh Xuân", "THCS Ngô Thì Nhậm", "THCS Trần Cao Vân", "THCS Phan Đình Phùng", "THCS Nguyễn Hồng Ánh"
 ];
+
+// Định nghĩa cấu trúc lưu chọn lớp
+type SelectedClassInfo = {
+  classId: string;
+  feeStatus: "PAID" | "UNPAID";
+};
+
 export default function StudentsClient({
   initialStudents,
   classes,
@@ -82,10 +29,12 @@ export default function StudentsClient({
   const router = useRouter();
   const { confirm } = useConfirm();
 
-  // ====== STATE ======
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingStudent, setEditingStudent] = useState<StudentData | null>(null);
   
+  // Lưu lại ID các lớp học sinh ĐANG học (để không cho đổi feeStatus các lớp cũ từ form này)
+  const [initialClassIds, setInitialClassIds] = useState<Set<string>>(new Set());
+
   // Form State
   const [fullName, setFullName] = useState("");
   const [phoneStudent, setPhoneStudent] = useState("");
@@ -94,33 +43,29 @@ export default function StudentsClient({
   const [gender, setGender] = useState("");
   const [dob, setDob] = useState("");
   const [school, setSchool] = useState("");
-  const [selectedClassIds, setSelectedClassIds] = useState<string[]>([]);
+  
+  // State quản lý việc chọn lớp và trạng thái đóng phí
+  const [selectedClasses, setSelectedClasses] = useState<SelectedClassInfo[]>([]);
   
   const [loading, setLoading] = useState(false);
-  
-  // Selection
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-
-  // Delete State
   const [isCheckingImpact, setIsCheckingImpact] = useState<string | null>(null);
 
-  // Filters & Pagination
   const [search, setSearch] = useState("");
   const [classFilter, setClassFilter] = useState("");
   const [teacherFilter, setTeacherFilter] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const ITEMS_PER_PAGE = 10;
   
-  // View Details
   const [viewStudent, setViewStudent] = useState<StudentData | null>(null);
 
   useEffect(() => {
     setCurrentPage(1);
   }, [search, classFilter, teacherFilter]);
 
-  // ====== HANDLERS MỞ MODAL ======
   const openAddModal = () => {
     setEditingStudent(null);
+    setInitialClassIds(new Set());
     setFullName("");
     setPhoneStudent("");
     setParentName("");
@@ -128,12 +73,14 @@ export default function StudentsClient({
     setGender("");
     setDob("");
     setSchool("");
-    setSelectedClassIds([]);
+    setSelectedClasses([]);
     setIsModalOpen(true);
   };
 
   const openEditModal = (s: StudentData) => {
     setEditingStudent(s);
+    setInitialClassIds(new Set(s.enrolledCourses.map(c => c.classId)));
+    
     setFullName(s.fullName);
     setPhoneStudent(s.phone || "");
     setParentName(s.parentName || "");
@@ -141,7 +88,12 @@ export default function StudentsClient({
     setGender(s.gender || "");
     setDob(s.dob ? new Date(s.dob).toISOString().slice(0, 10) : "");
     setSchool(s.school || "");
-    setSelectedClassIds(s.enrolledCourses.map(c => c.classId));
+    
+    // Map data cũ vào state mới
+    setSelectedClasses(s.enrolledCourses.map(c => ({
+      classId: c.classId,
+      feeStatus: (c.feeStatus === "PAID" ? "PAID" : "UNPAID") as "PAID" | "UNPAID"
+    })));
     setIsModalOpen(true);
   };
 
@@ -149,9 +101,7 @@ export default function StudentsClient({
     setViewStudent(s);
   };
 
-  // ====== TẢI FILE CSV MẪU ======
   const downloadSampleCsv = () => {
-    // Thêm ký tự BOM (\uFEFF) để Excel trên Windows không bị lỗi font Tiếng Việt
     const BOM = "\uFEFF"; 
     const csvContent = BOM + "fullname,phonestudent,parentname,phoneparent,gender\nNguyễn Văn A,0901234567,Nguyễn Văn B,0987654321,Nam\nTrần Thị C,,Trần Văn D,,Nữ";
     
@@ -163,19 +113,16 @@ export default function StudentsClient({
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    
     toast.success("Đã tải file CSV mẫu!");
   };
 
-  // ====== CSV IMPORT ======
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // 1. Kiểm tra đuôi file có phải .csv không
     if (!file.name.toLowerCase().endsWith('.csv')) {
       toast.error("Sai định dạng! Vui lòng chỉ tải lên file có đuôi .csv");
-      e.target.value = ''; // Reset input
+      e.target.value = ''; 
       return;
     }
 
@@ -184,7 +131,6 @@ export default function StudentsClient({
       const text = event.target?.result as string;
       const lines = text.split(/\r?\n/).filter(line => line.trim() !== '');
       
-      // 2. Kiểm tra file có nội dung không
       if (lines.length < 2) {
         toast.error("File CSV trống hoặc chưa có dữ liệu học sinh. Vui lòng kiểm tra lại!");
         e.target.value = '';
@@ -200,12 +146,8 @@ export default function StudentsClient({
       const ppIdx = headers.indexOf('phoneparent');
       const gIdx = headers.indexOf('gender');
 
-      // 3. Cảnh báo lỗi cấu trúc file rõ ràng
       if (fnIdx === -1) {
-        toast.error(
-          "Sai cấu trúc file! Không tìm thấy cột 'fullname'. Vui lòng bấm 'Tải File Mẫu' để xem định dạng chuẩn.",
-          { duration: 5000 }
-        );
+        toast.error("Sai cấu trúc file! Không tìm thấy cột 'fullname'. Vui lòng bấm 'Tải File Mẫu' để xem định dạng chuẩn.", { duration: 5000 });
         e.target.value = '';
         return;
       }
@@ -236,11 +178,9 @@ export default function StudentsClient({
       if (dataToImport.length > 0) {
         setLoading(true);
         const loadingToastId = toast.loading(`Đang xử lý ${dataToImport.length} học sinh...`);
-        
         try {
           const res = await importStudentsCsv(dataToImport);
           toast.dismiss(loadingToastId);
-          
           if (res.success) {
             toast.success(`Nhập thành công ${res.count} học sinh!`);
             router.refresh();
@@ -254,12 +194,27 @@ export default function StudentsClient({
         setLoading(false);
       }
     };
-    
     reader.readAsText(file, 'UTF-8');
     e.target.value = ''; 
   };
   
-  // ====== FORM SUBMIT ======
+  // Xử lý Checkbox Toggle
+  const handleClassToggle = (classId: string, checked: boolean) => {
+    if (checked) {
+      // Mặc định tick vào là UNPAID (Chưa nộp tiền) để tránh thất thoát tài chính
+      setSelectedClasses([...selectedClasses, { classId, feeStatus: "UNPAID" }]);
+    } else {
+      setSelectedClasses(selectedClasses.filter(c => c.classId !== classId));
+    }
+  };
+
+  // Xử lý đổi trạng thái đóng tiền của một lớp đang chọn
+  const handleFeeStatusChange = (classId: string, status: "PAID" | "UNPAID") => {
+    setSelectedClasses(selectedClasses.map(c => 
+      c.classId === classId ? { ...c, feeStatus: status } : c
+    ));
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -272,7 +227,7 @@ export default function StudentsClient({
       gender: gender || undefined,
       dob: dob || undefined,
       school: school || undefined,
-      classIds: selectedClassIds,
+      classEnrollments: selectedClasses, // Gửi cấu trúc mới có chứa trạng thái phí
     };
 
     if (editingStudent) {
@@ -297,7 +252,6 @@ export default function StudentsClient({
     setLoading(false);
   };
 
-  // ====== SELECT CHỨC NĂNG ======
   const toggleSelectAll = () => {
     if (selectedIds.size === paginatedStudents.length && paginatedStudents.length > 0) {
       setSelectedIds(new Set());
@@ -313,7 +267,6 @@ export default function StudentsClient({
     setSelectedIds(newSet);
   };
 
-  // ====== XÓA GỌI GLOBAL CONFIRM ======
   const confirmDeleteSingle = async (id: string, name: string) => {
     setIsCheckingImpact(id);
     try {
@@ -322,7 +275,6 @@ export default function StudentsClient({
         toast.error(res.error || "Lỗi kiểm tra dữ liệu.");
         return;
       }
-
       const impact = res.impact || { enrollmentCount: 0, paymentCount: 0, attendanceCount: 0 };
       const isSafe = impact?.enrollmentCount === 0 && impact.paymentCount === 0 && impact.attendanceCount === 0;
       
@@ -370,7 +322,6 @@ export default function StudentsClient({
 
   const confirmDeleteMultiple = () => {
     if (selectedIds.size === 0) return;
-
     confirm({
       title: "Xóa Nhiều Học Sinh",
       message: (
@@ -397,7 +348,6 @@ export default function StudentsClient({
     });
   };
 
-  // ====== FILTER & PAGINATION ======
   const allClasses = useMemo(() => {
     const classSet = new Set<string>();
     initialStudents.forEach(s => s.enrolledCourses.forEach(c => classSet.add(c.className)));
@@ -414,10 +364,8 @@ export default function StudentsClient({
     return initialStudents.filter(s => {
       const matchSearch = s.fullName.toLowerCase().includes(search.toLowerCase()) || 
                           (s.phone && s.phone.includes(search));
-      
       const matchClass = classFilter ? s.enrolledCourses.some(c => c.className === classFilter) : true;
       const matchTeacher = teacherFilter ? s.enrolledCourses.some(c => c.teachers.includes(teacherFilter)) : true;
-      
       return matchSearch && matchClass && matchTeacher;
     });
   }, [initialStudents, search, classFilter, teacherFilter]);
@@ -427,8 +375,6 @@ export default function StudentsClient({
 
   return (
     <div className="w-full max-w-7xl mx-auto pb-8 font-sans">
-      
-      {/* Header */}
       <div className="bg-white border border-slate-200 shadow-sm rounded-xl p-4 md:p-5 mb-6">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-5">
           <div>
@@ -441,67 +387,38 @@ export default function StudentsClient({
           </div>
           <div className="flex flex-wrap gap-2">
             {selectedIds.size > 0 && (
-              <button 
-                onClick={confirmDeleteMultiple} 
-                className="bg-rose-50 hover:bg-rose-100 text-rose-600 px-4 py-2 rounded-xl font-bold text-sm border border-rose-200 transition-all flex items-center gap-2"
-              >
+              <button onClick={confirmDeleteMultiple} className="bg-rose-50 hover:bg-rose-100 text-rose-600 px-4 py-2 rounded-xl font-bold text-sm border border-rose-200 transition-all flex items-center gap-2">
                 <Trash2 size={18} /> Xóa ({selectedIds.size})
               </button>
             )}
-            
-            <button 
-              onClick={downloadSampleCsv}
-              className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2.5 rounded-xl font-bold text-sm shadow-sm flex items-center gap-2 border border-slate-200 transition-all"
-              title="Tải cấu trúc file CSV chuẩn"
-            >
+            <button onClick={downloadSampleCsv} className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2.5 rounded-xl font-bold text-sm shadow-sm flex items-center gap-2 border border-slate-200 transition-all" title="Tải cấu trúc file CSV chuẩn">
               <Download size={18} strokeWidth={3} /> Mẫu CSV
             </button>
-
             <label className="transition-all cursor-pointer hover:bg-emerald-100 text-emerald-700 px-5 py-2.5 rounded-xl font-bold text-sm shadow-sm flex items-center gap-2 border border-emerald-200">
               <Upload size={18} strokeWidth={3} /> Import CSV
               <input type="file" accept=".csv" className="hidden" onChange={handleFileUpload} />
             </label>
-            
-            <button 
-              onClick={openAddModal} 
-              className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl font-bold text-sm shadow-sm flex items-center gap-2 transition-all"
-            >
+            <button onClick={openAddModal} className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl font-bold text-sm shadow-sm flex items-center gap-2 transition-all">
               <Plus size={18} strokeWidth={3} /> Thêm Học Sinh
             </button>
           </div>
         </div>
 
-        {/* Filters */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-4 border-t border-slate-100">
           <div className="relative">
             <Search className="absolute left-3 top-2.5 text-slate-400" size={18} />
-            <input 
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Tìm theo tên hoặc SĐT..." 
-              className="w-full h-10 pl-10 pr-3 border border-slate-200 rounded-xl bg-slate-50 text-sm font-semibold focus:ring-2 focus:ring-blue-100 outline-none transition-all"
-            />
+            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Tìm theo tên hoặc SĐT..." className="w-full h-10 pl-10 pr-3 border border-slate-200 rounded-xl bg-slate-50 text-sm font-semibold focus:ring-2 focus:ring-blue-100 outline-none transition-all" />
           </div>
-          
           <div className="relative">
             <Filter className="absolute left-3 top-2.5 text-slate-400" size={18} />
-            <select 
-              value={classFilter}
-              onChange={(e) => setClassFilter(e.target.value)}
-              className="w-full h-10 pl-10 pr-3 border border-slate-200 rounded-xl bg-slate-50 text-sm font-semibold focus:ring-2 focus:ring-blue-100 outline-none transition-all appearance-none cursor-pointer"
-            >
+            <select value={classFilter} onChange={(e) => setClassFilter(e.target.value)} className="w-full h-10 pl-10 pr-3 border border-slate-200 rounded-xl bg-slate-50 text-sm font-semibold focus:ring-2 focus:ring-blue-100 outline-none transition-all appearance-none cursor-pointer">
               <option value="">Tất cả lớp học</option>
               {allClasses.map(c => <option key={c} value={c}>{c}</option>)}
             </select>
           </div>
-
           <div className="relative">
             <UserIcon className="absolute left-3 top-2.5 text-slate-400" size={18} />
-            <select 
-              value={teacherFilter}
-              onChange={(e) => setTeacherFilter(e.target.value)}
-              className="w-full h-10 pl-10 pr-3 border border-slate-200 rounded-xl bg-slate-50 text-sm font-semibold focus:ring-2 focus:ring-blue-100 outline-none transition-all appearance-none cursor-pointer"
-            >
+            <select value={teacherFilter} onChange={(e) => setTeacherFilter(e.target.value)} className="w-full h-10 pl-10 pr-3 border border-slate-200 rounded-xl bg-slate-50 text-sm font-semibold focus:ring-2 focus:ring-blue-100 outline-none transition-all appearance-none cursor-pointer">
               <option value="">Tất cả giáo viên</option>
               {allTeachers.map(t => <option key={t} value={t}>{t}</option>)}
             </select>
@@ -509,7 +426,6 @@ export default function StudentsClient({
         </div>
       </div>
 
-      {/* Table */}
       <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden mb-4">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
@@ -521,22 +437,18 @@ export default function StudentsClient({
                   </button>
                 </th>
                 <th className="py-3 px-4">Học Sinh</th>
-                {/* Ẩn trên Mobile & Tablet, chỉ hiện trên PC */}
                 <th className="py-3 px-4 hidden lg:table-cell">Ngày Sinh</th>
                 <th className="py-3 px-4 hidden lg:table-cell">Trường Học</th>
-                {/* Ẩn trên Mobile, hiện từ Tablet trở lên */}
                 <th className="py-3 px-4 hidden md:table-cell">Liên Hệ</th>
                 <th className="py-3 px-4 hidden lg:table-cell">Phụ Huynh</th>
-                <th className="py-3 px-4 hidden md:table-cell min-w-[150px]">Lớp Đang Học</th>
+                <th className="py-3 px-4 hidden md:table-cell min-w-[200px]">Lớp Đang Học</th>
                 <th className="py-3 px-4 w-32 text-center">Thao tác</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {paginatedStudents.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-4 py-12 text-center text-slate-500 font-medium">
-                    Không tìm thấy học sinh nào phù hợp.
-                  </td>
+                  <td colSpan={8} className="px-4 py-12 text-center text-slate-500 font-medium">Không tìm thấy học sinh nào phù hợp.</td>
                 </tr>
               ) : (
                 paginatedStudents.map((s) => (
@@ -546,46 +458,25 @@ export default function StudentsClient({
                         {selectedIds.has(s.id) ? <CheckSquare size={16} className="text-blue-600" /> : <Square size={16} />}
                       </button>
                     </td>
-                    
                     <td className="py-3 px-4">
                       <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
                         <span className="font-bold text-slate-800 text-sm whitespace-nowrap">{s.fullName}</span>
                         {s.gender && (
-                          <span className={`w-fit px-2 py-0.5 rounded text-[10px] font-bold ${
-                            s.gender === "MALE" ? "bg-blue-100 text-blue-700" : 
-                            s.gender === "FEMALE" ? "bg-pink-100 text-pink-700" : 
-                            "bg-slate-100 text-slate-700"
-                          }`}>
+                          <span className={`w-fit px-2 py-0.5 rounded text-[10px] font-bold ${s.gender === "MALE" ? "bg-blue-100 text-blue-700" : s.gender === "FEMALE" ? "bg-pink-100 text-pink-700" : "bg-slate-100 text-slate-700"}`}>
                             {s.gender === "MALE" ? "Nam" : s.gender === "FEMALE" ? "Nữ" : "Khác"}
                           </span>
                         )}
                       </div>
                     </td>
-
                     <td className="py-3 px-4 hidden lg:table-cell">
-                      {s.dob ? (
-                        <span className="text-sm font-medium text-slate-600 whitespace-nowrap">
-                          {new Date(s.dob).toLocaleDateString("vi-VN")}
-                        </span>
-                      ) : <span className="text-xs text-slate-400 italic">Chưa cập nhật</span>}
+                      {s.dob ? <span className="text-sm font-medium text-slate-600 whitespace-nowrap">{new Date(s.dob).toLocaleDateString("vi-VN")}</span> : <span className="text-xs text-slate-400 italic">Chưa cập nhật</span>}
                     </td>
-
                     <td className="py-3 px-4 hidden lg:table-cell">
-                      {s.school ? (
-                        <span className="text-sm font-medium text-slate-600">
-                          {s.school}
-                        </span>
-                      ) : <span className="text-xs text-slate-400 italic">Chưa cập nhật</span>}
+                      {s.school ? <span className="text-sm font-medium text-slate-600">{s.school}</span> : <span className="text-xs text-slate-400 italic">Chưa cập nhật</span>}
                     </td>
-
                     <td className="py-3 px-4 hidden md:table-cell">
-                      {s.phone ? (
-                        <div className="flex items-center gap-1 text-sm font-medium text-slate-600 whitespace-nowrap">
-                          <Phone size={14} className="text-slate-400" /> {s.phone}
-                        </div>
-                      ) : <span className="text-xs text-slate-400 italic">Chưa cập nhật</span>}
+                      {s.phone ? <div className="flex items-center gap-1 text-sm font-medium text-slate-600 whitespace-nowrap"><Phone size={14} className="text-slate-400" /> {s.phone}</div> : <span className="text-xs text-slate-400 italic">Chưa cập nhật</span>}
                     </td>
-                    
                     <td className="py-3 px-4 hidden lg:table-cell">
                       {s.parentName ? (
                         <div>
@@ -594,25 +485,25 @@ export default function StudentsClient({
                         </div>
                       ) : <span className="text-xs text-slate-400 italic">Chưa cập nhật</span>}
                     </td>
-                    
                     <td className="py-3 px-4 hidden md:table-cell">
-                      <div className="flex flex-wrap gap-1">
-                        {s.enrolledCourses.map((c, i) => (
-                          <span key={i} className="text-xs font-semibold text-blue-700 bg-blue-50 px-2 py-1 rounded-md border border-blue-100 flex items-center gap-1 whitespace-nowrap">
-                            <BookOpen size={12} /> {c.className}
-                          </span>
-                        ))}
+                      <div className="flex flex-wrap gap-1.5">
+                        {s.enrolledCourses.map((c: any, i) => {
+                          const isLow = (c.remainingSessions ?? 0) <= 2;
+                          return (
+                            <span key={i} className={`text-xs font-semibold px-2 py-1 rounded-md border flex items-center gap-1.5 whitespace-nowrap ${isLow ? "bg-rose-50 text-rose-700 border-rose-200" : "bg-blue-50 text-blue-700 border-blue-100"}`}>
+                              <BookOpen size={12} /> {c.className}
+                              <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold border ${isLow ? "bg-white text-rose-600 border-rose-100" : "bg-white text-blue-600 border-blue-100"}`}>
+                                {c.remainingSessions ?? 0} buổi
+                              </span>
+                            </span>
+                          );
+                        })}
                       </div>
                     </td>
-                    
                     <td className="py-3 px-4">
                       <div className="flex items-center justify-center gap-1">
-                        <button onClick={() => openViewModal(s)} className="p-1.5 text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-md transition-colors" title="Xem chi tiết">
-                          <Eye size={16} />
-                        </button>
-                        <button onClick={() => openEditModal(s)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-md transition-colors" title="Sửa">
-                          <Edit2 size={16} />
-                        </button>
+                        <button onClick={() => openViewModal(s)} className="p-1.5 text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-md transition-colors" title="Xem chi tiết"><Eye size={16} /></button>
+                        <button onClick={() => openEditModal(s)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-md transition-colors" title="Sửa"><Edit2 size={16} /></button>
                         <button disabled={isCheckingImpact === s.id} onClick={() => confirmDeleteSingle(s.id, s.fullName)} className="p-1.5 text-rose-500 hover:bg-rose-50 rounded-md transition-colors disabled:opacity-50" title="Xóa">
                           {isCheckingImpact === s.id ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}
                         </button>
@@ -626,35 +517,20 @@ export default function StudentsClient({
         </div>
       </div>
 
-      {/* Pagination */}
       {totalPages > 1 && (
         <div className="flex justify-between items-center bg-white border border-slate-200 rounded-xl p-3 shadow-sm flex-wrap gap-2">
           <div className="text-sm font-medium text-slate-500">
             Hiển thị <span className="font-bold text-slate-800">{(currentPage - 1) * ITEMS_PER_PAGE + 1}</span> đến <span className="font-bold text-slate-800">{Math.min(currentPage * ITEMS_PER_PAGE, filteredStudents.length)}</span> trong số <span className="font-bold text-slate-800">{filteredStudents.length}</span> HS
           </div>
           <div className="flex gap-1">
-            <button 
-              disabled={currentPage === 1}
-              onClick={() => setCurrentPage(p => p - 1)}
-              className="p-1.5 border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 disabled:opacity-50 transition-colors"
-            >
-              <ChevronLeft size={18} />
-            </button>
-            <div className="px-4 py-1.5 font-bold text-sm text-slate-700">
-              Trang {currentPage} / {totalPages}
-            </div>
-            <button 
-              disabled={currentPage === totalPages}
-              onClick={() => setCurrentPage(p => p + 1)}
-              className="p-1.5 border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 disabled:opacity-50 transition-colors"
-            >
-              <ChevronRight size={18} />
-            </button>
+            <button disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)} className="p-1.5 border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 disabled:opacity-50 transition-colors"><ChevronLeft size={18} /></button>
+            <div className="px-4 py-1.5 font-bold text-sm text-slate-700">Trang {currentPage} / {totalPages}</div>
+            <button disabled={currentPage === totalPages} onClick={() => setCurrentPage(p => p + 1)} className="p-1.5 border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 disabled:opacity-50 transition-colors"><ChevronRight size={18} /></button>
           </div>
         </div>
       )}
 
-      {/* Modal Thêm/Sửa */}
+      {/* Modal Thêm/Sửa Học Sinh */}
       {isModalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-sm animate-in fade-in duration-200">
           <div className="bg-white w-full max-w-lg rounded-2xl shadow-xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-200 max-h-[95vh]">
@@ -662,16 +538,13 @@ export default function StudentsClient({
               <h2 className="text-lg font-extrabold text-slate-800">
                 {editingStudent ? "Sửa Học Sinh" : "Thêm Học Sinh Mới"}
               </h2>
-              <button onClick={() => setIsModalOpen(false)} className="p-1.5 bg-slate-200 hover:bg-slate-300 rounded-full text-slate-600 transition-colors">
-                <X size={18} />
-              </button>
+              <button onClick={() => setIsModalOpen(false)} className="p-1.5 bg-slate-200 hover:bg-slate-300 rounded-full text-slate-600 transition-colors"><X size={18} /></button>
             </div>
             <form onSubmit={handleSubmit} className="p-6 overflow-y-auto space-y-4">
               <div className="space-y-1.5">
                 <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Họ và Tên *</label>
                 <input required value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="Nhập tên học sinh" className="w-full h-10 px-3 border border-slate-200 rounded-xl bg-slate-50 text-sm font-semibold focus:ring-2 focus:ring-blue-100 outline-none transition-all" />
               </div>
-              
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1.5">
                   <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Số điện thoại</label>
@@ -687,37 +560,17 @@ export default function StudentsClient({
                   </select>
                 </div>
               </div>
-
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
-                  <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-2">
-                    <Calendar size={14} className="text-slate-400" /> Ngày sinh
-                  </label>
-                  <input
-                    type="date"
-                    value={dob}
-                    onChange={(e) => setDob(e.target.value)}
-                    className="w-full h-10 px-3 border border-slate-200 rounded-xl bg-slate-50 text-sm font-semibold focus:ring-2 focus:ring-blue-100 outline-none transition-all"
-                  />
+                  <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-2"><Calendar size={14} className="text-slate-400" /> Ngày sinh</label>
+                  <input type="date" value={dob} onChange={(e) => setDob(e.target.value)} className="w-full h-10 px-3 border border-slate-200 rounded-xl bg-slate-50 text-sm font-semibold focus:ring-2 focus:ring-blue-100 outline-none transition-all" />
                 </div>
-                
                 <div className="space-y-1.5">
-                  <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-2">
-                    <School size={14} className="text-slate-400" /> Trường học
-                  </label>
-                  <input
-                    list="danang-schools"
-                    value={school}
-                    onChange={(e) => setSchool(e.target.value)}
-                    placeholder="Chọn hoặc nhập trường..."
-                    className="w-full h-10 px-3 border border-slate-200 rounded-xl bg-slate-50 text-sm font-semibold focus:ring-2 focus:ring-blue-100 outline-none transition-all"
-                  />
-                  <datalist id="danang-schools">
-                    {DA_NANG_SCHOOLS.map(s => <option key={s} value={s} />)}
-                  </datalist>
+                  <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-2"><School size={14} className="text-slate-400" /> Trường học</label>
+                  <input list="danang-schools" value={school} onChange={(e) => setSchool(e.target.value)} placeholder="Chọn hoặc nhập trường..." className="w-full h-10 px-3 border border-slate-200 rounded-xl bg-slate-50 text-sm font-semibold focus:ring-2 focus:ring-blue-100 outline-none transition-all" />
+                  <datalist id="danang-schools">{DA_NANG_SCHOOLS.map(s => <option key={s} value={s} />)}</datalist>
                 </div>
               </div>
-
               <div className="space-y-1.5 pt-2 border-t border-slate-100 mt-2">
                 <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Tên Phụ huynh</label>
                 <input value={parentName} onChange={(e) => setParentName(e.target.value)} placeholder="Tên phụ huynh" className="w-full h-10 px-3 border border-slate-200 rounded-xl bg-slate-50 text-sm font-semibold focus:ring-2 focus:ring-blue-100 outline-none transition-all" />
@@ -727,36 +580,55 @@ export default function StudentsClient({
                 <input value={phoneParent} onChange={(e) => setPhoneParent(e.target.value)} placeholder="SĐT phụ huynh" className="w-full h-10 px-3 border border-slate-200 rounded-xl bg-slate-50 text-sm font-semibold focus:ring-2 focus:ring-blue-100 outline-none transition-all" />
               </div>
 
-              {/* CHỌN LỚP HỌC ĐỂ GHI DANH */}
+              {/* CHỌN LỚP HỌC ĐỂ GHI DANH KÈM FEE STATUS */}
               <div className="space-y-1.5 pt-2 border-t border-slate-100 mt-2">
-                <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                  Ghi danh vào lớp (Tùy chọn)
+                <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-2">
+                  Ghi danh vào lớp (Tùy chọn) 
                 </label>
-                <div className="max-h-40 overflow-y-auto border border-slate-200 rounded-xl bg-slate-50 p-2 space-y-1">
+                <div className="max-h-56 overflow-y-auto border border-slate-200 rounded-xl bg-slate-50 p-2 space-y-1">
                   {classes.length === 0 ? (
                     <div className="text-xs text-slate-500 p-2 text-center">Chưa có lớp học nào trên hệ thống.</div>
-                  ) : classes.map(c => (
-                    <label key={c.id} className="flex items-center gap-2 p-2 hover:bg-slate-100 rounded-lg cursor-pointer transition-colors">
-                      <input 
-                        type="checkbox" 
-                        checked={selectedClassIds.includes(c.id)} 
-                        onChange={(e) => {
-                          if (e.target.checked) setSelectedClassIds([...selectedClassIds, c.id]);
-                          else setSelectedClassIds(selectedClassIds.filter(id => id !== c.id));
-                        }}
-                        className="rounded border-slate-300 text-blue-600 focus:ring-blue-600"
-                      />
-                      <div className="flex flex-col">
-                        <span className="text-sm font-bold text-slate-800">{c.name}</span>
+                  ) : classes.map(c => {
+                    const selected = selectedClasses.find(sc => sc.classId === c.id);
+                    const isExistingClass = editingStudent && initialClassIds.has(c.id);
+
+                    return (
+                      <div key={c.id} className={`flex flex-col p-3 rounded-lg transition-colors border ${selected ? "bg-white border-blue-200 shadow-sm" : "border-transparent hover:bg-slate-100"}`}>
+                        <label className="flex items-center gap-2 cursor-pointer w-full">
+                          <input 
+                            type="checkbox" 
+                            checked={!!selected} 
+                            onChange={(e) => handleClassToggle(c.id, e.target.checked)}
+                            className="rounded border-slate-300 text-blue-600 focus:ring-blue-600 w-4 h-4"
+                          />
+                          <span className={`text-sm font-bold ${selected ? "text-blue-700" : "text-slate-700"}`}>{c.name}</span>
+                        </label>
+                        
+                        {/* Hiện Select Box chọn Đóng Tiền nếu lớp đang được tick */}
+                        {selected && (
+                          <div className="mt-3 ml-6 flex items-center gap-2">
+                            {isExistingClass ? (
+                              <div className="flex items-center gap-1.5 text-[11px] font-semibold text-amber-600 bg-amber-50 px-2 py-1 rounded border border-amber-100 w-full">
+                                <AlertCircle size={12}/> Trạng thái đóng phí của lớp cũ được quản lý ở màn hình Tài Chính.
+                              </div>
+                            ) : (
+                              <select 
+                                value={selected.feeStatus}
+                                onChange={(e) => handleFeeStatusChange(c.id, e.target.value as "PAID" | "UNPAID")}
+                                className={`text-xs font-bold rounded-md px-2 py-1.5 w-full outline-none border cursor-pointer ${
+                                  selected.feeStatus === "PAID" ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-rose-50 text-rose-700 border-rose-200"
+                                }`}
+                              >
+                                <option value="UNPAID">Chưa nộp tiền (Hệ thống cấp 0 buổi)</option>
+                                <option value="PAID">Đã nộp tiền (+{c.sessionsPerPackage} buổi học)</option>
+                              </select>
+                            )}
+                          </div>
+                        )}
                       </div>
-                    </label>
-                  ))}
+                    )
+                  })}
                 </div>
-                {editingStudent && (
-                  <p className="text-[11px] text-slate-500 italic mt-1">
-                    * Lưu ý: Cập nhật này sẽ thêm học sinh vào các lớp mới chọn. Nếu muốn hủy ghi danh, vui lòng thao tác ở màn hình chi tiết lớp.
-                  </p>
-                )}
               </div>
 
               <div className="mt-6 pt-4 flex justify-end gap-3 border-t border-slate-100">
@@ -778,12 +650,9 @@ export default function StudentsClient({
               <h2 className="text-lg font-extrabold text-slate-800 flex items-center gap-2">
                 <UserIcon size={20} className="text-blue-600" /> Hồ Sơ Học Sinh
               </h2>
-              <button onClick={() => setViewStudent(null)} className="p-1.5 bg-slate-200 hover:bg-slate-300 rounded-full text-slate-600 transition-colors">
-                <X size={18} />
-              </button>
+              <button onClick={() => setViewStudent(null)} className="p-1.5 bg-slate-200 hover:bg-slate-300 rounded-full text-slate-600 transition-colors"><X size={18} /></button>
             </div>
             <div className="p-6 overflow-y-auto space-y-6">
-              
               <div className="flex flex-col md:flex-row gap-6">
                 <div className="flex-1 space-y-4">
                   <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
@@ -811,24 +680,29 @@ export default function StudentsClient({
               <div>
                 <h3 className="text-sm font-bold text-slate-800 mb-3 flex items-center gap-2"><BookOpen size={16} /> Lớp Học Đang Ghi Danh</h3>
                 {viewStudent.enrolledCourses.length === 0 ? (
-                  <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl text-center text-sm font-medium text-slate-500">
-                    Học sinh chưa đăng ký lớp học nào.
-                  </div>
+                  <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl text-center text-sm font-medium text-slate-500">Học sinh chưa đăng ký lớp học nào.</div>
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {viewStudent.enrolledCourses.map((c, i) => (
-                      <div key={i} className="p-3 border border-slate-200 rounded-xl bg-white shadow-sm flex flex-col gap-1.5">
-                        <div className="font-bold text-slate-800 text-sm">{c.className}</div>
-                        <div className="text-xs text-slate-500 flex justify-between">
-                          <span className={c.feeStatus === "PAID" ? "text-emerald-600 font-bold" : "text-rose-600 font-bold"}>{c.feeStatus === "PAID" ? "Đã nộp học phí" : "Chưa nộp"}</span>
+                    {viewStudent.enrolledCourses.map((c: any, i) => {
+                      const isLow = (c.remainingSessions ?? 0) <= 2;
+                      return (
+                        <div key={i} className="p-3 border border-slate-200 rounded-xl bg-white shadow-sm flex flex-col gap-1.5">
+                          <div className="font-bold text-slate-800 text-sm flex justify-between items-start">
+                            <span>{c.className}</span>
+                            <span className={`px-2 py-0.5 rounded text-[11px] border whitespace-nowrap ${isLow ? "bg-rose-50 text-rose-600 border-rose-100" : "bg-slate-100 text-slate-600 border-slate-200"}`}>
+                              Còn {c.remainingSessions ?? 0} buổi
+                            </span>
+                          </div>
+                          <div className="text-xs text-slate-500 flex justify-between mt-1">
+                            <span className={c.feeStatus === "PAID" ? "text-emerald-600 font-bold" : "text-rose-600 font-bold"}>{c.feeStatus === "PAID" ? "Đã nộp học phí" : "Chưa nộp"}</span>
+                          </div>
+                          <div className="text-xs text-slate-500 mt-0.5">Giáo viên: <b>{c.teachers?.join(", ") || "Chưa phân công"}</b></div>
                         </div>
-                        <div className="text-xs text-slate-500">Giáo viên: <b>{c.teachers.join(", ") || "Chưa phân công"}</b></div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>
-
             </div>
           </div>
         </div>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Plus, X, Calendar as CalendarIcon, Users, Check, Ban, BookOpen, UserCircle } from "lucide-react";
+import { Plus, X, Calendar as CalendarIcon, Users, Check, Ban, BookOpen, UserCircle, Building2 } from "lucide-react";
 import { createBulkSchedule, getOccupiedPatterns } from "@/actions/schedule";
 import { toast } from "sonner";
 import { useConfirm } from "@/hooks/useconfirm"; 
@@ -16,6 +16,7 @@ type ClassItem = {
 type BulkScheduleModalProps = {
   classes: ClassItem[];
   teachers?: { id: string; fullName: string }[];
+  rooms?: { id: string; name: string }[];
 };
 
 type SchedulePattern = {
@@ -23,11 +24,12 @@ type SchedulePattern = {
   slot: number;
 };
 
-export default function BulkScheduleModal({ classes }: BulkScheduleModalProps) {
+export default function BulkScheduleModal({ classes, rooms = [] }: BulkScheduleModalProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
   const [classId, setClassId] = useState(classes[0]?.id || "");
+  const [roomId, setRoomId] = useState("");
   const [startDate, setStartDate] = useState(new Date().toISOString().split("T")[0]);
   const [endDate, setEndDate] = useState(() => {
     const d = new Date();
@@ -49,12 +51,12 @@ export default function BulkScheduleModal({ classes }: BulkScheduleModalProps) {
 
   // Quét lịch trống
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen || !roomId) return;
 
     let isMounted = true;
     const scanSchedule = async () => {
       setIsScanning(true);
-      const res = await getOccupiedPatterns(startDate, endDate);
+      const res = await getOccupiedPatterns(startDate, endDate, assignedTeacherId, roomId);
       
       if (isMounted) {
         const newSet = new Set<string>();
@@ -71,7 +73,7 @@ export default function BulkScheduleModal({ classes }: BulkScheduleModalProps) {
       isMounted = false;
       clearTimeout(timer);
     };
-  }, [startDate, endDate, isOpen]);
+  }, [startDate, endDate, isOpen, assignedTeacherId, roomId]);
 
   const handleToggleCell = (day: number, slot: number) => {
     setSelectedPatterns((prev) => {
@@ -85,6 +87,10 @@ export default function BulkScheduleModal({ classes }: BulkScheduleModalProps) {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!roomId) {
+      toast.warning("Vui lòng chọn phòng học!");
+      return;
+    }
     if (selectedPatterns.length === 0) {
       toast.warning("Vui lòng click chọn ít nhất 1 ô lịch học trên bảng lưới!");
       return;
@@ -104,7 +110,7 @@ export default function BulkScheduleModal({ classes }: BulkScheduleModalProps) {
       title: "Xác nhận tạo lịch học",
       message: (
         <>
-          Bạn đang chuẩn bị tạo lịch cho lớp <strong>{selectedClassObj?.name}</strong> do giáo viên <strong>{assignedTeacherName}</strong> phụ trách.<br/><br/>
+          Bạn đang chuẩn bị tạo lịch cho lớp <strong>{selectedClassObj?.name}</strong> do giáo viên <strong>{assignedTeacherName}</strong> phụ trách tại phòng <strong>{rooms.find(r => r.id === roomId)?.name || "Chưa rõ"}</strong>.<br/><br/>
           Tần suất: <strong>{selectedPatterns.length} ca/tuần</strong>, từ ngày <strong>{new Date(startDate).toLocaleDateString('vi-VN')}</strong> đến ngày <strong>{new Date(endDate).toLocaleDateString('vi-VN')}</strong>.<br/><br/>
           Bạn có chắc chắn muốn tiếp tục?
         </>
@@ -117,6 +123,7 @@ export default function BulkScheduleModal({ classes }: BulkScheduleModalProps) {
         const result = await createBulkSchedule({
           classId,
           teacherId: assignedTeacherId, // Lấy ID giáo viên đã được trích xuất tự động
+          roomId,
           patterns: selectedPatterns,
           startDate,
           endDate,
@@ -191,6 +198,21 @@ export default function BulkScheduleModal({ classes }: BulkScheduleModalProps) {
                      {assignedTeacherName}
                   </div>
                 </div>
+              </div>
+              
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
+                  <Building2 size={14}/> Chọn Phòng Học <span className="text-rose-500">*</span>
+                </label>
+                <select 
+                  value={roomId}
+                  onChange={(e) => setRoomId(e.target.value)}
+                  className="w-full h-11 px-3 border border-slate-200 rounded-xl bg-slate-50 text-sm font-semibold focus:ring-2 focus:ring-blue-100 outline-none cursor-pointer"
+                  required
+                >
+                  <option value="">-- Vui lòng chọn phòng học --</option>
+                  {rooms.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
+                </select>
               </div>
 
               {/* BẢNG LƯỚI CHỌN LỊCH TRỰC QUAN */}

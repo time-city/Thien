@@ -15,6 +15,14 @@ enum Role {
   @@schema("public")
 }
 
+// 🟢 MỚI: Enum cho trạng thái phê duyệt tạo lớp học
+enum ClassStatus {
+  PENDING     // Giáo viên yêu cầu, chờ Admin duyệt
+  APPROVED    // Đã duyệt & đang hoạt động
+  REJECTED    // Bị từ chối
+  @@schema("public")
+}
+
 enum EnrollmentStatus {
   ACTIVE
   PAUSED
@@ -30,6 +38,7 @@ enum FeeStatus {
 }
 
 enum SessionStatus {
+  PENDING       // 🟢 MỚI: Giáo viên xin lịch, chờ duyệt
   SCHEDULED
   COMPLETED
   CANCELLED
@@ -85,29 +94,28 @@ enum TransactionStatus {
 
 // ================= MODELS =================
 model User {
-  id                String         @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  username          String         @unique
-  passwordHash      String
-  fullName          String
-  role              Role           @default(TEACHER)
-  isActive          Boolean        @default(true)
+  id              String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  username        String          @unique
+  passwordHash    String
+  fullName        String
+  role            Role            @default(TEACHER)
+  isActive        Boolean         @default(true)
 
+  salaryBalance   Float           @default(0)
+  createdAt       DateTime        @default(now())
 
-  salaryBalance     Float          @default(0)
-  createdAt         DateTime       @default(now())
-
-  classTeachers     ClassTeacher[]
-  classSessions     ClassSession[]
-  roomRentalLogs    RoomRentalLog[]
-
-  salaryPayments    SalaryPayment[]
+  classTeachers   ClassTeacher[]
+  classSessions   ClassSession[]
+  roomRentalLogs  RoomRentalLog[]
+  salaryPayments  SalaryPayment[]
+  createdClasses  Class[]         @relation("ClassCreator") // 🟢 MỚI: Lịch sử các lớp do user này yêu cầu tạo
 
   @@map("users")
   @@schema("public")
 }
 
 model SalaryPayment {
-  id          String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   teacherId   String   @db.Uuid
   amount      Float    // Số tiền trung tâm ĐÃ THANH TOÁN cho GV
   note        String?  // Ghi chú (VD: "Thanh toán lương tháng 5", "Ứng trước")
@@ -119,29 +127,48 @@ model SalaryPayment {
   @@schema("public")
 }
 
+// 🟢 MỚI: Bảng quản lý phòng học
+model Room {
+  id          String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name        String         @unique // VD: "Phòng 1", "Phòng 2"
+  capacity    Int?           
+  isActive    Boolean        @default(true)
+  createdAt   DateTime       @default(now())
 
+  sessions    ClassSession[]
+
+  @@map("rooms")
+  @@schema("public")
+}
 
 model Class {
-  id                String         @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  name              String
-  category          String
-  roomFeePerSession Float          @default(0)
-  pricePerSession   Float          @default(0)
-  sessionsPerPackage Int          @default(12)
-  createdAt         DateTime       @default(now())
+  id                 String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name               String
+  category           String
+  roomFeePerSession  Float            @default(0)
+  pricePerSession    Float            @default(0)
+  sessionsPerPackage Int              @default(12)
+  
+  // 🟢 MỚI: Bổ sung trạng thái duyệt lớp và người tạo
+  status             ClassStatus      @default(APPROVED) 
+  createdById        String?          @db.Uuid           
+  
+  createdAt          DateTime         @default(now())
 
-  teachers     ClassTeacher[]
-  enrollments  Enrollment[]
-  sessions     ClassSession[]
-  payments     PaymentHistory[]
-
+  teachers           ClassTeacher[]
+  enrollments        Enrollment[]
+  sessions           ClassSession[]
+  payments           PaymentHistory[]
+  
+  // 🟢 MỚI: Khóa ngoại liên kết tới người yêu cầu tạo lớp
+  createdBy          User?            @relation("ClassCreator", fields: [createdById], references: [id], onDelete: SetNull)
 
   @@map("classes")
   @@schema("public")
 }
 
 model ClassTeacher {
-  id        String  @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  id        String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   classId   String  @db.Uuid
   teacherId String  @db.Uuid
   subModule String?
@@ -154,124 +181,130 @@ model ClassTeacher {
 }
 
 model Student {
-  id             String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  fullName       String
-  dob            DateTime? @db.Date
-  gender         Gender?
-  school         String?
-  phoneStudent   String?
-  parentName     String?
-  phoneParent    String?
-  qrCodeId       String?   @unique
-  createdAt      DateTime  @default(now())
+  id                  String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  fullName            String
+  dob                 DateTime?            @db.Date
+  gender              Gender?
+  school              String?
+  phoneStudent        String?
+  parentName          String?
+  phoneParent         String?
+  qrCodeId            String?              @unique
+  createdAt           DateTime             @default(now())
 
-  enrollments           Enrollment[]
-  payments              PaymentHistory[]
-  attendanceLogs        AttendanceLog[]
-  pendingTransactions   PendingTransaction[]
+  enrollments         Enrollment[]
+  payments            PaymentHistory[]
+  attendanceLogs      AttendanceLog[]
+  pendingTransactions PendingTransaction[]
 
   @@map("students")
   @@schema("public")
 }
 
 model Enrollment {
- id                  String           @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  studentId           String           @db.Uuid
-  classId             String           @db.Uuid
-  startDate           DateTime?
-  endDate             DateTime?
-  currentVoucher      Int              @default(1)
-  remainingSessions   Int              @default(0)
-  status              EnrollmentStatus @default(ACTIVE)
-  feeStatus           FeeStatus        @default(PAID)
-  createdAt           DateTime         @default(now())
+  id                String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  studentId         String           @db.Uuid
+  classId           String           @db.Uuid
+  startDate         DateTime?
+  endDate           DateTime?
+  currentVoucher    Int              @default(1)
+  remainingSessions Int              @default(0)
+  status            EnrollmentStatus @default(ACTIVE)
+  feeStatus         FeeStatus        @default(PAID)
+  createdAt         DateTime         @default(now())
 
-  student             Student          @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  class               Class            @relation(fields: [classId], references: [id], onDelete: Cascade)
+  student           Student          @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  class             Class            @relation(fields: [classId], references: [id], onDelete: Cascade)
 
   @@map("enrollments")
   @@schema("public")
 }
 
 model PaymentHistory {
-  id                String        @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  studentId         String        @db.Uuid
-  classId           String        @db.Uuid
-  amount            Float
-  paymentDate       DateTime      @default(now())
-  paymentMethod     PaymentMethod @default(BANK_TRANSFER)
-  voucherRef        Int?
-  status            PaymentStatus @default(SUCCESS)
-  transactionCode   String?       @unique
-  createdAt         DateTime      @default(now())
+  id              String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  studentId       String        @db.Uuid
+  classId         String        @db.Uuid
+  amount          Float
+  paymentDate     DateTime      @default(now())
+  paymentMethod   PaymentMethod @default(BANK_TRANSFER)
+  voucherRef      Int?
+  status          PaymentStatus @default(SUCCESS)
+  transactionCode String?       @unique
+  createdAt       DateTime      @default(now())
 
-  student           Student       @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  class             Class         @relation(fields: [classId], references: [id], onDelete: Cascade)
+  student         Student       @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  class           Class         @relation(fields: [classId], references: [id], onDelete: Cascade)
 
   @@map("payment_history")
   @@schema("public")
 }
 
 model ClassSession {
-  id                      String        @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  classId                 String        @db.Uuid
-  teacherId               String        @db.Uuid
-  date                    DateTime      @db.Date
-  slot                    Int
-  status                  SessionStatus @default(SCHEDULED)
-  isAttendanceSubmitted   Boolean       @default(false)
-  attendanceSubmittedAt   DateTime?
+  id                    String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  classId               String        @db.Uuid
+  teacherId             String        @db.Uuid
+  roomId                String?       @db.Uuid   // 🟢 MỚI: Cho phép xếp phòng học
+  date                  DateTime      @db.Date
+  slot                  Int
+  status                SessionStatus @default(SCHEDULED)
+  isAttendanceSubmitted Boolean       @default(false)
+  attendanceSubmittedAt DateTime?
 
-  class                   Class         @relation(fields: [classId], references: [id], onDelete: Cascade)
-  teacher                 User          @relation(fields: [teacherId], references: [id], onDelete: Cascade)
-  attendanceLogs          AttendanceLog[]
-  roomRentalLogs          RoomRentalLog[]
+  class                 Class         @relation(fields: [classId], references: [id], onDelete: Cascade)
+  teacher               User          @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  room                  Room?         @relation(fields: [roomId], references: [id], onDelete: SetNull) // 🟢 MỚI
 
-  @@unique([date, slot])
+  attendanceLogs        AttendanceLog[]
+  roomRentalLogs        RoomRentalLog[]
+
+  // 🟢 ĐÃ SỬA: Một giáo viên không thể dạy 2 lớp cùng giờ. Xóa bỏ chặn toàn trung tâm.
+  @@unique([teacherId, date, slot])
+  // 🟢 THÊM DÒNG NÀY: 1 Phòng không thể có 2 lớp học cùng giờ
+  @@unique([roomId, date, slot])
   @@map("class_sessions")
   @@schema("public")
 }
 
 model AttendanceLog {
-  id                 String           @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  classSessionId     String           @db.Uuid
-  studentId          String           @db.Uuid
-  attendanceStatus   AttendanceStatus
-  homeworkStatus     HomeworkStatus?
-  note               String?
-  createdAt          DateTime         @default(now())
+  id               String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  classSessionId   String           @db.Uuid
+  studentId        String           @db.Uuid
+  attendanceStatus AttendanceStatus
+  homeworkStatus   HomeworkStatus?
+  note             String?
+  createdAt        DateTime         @default(now())
 
-  classSession       ClassSession     @relation(fields: [classSessionId], references: [id], onDelete: Cascade)
-  student            Student          @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  classSession     ClassSession     @relation(fields: [classSessionId], references: [id], onDelete: Cascade)
+  student          Student          @relation(fields: [studentId], references: [id], onDelete: Cascade)
 
   @@map("attendance_logs")
   @@schema("public")
 }
 
 model RoomRentalLog {
-  id               String       @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  teacherId        String       @db.Uuid
-  classSessionId   String       @db.Uuid
-  feeCalculated    Float        @default(0)
-  status           RentalStatus @default(PENDING)
-  createdAt        DateTime     @default(now())
+  id             String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  teacherId      String       @db.Uuid
+  classSessionId String       @db.Uuid
+  feeCalculated  Float        @default(0)
+  status         RentalStatus @default(PENDING)
+  createdAt      DateTime     @default(now())
 
-  teacher          User         @relation(fields: [teacherId], references: [id], onDelete: Cascade)
-  classSession     ClassSession @relation(fields: [classSessionId], references: [id], onDelete: Cascade)
+  teacher        User         @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  classSession   ClassSession @relation(fields: [classSessionId], references: [id], onDelete: Cascade)
 
   @@map("room_rental_logs")
   @@schema("public")
 }
 
 model PendingTransaction {
-  id                String            @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  amount            Float
-  transferContent   String
-  status            TransactionStatus @default(PENDING)
-  studentId         String?           @db.Uuid
-  createdAt         DateTime          @default(now())
+  id              String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  amount          Float
+  transferContent String
+  status          TransactionStatus @default(PENDING)
+  studentId       String?           @db.Uuid
+  createdAt       DateTime          @default(now())
 
-  student           Student?          @relation(fields: [studentId], references: [id], onDelete: SetNull)
+  student         Student?          @relation(fields: [studentId], references: [id], onDelete: SetNull)
 
   @@map("pending_transactions")
   @@schema("public")

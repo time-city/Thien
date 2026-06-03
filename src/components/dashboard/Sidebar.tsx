@@ -1,7 +1,9 @@
 "use client";
 
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { signOut } from "next-auth/react";
 import { 
   Shield, 
   Users, 
@@ -10,15 +12,22 @@ import {
   LogOut, 
   BookOpen, 
   GraduationCap,
-  Layers
+  Layers,
+  Building2,
+  ReceiptText,
+  Wallet,
+  Settings2,
+  History
 } from "lucide-react";
-import { signOut } from "next-auth/react";
+
+import { getPendingSessionsCount } from "@/actions/mutations";
 
 type MenuItem = {
   title: string;
   href: string;
   icon: React.ElementType;
   roles: string[];
+  section: string;
 };
 
 // Đã quy hoạch lại Menu chuẩn chỉ, không thừa không thiếu
@@ -29,13 +38,36 @@ const menuItems: MenuItem[] = [
     href: "/schedule",
     icon: Calendar,
     roles: ["TEACHER", "SUPER_ADMIN"],
+    section: "Dùng chung",
   },
-  // {
-  //   title: "Sơ Đồ Lớp Học",
-  //   href: "/ta",
-  //   icon: Users,
-  //   roles: ["TEACHER", "SUPER_ADMIN"], // Đã fix lỗi chuỗi dính liền
-  // },
+  {
+    title: "Lớp học của tôi",
+    href: "/myClass",
+    icon: BookOpen,
+    roles: ["TEACHER"],
+    section: "Cá nhân",
+  },
+  {
+    title: "Lịch sử đặt phòng",
+    href: "/ta/booking-history",
+    icon: History,
+    roles: ["TEACHER"],
+    section: "Cá nhân",
+  },
+  {
+    title: "Lịch sử nhận lương",
+    href: "/ta/salary-history",
+    icon: Wallet,
+    roles: ["TEACHER"],
+    section: "Cá nhân",
+  },
+  {
+    title: "Cài đặt",
+    href: "/ta/settings",
+    icon: Settings2,
+    roles: ["TEACHER"],
+    section: "Cá nhân",
+  },
   
   // --- MENU DÀNH RIÊNG CHO ADMIN ---
   {
@@ -43,24 +75,56 @@ const menuItems: MenuItem[] = [
     href: "/admin/students",
     icon: GraduationCap,
     roles: ["SUPER_ADMIN"],
+    section: "Quản lý",
   },
   {
     title: "Quản Lý Giáo Viên",
     href: "/admin/teachers",
     icon: Shield,
     roles: ["SUPER_ADMIN"],
+    section: "Quản lý",
   },
   {
-    title: "Lớp Học",
+    title: "Quản Lý Lớp Học",
     href: "/admin/classes", // Hoặc /admin/subjects tuỳ ông đặt
     icon: Layers,
     roles: ["SUPER_ADMIN"],
+    section: "Quản lý",
   },
   {
-    title: "Tài Chính & Học Phí",
+    title: "Quản lý phòng học",
+    href: "/admin/rooms",
+    icon: Building2,
+    roles: ["SUPER_ADMIN"],
+    section: "Quản lý",
+  },
+  {
+    title: "Thu Học Phí",
     href: "/admin/tuition",
     icon: DollarSign,
     roles: ["SUPER_ADMIN"],
+    section: "Tài chính",
+  },
+  {
+    title: "Lịch sử Học Phí",
+    href: "/admin/history/tuition",
+    icon: ReceiptText,
+    roles: ["SUPER_ADMIN"],
+    section: "Tài chính",
+  },
+  {
+    title: "Lịch sử Lương",
+    href: "/admin/history/salary",
+    icon: Wallet,
+    roles: ["SUPER_ADMIN"],
+    section: "Tài chính",
+  },
+  {
+    title: "Duyệt Đặt Phòng",
+    href: "/admin/schedule",
+    icon: Calendar,
+    roles: ["SUPER_ADMIN"],
+    section: "Quản lý",
   },
 ];
 
@@ -74,6 +138,13 @@ interface SidebarProps {
 export default function Sidebar({ userRole, userName, isOpen, onClose }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
+  const [pendingCount, setPendingCount] = useState(0);
+
+  useEffect(() => {
+    if (userRole === "SUPER_ADMIN") {
+      getPendingSessionsCount().then(setPendingCount);
+    }
+  }, [userRole]);
 
   // Lọc menu theo role của user hiện tại
   const filteredNav = menuItems.filter((item) => item.roles.includes(userRole));
@@ -106,33 +177,46 @@ export default function Sidebar({ userRole, userName, isOpen, onClose }: Sidebar
 
         {/* Navigation */}
         <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-          <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3 px-3">
-            Menu chính
-          </div>
-          {filteredNav.map((item) => {
-            // Logic Active mượt hơn: bao gồm cả trường hợp đường dẫn con (VD: /admin/students/1)
+          {filteredNav.map((item, index) => {
+            const previous = filteredNav[index - 1];
+            const showSection = !previous || previous.section !== item.section;
             const isActive = 
               pathname === item.href || 
               (item.href !== "/" && pathname.startsWith(item.href));
-            
+
             const Icon = item.icon;
-            
+
             return (
-              <Link 
-                key={item.href} 
-                href={item.href}
-                onClick={onClose}
-                className={`
-                  flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200
-                  ${isActive 
-                    ? "bg-blue-50 text-blue-700" 
-                    : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
-                  }
-                `}
-              >
-                <Icon size={18} className={isActive ? "text-blue-600" : "text-slate-400"} />
-                {item.title}
-              </Link>
+              <div key={item.href} className={index === 0 ? "" : "mt-2"}>
+                {showSection && (
+                  <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 px-3">
+                    {item.section}
+                  </div>
+                )}
+                <Link 
+                  href={item.href}
+                  onClick={onClose}
+                  className={`
+                    flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200
+                    ${isActive 
+                      ? "bg-blue-50 text-blue-700" 
+                      : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                    }
+                  `}
+                >
+                  <div className="flex items-center justify-between w-full">
+                    <div className="flex items-center gap-3">
+                      <Icon size={18} className={isActive ? "text-blue-600" : "text-slate-400"} />
+                      {item.title}
+                    </div>
+                    {item.href === "/admin/schedule" && pendingCount > 0 && (
+                      <span className="bg-rose-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full animate-pulse shadow-sm">
+                        {pendingCount}
+                      </span>
+                    )}
+                  </div>
+                </Link>
+              </div>
             );
           })}
         </nav>

@@ -9,7 +9,6 @@ import { Loader2, TrendingUp, CreditCard, Wallet, CheckCircle2 } from "lucide-re
 import type { TuitionStudentData } from "@/actions/queries"; 
 import { payTeacherSalary, processStudentTuitionPayment } from "@/actions/mutations";
 
-// Khai báo type dựa trên data mới từ backend
 export type TeacherFinanceViewData = {
   id: string;
   username: string;
@@ -36,7 +35,7 @@ export default function TuitionClient({
   const [students, setStudents] = useState<TuitionStudentData[]>(initialStudents);
   const [teachers, setTeachers] = useState<TeacherFinanceViewData[]>(initialTeachers);
 
-  // Đồng bộ data khi router.refresh() chạy
+  // LẮNG NGHE DATA TỪ DATABASE: Khi router.refresh() chạy, data DB mới nhất sẽ được đổ vào đây
   useEffect(() => {
     setStudents(initialStudents);
   }, [initialStudents]);
@@ -45,12 +44,12 @@ export default function TuitionClient({
     setTeachers(initialTeachers);
   }, [initialTeachers]);
 
-  // States Thu học phí
+  // States
   const [selectedStudent, setSelectedStudent] = useState<TuitionStudentData | null>(null);
   const [selectedCourses, setSelectedCourses] = useState<Set<string>>(new Set());
   const [isSubmittingTuition, setIsSubmittingTuition] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState<"BANK_TRANSFER" | "CASH">("BANK_TRANSFER");
   
-  // States Thanh toán lương
   const [selectedTeacher, setSelectedTeacher] = useState<TeacherFinanceViewData | null>(null);
   const [isPayingSalary, setIsPayingSalary] = useState(false);
 
@@ -59,13 +58,9 @@ export default function TuitionClient({
   }, [students]);
 
   const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat("vi-VN", {
-      style: "currency",
-      currency: "VND",
-    }).format(amount);
+    return new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND" }).format(amount);
   };
 
-  // --- LOGIC THU HỌC PHÍ ---
   const handleToggleCourse = (courseId: string) => {
     setSelectedCourses((prev) => {
       const next = new Set(prev);
@@ -77,8 +72,8 @@ export default function TuitionClient({
 
   const totalFee = useMemo(() => {
     if (!selectedStudent) return 0;
-    return selectedStudent.enrolledCourses.reduce((sum, course) => {
-      if (selectedCourses.has(course.enrollmentId)) return sum + course.price;
+    return selectedStudent.enrolledCourses.reduce((sum, course: any) => {
+      if (selectedCourses.has(course.enrollmentId)) return sum + (course.price || 0);
       return sum;
     }, 0);
   }, [selectedStudent, selectedCourses]);
@@ -94,33 +89,22 @@ export default function TuitionClient({
     return `HP ${normalizedCourses} ${selectedStudent.id}`;
   };
 
+  // --- LOGIC THU HỌC PHÍ (CHẠY 100% BẰNG DATABASE) ---
   const handleProcessTuition = async () => {
     if (!selectedStudent || selectedCourses.size === 0) return;
     setIsSubmittingTuition(true);
     try {
-      const res = await processStudentTuitionPayment(selectedStudent.id, Array.from(selectedCourses));
+      // 1. GỌI MUTATION: Backend sẽ lưu Phiếu thu (PaymentHistory) và cộng số buổi trong DB
+      const res = await processStudentTuitionPayment(selectedStudent.id, Array.from(selectedCourses), paymentMethod);
+      
       if (res.success) {
         toast.success(`Đã thu ${formatCurrency(totalFee)} của ${selectedStudent.fullName}`);
         
-        // Cập nhật UI ngay lập tức: Cộng thêm số buổi để học sinh biến mất khỏi danh sách cảnh báo
-        setStudents((prev) =>
-          prev.map((s) => {
-            if (s.id === selectedStudent.id) {
-              return {
-                ...s,
-                enrolledCourses: s.enrolledCourses.map((c) => 
-                  selectedCourses.has(c.enrollmentId) 
-                    ? { ...c, remainingSessions: c.remainingSessions + 10 } 
-                    : c
-                )
-              };
-            }
-            return s;
-          })
-        );
-
         setSelectedStudent(null);
         setSelectedCourses(new Set());
+        setPaymentMethod("BANK_TRANSFER");
+        
+        // 2. GỌI QUERY MỚI LÊN: Ép Next.js tải lại Database thật để lấy số buổi đã được cộng
         router.refresh();
       } else {
         toast.error(res.error || "Lỗi thu học phí");
@@ -141,15 +125,8 @@ export default function TuitionClient({
       if (res.success) {
         toast.success(`Đã thanh toán ${formatCurrency(selectedTeacher.salaryBalance)} cho ${selectedTeacher.fullName}`);
         
-        // Cập nhật UI ngay lập tức
-        setTeachers((prev) => 
-          prev.map((t) => 
-            t.id === selectedTeacher.id ? { ...t, salaryBalance: 0 } : t
-          )
-        );
-
         setSelectedTeacher(null);
-        router.refresh(); 
+        router.refresh(); // Ép tải lại Database để lấy số dư ví = 0đ
       } else {
         toast.error(res.error || "Lỗi thanh toán lương");
       }
@@ -175,9 +152,7 @@ export default function TuitionClient({
         <button
           onClick={() => setActiveTab("STUDENT")}
           className={`px-6 py-3 border-b-2 transition-colors whitespace-nowrap ${
-            activeTab === "STUDENT"
-              ? "border-blue-600 text-blue-700"
-              : "border-transparent text-slate-500 hover:text-slate-800"
+            activeTab === "STUDENT" ? "border-blue-600 text-blue-700" : "border-transparent text-slate-500 hover:text-slate-800"
           }`}
         >
           Thu Học Phí Học Sinh
@@ -185,9 +160,7 @@ export default function TuitionClient({
         <button
           onClick={() => setActiveTab("TEACHER_SALARY")}
           className={`px-6 py-3 border-b-2 transition-colors whitespace-nowrap ${
-            activeTab === "TEACHER_SALARY"
-              ? "border-blue-600 text-blue-700"
-              : "border-transparent text-slate-500 hover:text-slate-800"
+            activeTab === "TEACHER_SALARY" ? "border-blue-600 text-blue-700" : "border-transparent text-slate-500 hover:text-slate-800"
           }`}
         >
           Thanh Toán Lương
@@ -304,22 +277,16 @@ export default function TuitionClient({
                 {/* 3. Trạng thái & Nút hành động */}
                 <div className="flex flex-row md:flex-col items-center md:items-end justify-between md:justify-center md:w-32 shrink-0 gap-3 border-t md:border-t-0 border-slate-100 pt-3 md:pt-0 mt-1 md:mt-0">
                   {hasBalance ? (
-                    <span className="bg-amber-100 text-amber-700 font-extrabold px-2 py-1 rounded text-[10px] uppercase tracking-wider whitespace-nowrap">
-                      Cần Trả Lương
-                    </span>
+                    <span className="bg-amber-100 text-amber-700 font-extrabold px-2 py-1 rounded text-[10px] uppercase tracking-wider whitespace-nowrap">Cần Trả Lương</span>
                   ) : (
-                    <span className="bg-slate-100 text-slate-500 font-extrabold px-2 py-1 rounded text-[10px] uppercase tracking-wider whitespace-nowrap">
-                      Đã Tất Toán
-                    </span>
+                    <span className="bg-slate-100 text-slate-500 font-extrabold px-2 py-1 rounded text-[10px] uppercase tracking-wider whitespace-nowrap">Đã Tất Toán</span>
                   )}
                   
                   <button
                     onClick={() => setSelectedTeacher(teacher)}
                     disabled={!hasBalance}
                     className={`w-full md:w-auto px-4 py-2 rounded-lg font-bold shadow-sm transition-all text-xs flex items-center justify-center gap-1.5 whitespace-nowrap ${
-                      hasBalance 
-                        ? "bg-slate-900 hover:bg-slate-800 text-white" 
-                        : "bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200"
+                      hasBalance ? "bg-slate-900 hover:bg-slate-800 text-white" : "bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200"
                     }`}
                   >
                     Thanh Toán
@@ -348,9 +315,10 @@ export default function TuitionClient({
             <div className="p-4 md:p-6 overflow-y-auto">
               <p className="text-sm font-bold text-slate-700 mb-3">1. Chọn môn học để gia hạn:</p>
               <div className="space-y-2">
-                {selectedStudent.enrolledCourses.map((c) => {
+                {selectedStudent.enrolledCourses.map((c: any) => {
                   const isLow = c.remainingSessions <= 2;
                   const isSelected = selectedCourses.has(c.enrollmentId);
+                  
                   return (
                     <label key={c.enrollmentId} className={`flex items-center justify-between p-3 rounded-xl border cursor-pointer transition-all ${isSelected ? "border-blue-500 bg-blue-50/50" : "border-slate-200 bg-white hover:bg-slate-50"}`}>
                       <div className="flex items-center gap-3">
@@ -362,17 +330,32 @@ export default function TuitionClient({
                           <p className={`text-[11px] font-medium mt-0.5 ${isLow ? "text-rose-600" : "text-slate-500"}`}>Đang còn: {c.remainingSessions} buổi</p>
                         </div>
                       </div>
-                      <div className="font-bold text-slate-700 text-sm">{formatCurrency(c.price)}</div>
+                      <div className="font-bold text-slate-700 text-sm">{formatCurrency(c.price || 0)}</div>
                       <input type="checkbox" checked={isSelected} onChange={() => handleToggleCourse(c.enrollmentId)} className="sr-only"/>
                     </label>
                   );
                 })}
               </div>
+              
+              <div className="mt-4 pt-4 border-t border-slate-100">
+                <p className="text-sm font-bold text-slate-700 mb-2">2. Phương thức thu:</p>
+                <div className="flex gap-4">
+                  <label className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl border cursor-pointer font-bold text-sm transition-colors ${paymentMethod === "BANK_TRANSFER" ? "bg-blue-50 border-blue-500 text-blue-700" : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"}`}>
+                    <input type="radio" name="paymentMethod" checked={paymentMethod === "BANK_TRANSFER"} onChange={() => setPaymentMethod("BANK_TRANSFER")} className="sr-only" />
+                    Chuyển Khoản
+                  </label>
+                  <label className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl border cursor-pointer font-bold text-sm transition-colors ${paymentMethod === "CASH" ? "bg-emerald-50 border-emerald-500 text-emerald-700" : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"}`}>
+                    <input type="radio" name="paymentMethod" checked={paymentMethod === "CASH"} onChange={() => setPaymentMethod("CASH")} className="sr-only" />
+                    Tiền Mặt
+                  </label>
+                </div>
+              </div>
+
               <div className="mt-6 pt-4 border-t border-slate-100 flex justify-between items-center">
-                <span className="text-slate-500 text-sm font-bold">2. Tổng tiền cần thu:</span>
+                <span className="text-slate-500 text-sm font-bold">3. Tổng tiền cần thu:</span>
                 <span className="text-2xl font-extrabold text-blue-600 tracking-tight">{formatCurrency(totalFee)}</span>
               </div>
-              {selectedCourses.size > 0 && (
+              {selectedCourses.size > 0 && paymentMethod === "BANK_TRANSFER" && (
                 <div className="mt-6 flex flex-col items-center p-5 bg-slate-50 rounded-2xl border border-slate-100">
                   <p className="text-[11px] font-bold text-slate-500 mb-3 uppercase tracking-widest">Đưa QR cho học sinh quét</p>
                   <div className="bg-white p-3 rounded-xl shadow-sm border border-slate-200">

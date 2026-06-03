@@ -583,7 +583,7 @@ export default function ClassesClient({
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1.5">
-                  <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Học phí / Buổi</label>
+                  <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Học phí / Phiếu</label>
                   <div className="relative">
                     <DollarSign size={16} className="absolute left-3 top-3 text-slate-400" />
                     <input

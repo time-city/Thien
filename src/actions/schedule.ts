@@ -7,11 +7,12 @@ import { revalidatePath } from "next/cache";
 export async function createBulkSchedule(data: {
   classId: string;
   teacherId: string;
+  roomId: string;
   patterns: { day: number; slot: number }[]; // Dữ liệu mới: Mảng chứa các ô lưới được chọn
   startDate: string;
   endDate: string;
 }) {
-  const { classId, teacherId, patterns, startDate, endDate } = data;
+  const { classId, teacherId, roomId, patterns, startDate, endDate } = data;
 
   if (patterns.length === 0) return { success: false, error: "Chưa chọn lịch dạy!" };
 
@@ -33,6 +34,7 @@ export async function createBulkSchedule(data: {
       sessionsToCreate.push({
         classId,
         teacherId,
+        roomId,
         date: targetDate,
         slot: pat.slot,
         status: SessionStatus.SCHEDULED,
@@ -47,14 +49,17 @@ export async function createBulkSchedule(data: {
     // Vì mỗi ô khác slot nhau, ta gom lại check bằng câu lệnh OR
     const conflictingSessions = await prisma.classSession.findMany({
       where: {
-        OR: datesToCheck.map(dt => ({ date: dt.date, slot: dt.slot }))
+        AND: [
+          { OR: datesToCheck.map(dt => ({ date: dt.date, slot: dt.slot })) },
+          { OR: [{ teacherId }, { roomId }] }
+        ]
       },
-      include: { class: true }
+      include: { class: true, teacher: true, room: true }
     });
 
     if (conflictingSessions.length > 0) {
       const conflictDetails = conflictingSessions.map(
-        (s) => `Ngày ${s.date.toLocaleDateString('vi-VN')} (Ca ${s.slot} - Lớp ${s.class.name})`
+        (s) => `Ngày ${s.date.toLocaleDateString('vi-VN')} (Ca ${s.slot}): ${s.teacherId === teacherId ? "Giáo viên bận" : "Phòng bị trùng"}`
       ).join(", ");
       return { success: false, error: `Trùng lịch! Đã có lớp học tại: ${conflictDetails}.` };
     }
@@ -184,7 +189,7 @@ export async function deleteSchedule(
 }
 
 // thêm lịch học hàng loạt (dành cho SUPER_ADMIN)
-export async function getOccupiedPatterns(startDate: string, endDate: string) {
+export async function getOccupiedPatterns(startDate: string, endDate: string, teacherId: string | null, roomId: string) {
   const start = new Date(`${startDate}T00:00:00.000Z`);
   const end = new Date(`${endDate}T23:59:59.999Z`);
 
@@ -195,6 +200,10 @@ export async function getOccupiedPatterns(startDate: string, endDate: string) {
         gte: start,
         lt: end,
       },
+      OR: [
+        ...(teacherId ? [{ teacherId }] : []),
+        { roomId }
+      ]
     },
     select: { date: true, slot: true },
   });

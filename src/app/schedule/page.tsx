@@ -3,6 +3,7 @@ import TeacherBookingCalendar from "./TeacherBookingCalendar";
 import { auth } from "@/auth";
 import { getSchedule, getAllClasses, getAllUsers, getRooms } from "@/lib/queries";
 import BulkScheduleModal from "@/components/schedule/BulkScheduleModal";
+import AdminRoomSelector from "@/components/schedule/AdminRoomSelector";
 
 export default async function SchedulePage({
   searchParams,
@@ -22,31 +23,53 @@ export default async function SchedulePage({
   // GIAO DIỆN DÀNH CHO SUPER_ADMIN
   // ==========================================
   if (userRole === "SUPER_ADMIN") {
-    const schedule = await getSchedule(); // admin sees all
+    const rooms = await getRooms();
     const classes = await getAllClasses();
     const teachers = await getAllUsers();
-    const rooms = await getRooms();
+    
+    // Nếu chưa chọn phòng thì có thể hiện form chọn phòng, 
+    // Hoặc lấy lịch của phòng đã chọn.
+    const schedule = roomId ? await getSchedule(roomId) : []; 
 
     return (
       <div className="max-w-7xl mx-auto p-4 md:p-8">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+          <div>
+            <h1 className="text-2xl font-extrabold text-slate-900">Quản Lý Lịch Dạy</h1>
+            <p className="text-sm text-slate-500 mt-1">Duyệt, xem và tạo lịch định kỳ</p>
+          </div>
           <BulkScheduleModal classes={classes} teachers={teachers} rooms={rooms} />
         </div>
 
-        <WeeklyCalendar
-          userRole={userRole}
-          sessions={schedule.map((s) => ({
-            id: s.id,
-            classId: s.classId,
-            className: s.className,
-            teacherId: s.teacherId,
-            teacherFullName: s.teacherName,
-            date: s.date,
-            slot: s.slot,
-            status: s.status,
-            isAttendanceSubmitted: s.isAttendanceSubmitted,
-          }))}
-        />
+        {/* Room Selector for Admin */}
+        <div className="mb-6 flex flex-col sm:flex-row gap-3">
+          <form className="flex items-center gap-3 w-full sm:w-auto">
+            <AdminRoomSelector rooms={rooms} selectedRoomId={roomId || ""} />
+          </form>
+        </div>
+
+        {!roomId ? (
+          <div className="bg-white border border-slate-200 rounded-xl p-16 text-center shadow-sm">
+            <h3 className="text-lg font-bold text-slate-700 mb-2">Vui lòng chọn phòng</h3>
+            <p className="text-slate-500">Bạn cần chọn một phòng cụ thể ở menu trên để xem toàn bộ lịch dạy.</p>
+          </div>
+        ) : (
+          <WeeklyCalendar
+            userRole={userRole}
+            sessions={schedule.map((s) => ({
+              id: s.id,
+              classId: s.classId,
+              className: s.className,
+              teacherId: s.teacherId,
+              teacherFullName: s.teacherName,
+              roomName: s.roomName,
+              date: s.date,
+              slot: s.slot,
+              status: s.status,
+              isAttendanceSubmitted: s.isAttendanceSubmitted,
+            }))}
+          />
+        )}
       </div>
     );
   }
@@ -55,10 +78,11 @@ export default async function SchedulePage({
   // GIAO DIỆN DÀNH CHO TEACHER (ROOM BOOKING)
   // ==========================================
   if (userRole === "TEACHER") {
-    const [rooms, classes, schedule] = await Promise.all([
+    const [rooms, classes, schedule, teacherSchedule] = await Promise.all([
       getRooms(),
       getAllClasses(),
-      getSchedule(roomId) // pass roomId to get full schedule of the room
+      roomId ? getSchedule(roomId) : Promise.resolve([]), // Lịch của phòng đang chọn
+      getSchedule(undefined, userId) // Lịch của toàn bộ giáo viên này (để biết bị trùng phòng khác)
     ]);
 
     // Lọc classes mà giáo viên được gán
@@ -71,6 +95,7 @@ export default async function SchedulePage({
         rooms={rooms}
         classes={myClasses}
         initialSchedule={schedule}
+        teacherSchedule={teacherSchedule}
         teacherId={userId}
         selectedRoomId={roomId || ""}
       />

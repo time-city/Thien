@@ -1412,3 +1412,53 @@ export async function rejectSessionRequest(sessionId: string) {
     return { success: false, error: "Lỗi từ chối / hủy phòng" };
   }
 }
+
+export async function transferStudentClass(studentId: string, oldClassId: string, newClassId: string) {
+  await checkSuperAdmin();
+  if (oldClassId === newClassId) return { success: false, error: "Lớp mới phải khác lớp cũ" };
+
+  try {
+    return await prisma.$transaction(async (tx) => {
+      // 1. Lấy thông tin phiếu học cũ
+      const oldEnrollment = await tx.enrollment.findFirst({
+        where: { studentId, classId: oldClassId, status: "ACTIVE" },
+        include: { class: true }
+      });
+      if (!oldEnrollment) throw new Error("Không tìm thấy thông tin đăng ký lớp cũ");
+
+      // 2. Lấy thông tin lớp mới
+      const newClass = await tx.class.findUnique({
+        where: { id: newClassId }
+      });
+      if (!newClass) throw new Error("Không tìm thấy lớp mới");
+
+      // 3. Tính số buổi đã học = Tổng số buổi mặc định lớp cũ - Số buổi còn lại
+      const usedSessions = Math.max(0, oldEnrollment.class.sessionsPerPackage - oldEnrollment.remainingSessions);
+
+      // 4. Tính số buổi còn lại cho lớp mới
+      const newRemainingSessions = Math.max(0, newClass.sessionsPerPackage - usedSessions);
+
+      // 5. Cập nhật phiếu cũ thành DROPPED
+      await tx.enrollment.update({
+        where: { id: oldEnrollment.id },
+        data: { status: "DROPPED" }
+      });
+
+      // 6. Tạo phiếu đăng ký mới (chuyển bảo lưu số dư/số buổi)
+      const newEnrollment = await tx.enrollment.create({
+        data: {
+          studentId,
+          classId: newClassId,
+          remainingSessions: newRemainingSessions,
+          feeStatus: oldEnrollment.feeStatus,
+          status: "ACTIVE"
+        }
+      });
+
+      return { success: true, data: newEnrollment };
+    });
+  } catch (error: any) {
+    console.error("Lỗi khi chuyển lớp:", error);
+    return { success: false, error: error.message || "Lỗi hệ thống khi chuyển lớp" };
+  }
+}

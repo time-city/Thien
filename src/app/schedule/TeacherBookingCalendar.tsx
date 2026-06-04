@@ -43,12 +43,14 @@ export default function TeacherBookingCalendar({
   rooms,
   classes,
   initialSchedule,
+  teacherSchedule,
   teacherId,
   selectedRoomId,
 }: {
   rooms: RoomData[];
   classes: ClassData[];
   initialSchedule: ScheduleItemData[];
+  teacherSchedule: ScheduleItemData[];
   teacherId: string;
   selectedRoomId: string;
 }) {
@@ -250,8 +252,13 @@ export default function TeacherBookingCalendar({
                       return toISODate(s.date) === dateISO && dayOfWeekMon1Sun7(s.date) === day.id && s.slot === shift.id;
                     });
 
+                    const teacherBusySessions = teacherSchedule.filter((s) => {
+                      return toISODate(s.date) === dateISO && dayOfWeekMon1Sun7(s.date) === day.id && s.slot === shift.id;
+                    });
+
                     // Check if there is any session in this cell
                     const session = cellSessions.length > 0 ? cellSessions[0] : null;
+                    const teacherBusy = teacherBusySessions.length > 0 && (!session || session.id !== teacherBusySessions[0].id) ? teacherBusySessions[0] : null;
 
                     return (
                       <div
@@ -261,16 +268,23 @@ export default function TeacherBookingCalendar({
                         }`}
                       >
                         {!session ? (
-                          // CA TRỐNG
-                          <button
-                            onClick={() => setBookingSlot({ date: dateForCell, slot: shift.id })}
-                            className="w-full h-full min-h-[60px] rounded border-2 border-dashed border-slate-200 hover:border-blue-400 hover:bg-blue-50/50 flex flex-col items-center justify-center gap-1 transition-colors text-slate-400 hover:text-blue-500 group"
-                          >
-                            <CalendarPlus size={16} className="opacity-0 group-hover:opacity-100 transition-opacity" />
-                            <span className="text-[10px] font-semibold opacity-0 group-hover:opacity-100 transition-opacity">Đặt phòng</span>
-                          </button>
+                          !teacherBusy ? (
+                            // CA TRỐNG VÀ GIÁO VIÊN RẢNH
+                            <button
+                              onClick={() => setBookingSlot({ date: dateForCell, slot: shift.id })}
+                              className="w-full h-full min-h-[60px] rounded border-2 border-dashed border-slate-200 hover:border-blue-400 hover:bg-blue-50/50 flex flex-col items-center justify-center gap-1 transition-colors text-slate-400 hover:text-blue-500 group"
+                            >
+                              <CalendarPlus size={16} className="opacity-0 group-hover:opacity-100 transition-opacity" />
+                              <span className="text-[10px] font-semibold opacity-0 group-hover:opacity-100 transition-opacity">Đặt phòng</span>
+                            </button>
+                          ) : (
+                            // GIÁO VIÊN BẬN Ở PHÒNG KHÁC
+                            <div className="w-full h-full min-h-[60px] p-2 rounded-lg border border-rose-200 bg-rose-50 text-rose-500 flex flex-col justify-center items-center cursor-not-allowed">
+                              <span className="text-[11px] font-bold text-center">Bạn bị trùng lịch ở {teacherBusy.roomName || "phòng khác"}</span>
+                            </div>
+                          )
                         ) : (
-                          // ĐÃ CÓ CA
+                          // ĐÃ CÓ CA TRONG PHÒNG NÀY
                           <div className="w-full h-full">
                             {session.teacherId !== teacherId ? (
                               // CA CỦA GIÁO VIÊN KHÁC

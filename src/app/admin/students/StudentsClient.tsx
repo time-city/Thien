@@ -8,6 +8,8 @@ import { StudentData, ClassData } from "@/actions/queries";
 import { toast } from "sonner";
 import { useConfirm } from "@/hooks/useconfirm"; 
 import { useRouter } from "next/navigation";
+import TransferClassModal from "./TransferClassModal";
+import CourseReportModal from "./CourseReportModal";
 
 const DA_NANG_SCHOOLS = [
   "THPT Chuyên Lê Quý Đôn", "THPT Phan Châu Trinh", "THPT Hoàng Hoa Thám", "THPT Trần Phú", "THPT Thái Phiên", "THPT Nguyễn Trãi", "THPT Tôn Thất Tùng", "THPT Nguyễn Hiền", "THPT Thanh Khê", "THPT Hòa Vang", "THPT Cẩm Lệ", "THPT Ngô Quyền", "THPT Liên Chiểu", "THPT Phạm Phú Thứ", "THPT Ông Ích Khiêm", "THPT Phan Thành Tài", "THPT Võ Chí Công", "THPT Sơn Trà", "THPT Tôn Đức Thắng", "THPT Nguyễn Thượng Hiền", "THPT Khâm Đức", "THPT FPT Đà Nẵng", "THPT Sky-Line", "THPT APU", "THPT Chuyên Biệt Tương Lai",
@@ -59,6 +61,14 @@ export default function StudentsClient({
   const ITEMS_PER_PAGE = 10;
   
   const [viewStudent, setViewStudent] = useState<StudentData | null>(null);
+
+  // States for Class Transfer
+  const [transferModalOpen, setTransferModalOpen] = useState(false);
+  const [transferStudentData, setTransferStudentData] = useState<{ id: string; name: string; oldClassId: string; oldClassName: string } | null>(null);
+
+  // States for Course Report Export
+  const [reportModalOpen, setReportModalOpen] = useState(false);
+  const [reportData, setReportData] = useState<{ studentId: string; studentName: string; classId: string; className: string } | null>(null);
 
   useEffect(() => {
     setCurrentPage(1);
@@ -707,6 +717,28 @@ export default function StudentsClient({
                             <span className={c.feeStatus === "PAID" ? "text-emerald-600 font-bold" : "text-rose-600 font-bold"}>{c.feeStatus === "PAID" ? "Đã nộp học phí" : "Chưa nộp"}</span>
                           </div>
                           <div className="text-xs text-slate-500 mt-0.5">Giáo viên: <b>{c.teachers?.join(", ") || "Chưa phân công"}</b></div>
+                          
+                          {/* Buttons for Transfer and Report */}
+                          <div className="flex items-center gap-2 mt-2 pt-2 border-t border-slate-100">
+                            <button
+                              onClick={() => {
+                                setTransferStudentData({ id: viewStudent.id, name: viewStudent.fullName, oldClassId: c.classId, oldClassName: c.className });
+                                setTransferModalOpen(true);
+                              }}
+                              className="flex-1 py-1.5 px-2 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded text-xs font-bold transition-colors text-center"
+                            >
+                              Đổi lớp
+                            </button>
+                            <button
+                              onClick={() => {
+                                setReportData({ studentId: viewStudent.id, studentName: viewStudent.fullName, classId: c.classId, className: c.className });
+                                setReportModalOpen(true);
+                              }}
+                              className="flex-1 py-1.5 px-2 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 rounded text-xs font-bold transition-colors text-center"
+                            >
+                              Xuất báo cáo
+                            </button>
+                          </div>
                         </div>
                       );
                     })}
@@ -716,6 +748,31 @@ export default function StudentsClient({
             </div>
           </div>
         </div>
+      )}
+
+      {/* Modal Chuyển Lớp */}
+      {transferStudentData && (
+        <TransferClassModal
+          isOpen={transferModalOpen}
+          onClose={() => setTransferModalOpen(false)}
+          studentId={transferStudentData.id}
+          studentName={transferStudentData.name}
+          oldClassId={transferStudentData.oldClassId}
+          oldClassName={transferStudentData.oldClassName}
+          availableClasses={classes}
+        />
+      )}
+
+      {/* Modal Xuất Báo Cáo */}
+      {reportData && (
+        <CourseReportModal
+          isOpen={reportModalOpen}
+          onClose={() => setReportModalOpen(false)}
+          studentId={reportData.studentId}
+          studentName={reportData.studentName}
+          classId={reportData.classId}
+          className={reportData.className}
+        />
       )}
     </div>
   );

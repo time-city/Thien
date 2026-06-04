@@ -87,8 +87,10 @@ export async function getAllAvailableTeachers() {
 export type TuitionStudentData = {
   id: string;
   fullName: string;
+  phoneStudent: string | null;
   enrolledCourses: {
     enrollmentId: string;
+    classId: string;
     className: string;
     feeStatus: string;
     remainingSessions: number;
@@ -109,8 +111,10 @@ export async function getTuitionData(): Promise<TuitionStudentData[]> {
   return students.map(s => ({
     id: s.id,
     fullName: s.fullName,
+    phoneStudent: s.phoneStudent,
     enrolledCourses: s.enrollments.map(e => ({
       enrollmentId: e.id,
+      classId: e.classId,
       className: e.class.name,
       feeStatus: e.feeStatus,
       remainingSessions: e.remainingSessions,
@@ -322,6 +326,11 @@ export async function getStudentsDetailed(): Promise<StudentData[]> {
   const students = await prisma.student.findMany({
     include: {
       enrollments: {
+        where: {
+          status: {
+            not: "DROPPED"
+          }
+        },
         include: {
           class: {
             include: {

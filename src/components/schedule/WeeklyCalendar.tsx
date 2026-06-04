@@ -41,6 +41,7 @@ type ScheduleSession = {
   className: string;
   teacherId: string;
   teacherFullName: string;
+  roomName: string | null;
   date: Date;
   slot: number;
   status: string;
@@ -92,7 +93,7 @@ export default function WeeklyCalendar({ userRole, sessions }: WeeklyCalendarPro
     const map = new Map<string, number>();
     for (const s of sessions) {
       const dateISO = toISODate(s.date);
-      const room = `Phòng ${((s.slot + s.className.length) % 4) + 1}`;
+      const room = s.roomName || "Chưa xếp phòng";
       const key = `${dateISO}|${s.slot}|${room}`;
       map.set(key, (map.get(key) ?? 0) + 1);
     }
@@ -292,7 +293,7 @@ export default function WeeklyCalendar({ userRole, sessions }: WeeklyCalendarPro
                       return dISO === dateISO && sDayId === day.id && s.slot === shift.id;
                     })
                     .map((s) => {
-                      const room = `Phòng ${((s.slot + s.className.length) % 4) + 1}`;
+                      const room = s.roomName || "Chưa xếp phòng";
                       const key = `${dateISO}|${s.slot}|${room}`;
                       const attendanceConflict = (conflictCounts.get(key) ?? 0) > 1;
 

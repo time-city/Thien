@@ -164,27 +164,100 @@ export async function importStudentsCsv(data: {
   phoneStudent?: string; 
   parentName?: string; 
   phoneParent?: string; 
-  gender?: string 
+  gender?: string;
+  className?: string;
+  school?: string;
+  dob?: string;
+  createdAt?: string;
+  feeStatus?: string;
 }[]) {
   await checkSuperAdmin();
   try {
-    const formattedData = data.filter(d => d.fullName?.trim()).map(row => ({
-      fullName: row.fullName.trim(),
-      phoneStudent: row.phoneStudent,
-      parentName: row.parentName,
-      phoneParent: row.phoneParent,
-      gender: (row.gender === "MALE" || row.gender === "FEMALE" || row.gender === "OTHER" ? row.gender : null) as any
-    }));
+    // 1. Lọc dữ liệu hợp lệ
+    const validData = data.filter(d => d.fullName?.trim());
+    if (validData.length === 0) return { success: false, error: "File CSV không có dữ liệu hợp lệ" };
 
-    if (formattedData.length === 0) return { success: false, error: "Dữ liệu không hợp lệ" };
+    // 2. Thu thập danh sách lớp học có trong file
+    const classNamesInCsv = Array.from(new Set(validData.map(d => d.className?.trim()).filter(Boolean) as string[]));
 
-    await prisma.student.createMany({
-      data: formattedData,
-      skipDuplicates: true
+    // 3. Tìm các lớp học trong hệ thống
+    const existingClasses = await prisma.class.findMany({
+      where: { name: { in: classNamesInCsv } }
     });
+    const existingClassNames = existingClasses.map(c => c.name);
+
+    // 4. Báo lỗi nếu có lớp chưa được tạo
+    const missingClasses = classNamesInCsv.filter(name => !existingClassNames.includes(name));
+    if (missingClasses.length > 0) {
+      return { 
+        success: false, 
+        error: `Các lớp sau chưa được tạo trên hệ thống: ${missingClasses.join(', ')}. Vui lòng tạo lớp trước khi import.` 
+      };
+    }
+
+    // Hàm hỗ trợ parse DD/MM/YYYY sang Date UTC
+    const parseDDMMYYYY = (dateString?: string) => {
+      if (!dateString) return undefined;
+      const parts = dateString.trim().split('/');
+      if (parts.length === 3) {
+        const d = parseInt(parts[0], 10);
+        const m = parseInt(parts[1], 10);
+        const y = parseInt(parts[2], 10);
+        if (!isNaN(d) && !isNaN(m) && !isNaN(y)) {
+          return new Date(Date.UTC(y, m - 1, d));
+        }
+      }
+      return undefined;
+    };
+
+    // 5. Thêm dữ liệu (dùng Transaction để đảm bảo tính toàn vẹn)
+    await prisma.$transaction(async (tx) => {
+      for (const row of validData) {
+        let genderEnum: any = null;
+        if (row.gender === "MALE" || row.gender === "FEMALE" || row.gender === "OTHER") {
+          genderEnum = row.gender;
+        }
+
+        const classNameStr = row.className?.trim();
+        const classInfo = classNameStr ? existingClasses.find(c => c.name === classNameStr) : null;
+        
+        let enrollmentsData: any = undefined;
+        if (classInfo) {
+          const isPaid = row.feeStatus === "PAID";
+          enrollmentsData = {
+            create: [{
+              classId: classInfo.id,
+              feeStatus: isPaid ? "PAID" : "UNPAID",
+              remainingSessions: isPaid ? classInfo.sessionsPerPackage : 0,
+              currentVoucher: isPaid ? 1 : 0
+            }]
+          };
+        }
+
+        const parsedCreatedAt = parseDDMMYYYY(row.createdAt);
+
+        await tx.student.create({
+          data: {
+            fullName: row.fullName.trim(),
+            phoneStudent: row.phoneStudent,
+            parentName: row.parentName,
+            phoneParent: row.phoneParent,
+            gender: genderEnum,
+            school: row.school,
+            dob: parseDDMMYYYY(row.dob),
+            createdAt: parsedCreatedAt ? parsedCreatedAt : undefined,
+            enrollments: enrollmentsData
+          }
+        });
+      }
+    }, {
+      timeout: 30000, // Tăng timeout lên 30 giây thay vì 5 giây mặc định
+    });
+
     revalidatePath("/admin/students");
-    return { success: true, count: formattedData.length };
+    return { success: true, count: validData.length };
   } catch(error) {
+    console.error("importStudentsCsv error:", error);
     return { success: false, error: "Lỗi import file CSV" };
   }
 }

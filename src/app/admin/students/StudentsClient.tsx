@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
+import Papa from "papaparse";
 import { Plus, Edit2, Trash2, X, Search, User as UserIcon, Phone, CheckSquare, Square, Loader2, Eye, Filter, ChevronLeft, ChevronRight, BookOpen, Upload, Calendar, School, Download, AlertCircle } from "lucide-react";
 import { createStudent, updateStudent, deleteStudent, deleteStudents, getStudentDeletionImpact, importStudentsCsv } from "@/actions/mutations";
 import { StudentData, ClassData } from "@/actions/queries";
@@ -126,75 +127,84 @@ export default function StudentsClient({
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = async (event) => {
-      const text = event.target?.result as string;
-      const lines = text.split(/\r?\n/).filter(line => line.trim() !== '');
-      
-      if (lines.length < 2) {
-        toast.error("File CSV trống hoặc chưa có dữ liệu học sinh. Vui lòng kiểm tra lại!");
-        e.target.value = '';
-        return;
-      }
-      
-      const dataToImport = [];
-      const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
-      
-      const fnIdx = headers.indexOf('fullname');
-      const psIdx = headers.indexOf('phonestudent');
-      const pnIdx = headers.indexOf('parentname');
-      const ppIdx = headers.indexOf('phoneparent');
-      const gIdx = headers.indexOf('gender');
-
-      if (fnIdx === -1) {
-        toast.error("Sai cấu trúc file! Không tìm thấy cột 'fullname'. Vui lòng bấm 'Tải File Mẫu' để xem định dạng chuẩn.", { duration: 5000 });
-        e.target.value = '';
-        return;
-      }
-
-      const mapGender = (gStr: string | undefined) => {
-        if (!gStr) return undefined;
-        const lower = gStr.trim().toLowerCase();
-        if (["nam", "male", "m", "trai"].includes(lower)) return "MALE";
-        if (["nữ", "nu", "female", "f", "gái"].includes(lower)) return "FEMALE";
-        if (["khác", "other", "o"].includes(lower)) return "OTHER";
-        return undefined;
-      };
-
-      for (let i = 1; i < lines.length; i++) {
-        const cols = lines[i].split(',').map(c => c.trim().replace(/^"|"$/g, ''));
-        const fullName = cols[fnIdx];
-        if (!fullName) continue; 
-
-        dataToImport.push({
-          fullName: fullName,
-          phoneStudent: psIdx !== -1 ? cols[psIdx] : undefined,
-          parentName: pnIdx !== -1 ? cols[pnIdx] : undefined,
-          phoneParent: ppIdx !== -1 ? cols[ppIdx] : undefined,
-          gender: gIdx !== -1 ? mapGender(cols[gIdx]) : undefined,
-        });
-      }
-
-      if (dataToImport.length > 0) {
-        setLoading(true);
-        const loadingToastId = toast.loading(`Đang xử lý ${dataToImport.length} học sinh...`);
-        try {
-          const res = await importStudentsCsv(dataToImport);
-          toast.dismiss(loadingToastId);
-          if (res.success) {
-            toast.success(`Nhập thành công ${res.count} học sinh!`);
-            router.refresh();
-          } else {
-            toast.error(res.error || "Có lỗi xảy ra khi lưu vào hệ thống.");
-          }
-        } catch (error) {
-          toast.dismiss(loadingToastId);
-          toast.error("Lỗi kết nối máy chủ khi import!");
+    Papa.parse(file, {
+      skipEmptyLines: true,
+      complete: async (results) => {
+        const rows = results.data as string[][];
+        if (rows.length < 2) {
+          toast.error("File CSV trống hoặc chưa có dữ liệu học sinh. Vui lòng kiểm tra lại!");
+          return;
         }
-        setLoading(false);
+
+        // Tìm dòng tiêu đề để bắt đầu lấy dữ liệu (dòng chứa "STT" và "Họ và tên")
+        let dataStartIndex = 2;
+        for (let i = 0; i < rows.length; i++) {
+          const rowStr = rows[i].join('').toLowerCase();
+          if (rowStr.includes('họ và tên') && rowStr.includes('stt')) {
+            dataStartIndex = i + 1;
+            break;
+          }
+        }
+
+        const dataToImport = [];
+        
+        const mapGender = (gStr: string | undefined) => {
+          if (!gStr) return undefined;
+          const lower = gStr.trim().toLowerCase();
+          if (["nam", "male", "m", "trai"].includes(lower)) return "MALE";
+          if (["nữ", "nu", "female", "f", "gái"].includes(lower)) return "FEMALE";
+          if (["khác", "other", "o"].includes(lower)) return "OTHER";
+          return undefined;
+        };
+
+        for (let i = dataStartIndex; i < rows.length; i++) {
+          const cols = rows[i];
+          // STT(0), Họ và tên(1), Lớp(2), SDT(3), Trường(4), Ngày sinh(5), Giới tính(6), 
+          // Trạng thái(7), Phụ huynh(8), SDT Phụ huynh(9), Ngày bắt đầu(10), 
+          // Ngày kết thúc(11), Phiếu(12), Trạng thái học phí(13)
+          const fullName = cols[1]?.trim();
+          if (!fullName) continue; 
+
+          dataToImport.push({
+            fullName: fullName,
+            className: cols[2]?.trim(),
+            phoneStudent: cols[3]?.trim(),
+            school: cols[4]?.trim(),
+            dob: cols[5]?.trim(),
+            gender: mapGender(cols[6]),
+            parentName: cols[8]?.trim(),
+            phoneParent: cols[9]?.trim(),
+            createdAt: cols[10]?.trim(),
+            feeStatus: cols[13]?.trim() === "Đã thanh toán" ? "PAID" : "UNPAID"
+          });
+        }
+
+        if (dataToImport.length > 0) {
+          setLoading(true);
+          const loadingToastId = toast.loading(`Đang xử lý ${dataToImport.length} học sinh...`);
+          try {
+            const res = await importStudentsCsv(dataToImport);
+            toast.dismiss(loadingToastId);
+            if (res.success) {
+              toast.success(`Nhập thành công ${res.count} học sinh!`);
+              router.refresh();
+            } else {
+              toast.error(res.error || "Có lỗi xảy ra khi lưu vào hệ thống.", { duration: 10000 });
+            }
+          } catch (error) {
+            toast.dismiss(loadingToastId);
+            toast.error("Lỗi kết nối máy chủ khi import!");
+          }
+          setLoading(false);
+        } else {
+          toast.error("Không tìm thấy dữ liệu học sinh trong file CSV.");
+        }
+      },
+      error: (error) => {
+        toast.error("Lỗi khi đọc file CSV: " + error.message);
       }
-    };
-    reader.readAsText(file, 'UTF-8');
+    });
+
     e.target.value = ''; 
   };
   

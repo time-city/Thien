@@ -1,11 +1,11 @@
 import { prisma } from "@/lib/prisma";
-import { 
-  Role, 
+import {
+  Role,
   ClassStatus,
-  AttendanceStatus, 
-  HomeworkStatus, 
+  AttendanceStatus,
+  HomeworkStatus,
   RentalStatus,
-  SessionStatus
+  SessionStatus,
 } from "@prisma/client";
 
 // ==========================================
@@ -55,8 +55,8 @@ export async function getUserById(id: string) {
 
 export async function getTeachers() {
   return await prisma.user.findMany({
-    where: { 
-      role: "TEACHER" 
+    where: {
+      role: "TEACHER"
     },
     orderBy: { createdAt: "desc" },
   });
@@ -66,16 +66,16 @@ export async function getAllAvailableTeachers() {
   return await prisma.user.findMany({
     where: {
       role: {
-        in: ["TEACHER", "SUPER_ADMIN"], 
+        in: ["TEACHER", "SUPER_ADMIN"],
       },
-      isActive: true, 
+      isActive: true,
     },
     select: {
       id: true,
       fullName: true,
     },
     orderBy: {
-      fullName: "asc", 
+      fullName: "asc",
     },
   });
 }
@@ -101,7 +101,7 @@ export async function getTuitionData(): Promise<TuitionStudentData[]> {
   const students = await prisma.student.findMany({
     include: {
       enrollments: {
-        include: { class: true } 
+        include: { class: true }
       }
     }
   });
@@ -302,7 +302,7 @@ export type EnrolledCourseData = {
   remainingSessions: number;
   feeStatus: string;
   status: string;
-  teachers: string[]; 
+  teachers: string[];
 };
 
 export type StudentData = {
@@ -493,7 +493,7 @@ export async function getTuitionEnrollments() {
   return await prisma.enrollment.findMany({
     include: {
       student: true,
-      class: true 
+      class: true
     },
     orderBy: { createdAt: "desc" }
   });
@@ -504,7 +504,7 @@ export async function getRentalLogs(): Promise<RentalLogData[]> {
     include: {
       teacher: true,
       classSession: {
-        include: { class: true } 
+        include: { class: true }
       }
     },
     orderBy: { createdAt: "desc" }
@@ -515,7 +515,7 @@ export async function getRentalLogs(): Promise<RentalLogData[]> {
     teacherId: log.teacherId,
     teacherName: log.teacher.fullName,
     classSessionId: log.classSessionId,
-    className: log.classSession.class.name, 
+    className: log.classSession.class.name,
     date: log.classSession.date,
     slot: log.classSession.slot,
     feeCalculated: log.feeCalculated,
@@ -587,10 +587,10 @@ export async function getTeacherSettingsInfo(teacherId: string) {
   return {
     teacherInfo: teacherInfo
       ? {
-          ...teacherInfo,
-          totalRoomFee,
-          totalEarned,
-        }
+        ...teacherInfo,
+        totalRoomFee,
+        totalEarned,
+      }
       : (undefined as any),
     teachingHistory,
   };
@@ -625,7 +625,7 @@ export async function getTeachersForFinance(): Promise<TeacherFinanceViewData[]>
         _sum: { feeCalculated: true }
       });
       const totalRoomFee = roomFeeAggr._sum.feeCalculated || 0;
-      
+
       // Tổng thu nhập giảng dạy = Số dư ví hiện tại + Tổng phí phòng đã trừ
       const totalEarned = t.salaryBalance + totalRoomFee;
 

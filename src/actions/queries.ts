@@ -88,6 +88,7 @@ export type TuitionStudentData = {
   id: string;
   fullName: string;
   phoneStudent: string | null;
+  phoneParent: string | null;
   enrolledCourses: {
     enrollmentId: string;
     classId: string;
@@ -117,6 +118,7 @@ export async function getTuitionData(): Promise<TuitionStudentData[]> {
     id: s.id,
     fullName: s.fullName,
     phoneStudent: s.phoneStudent,
+    phoneParent: s.phoneParent,
     enrolledCourses: s.enrollments.map(e => ({
       enrollmentId: e.id,
       classId: e.classId,

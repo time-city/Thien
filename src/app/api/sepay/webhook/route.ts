@@ -78,7 +78,8 @@ export async function POST(request: Request) {
       const student = await prisma.student.findFirst({
         where: {
           OR: [
-            { phoneStudent: { contains: studentPhoneMatch } }, // Lọc theo số điện thoại
+            { phoneStudent: { contains: studentPhoneMatch } },
+            { phoneParent: { contains: studentPhoneMatch } },
             { id: studentPhoneMatch.length === 36 ? studentPhoneMatch : undefined },
             { qrCodeId: studentPhoneMatch }
           ]

@@ -95,8 +95,13 @@ export default function CourseReportModal({
   const finalPrice = Math.max(0, originalPrice - (originalPrice * discountPercent) / 100);
 
   // Generate VietQR URL
-  const phone = report?.phoneStudent?.replace(/\D/g, "") || "000000";
-  const descString = `HT${phone}`;
+  let identifier = "000000";
+  if (report?.phoneParent) {
+    identifier = report.phoneParent.replace(/\D/g, "");
+  } else if (studentId) {
+    identifier = studentId;
+  }
+  const descString = `HT${identifier}`;
   const qrUrl = `https://qr.sepay.vn/img?bank=MBBank&acc=0700107189999&amount=${finalPrice}&des=${encodeURIComponent(descString)}&template=`;
 
   console.log("Thông tin tạo mã QR:", {

@@ -18,7 +18,7 @@ const payload = {
   content: `HT${STUDENT_PHONE}`, // Cú pháp mà Server đang quét
   transferType: "in",
   description: `BankAPINotify HT${STUDENT_PHONE}`,
-  transferAmount: 500000,
+  transferAmount: 10000,
   referenceCode: `FT${Date.now()}`, // Tạo mã ngẫu nhiên để không bị báo trùng
   accumulated: 0,
   id: Math.floor(Math.random() * 10000000)

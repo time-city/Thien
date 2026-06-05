@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 export type StudentCourseReport = {
   studentName: string;
   phoneStudent: string | null;
+  phoneParent: string | null;
   className: string;
   sessionsPerPackage: number;
   pricePerSession: number;
@@ -21,7 +22,7 @@ export type StudentCourseReport = {
 export async function getStudentCourseReport(studentId: string, classId: string): Promise<StudentCourseReport | null> {
   const student = await prisma.student.findUnique({
     where: { id: studentId },
-    select: { fullName: true, phoneStudent: true }
+    select: { fullName: true, phoneStudent: true, phoneParent: true }
   });
   if (!student) return null;
 
@@ -53,6 +54,7 @@ export async function getStudentCourseReport(studentId: string, classId: string)
   return {
     studentName: student.fullName,
     phoneStudent: student.phoneStudent,
+    phoneParent: student.phoneParent,
     className: classData.name,
     sessionsPerPackage: classData.sessionsPerPackage,
     pricePerSession: classData.pricePerSession,

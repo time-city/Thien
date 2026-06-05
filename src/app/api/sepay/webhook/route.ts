@@ -5,41 +5,40 @@ import crypto from "crypto";
 export async function POST(request: Request) {
   try {
     const rawBody = await request.text();
-    
-    // Lấy header (Xử lý case-insensitive)
-    const signatureHeader = request.headers.get("x-sepay-signature") || request.headers.get("X-SePay-Signature");
-    const secretKey = process.env.SEPAY_WEBHOOK_SECRET;
+    const signature = request.headers.get("x-sepay-signature") ?? "";
+    const timestampHeader = request.headers.get("x-sepay-timestamp") ?? "0";
+    const secretKey = process.env.SEPAY_WEBHOOK_SECRET?.trim();
 
-    // 1. Kiểm tra biến môi trường và header
     if (!secretKey) {
-      console.error("🚨 [SEPAY WEBHOOK] LỖI: Thiếu biến môi trường SEPAY_WEBHOOK_SECRET trên Server");
-      return NextResponse.json({ success: false, message: "Server configuration error" }, { status: 500 });
-    }
-    if (!signatureHeader) {
-      console.error("🚨 [SEPAY WEBHOOK] LỖI: Request không có header X-SePay-Signature");
-      return NextResponse.json({ success: false, message: "Missing signature" }, { status: 401 });
+      console.error("🚨 THIẾU SEPAY_WEBHOOK_SECRET");
+      return NextResponse.json({ success: false, message: "Server error" }, { status: 500 });
     }
 
-    // 2. Làm sạch chữ ký (Cắt bỏ tiền tố sha256= nếu có)
-    const actualSignature = signatureHeader.replace(/^sha256=/, "").trim();
+    const timestamp = Number(timestampHeader);
 
-    // 3. Băm dữ liệu Raw Body
-    const hmac = crypto.createHmac("sha256", secretKey);
-    hmac.update(rawBody);
-    const expectedSignature = hmac.digest("hex");
+    // 1. Kiểm tra timestamp chống replay attack (±5 phút = 300 giây)
+    if (Math.abs(Date.now() / 1000 - timestamp) > 300) {
+      console.error("🚨 REQUEST QUÁ HẠN (EXPIRED)");
+      return NextResponse.json({ success: false, message: "Request expired" }, { status: 401 });
+    }
 
-    // 4. Đối chiếu và in Log chi tiết nếu sai
-    if (actualSignature !== expectedSignature) {
-      console.error("🚨 [SEPAY WEBHOOK] LỆCH CHỮ KÝ BẢO MẬT!");
-      console.error("   - Header gửi lên :", actualSignature);
-      console.error("   - Server tính ra :", expectedSignature);
-      console.error("   - Raw Body size  :", rawBody.length);
+    // 2. Tạo chữ ký chuẩn theo SePay: "sha256=" + hash(timestamp.body)
+    const expectedSignature = "sha256=" + crypto.createHmac("sha256", secretKey)
+      .update(`${timestamp}.${rawBody}`)
+      .digest("hex");
+
+    // 3. So sánh chữ ký an toàn (timingSafeEqual)
+    const sigBuffer = Buffer.from(signature);
+    const expBuffer = Buffer.from(expectedSignature);
+
+    if (sigBuffer.length !== expBuffer.length || !crypto.timingSafeEqual(sigBuffer, expBuffer)) {
+      console.error("🚨 LỆCH CHỮ KÝ BẢO MẬT!");
       return NextResponse.json({ success: false, message: "Invalid signature" }, { status: 401 });
     }
 
-    console.log("✅ [SEPAY WEBHOOK] Xác thực chữ ký THÀNH CÔNG!");
+    console.log("✅ [SEPAY WEBHOOK] XÁC THỰC THÀNH CÔNG!");
 
-    // --- BẮT ĐẦU LOGIC PARSE JSON VÀ UPDATE DATABASE Ở ĐÂY ---
+    // 4. PARSE DỮ LIỆU VÀ XỬ LÝ DATABASE
     let body;
     try {
       body = JSON.parse(rawBody);
@@ -63,7 +62,7 @@ export async function POST(request: Request) {
     const existingPayment = await prisma.paymentHistory.findUnique({
       where: { transactionCode: sepayId },
     });
-    
+
     if (existingPayment) {
       return NextResponse.json({ success: true, reason: "Already processed" });
     }
@@ -95,7 +94,7 @@ export async function POST(request: Request) {
         // Tìm lớp học cần gạch nợ (ưu tiên lớp UNPAID hoặc số buổi còn lại ít nhất)
         let targetEnrollment = student.enrollments.find(e => e.feeStatus === "UNPAID");
         if (!targetEnrollment && student.enrollments.length > 0) {
-          targetEnrollment = student.enrollments.reduce((prev, curr) => 
+          targetEnrollment = student.enrollments.reduce((prev, curr) =>
             (prev.remainingSessions < curr.remainingSessions) ? prev : curr
           );
         }

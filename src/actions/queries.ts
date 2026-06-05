@@ -103,6 +103,11 @@ export async function getTuitionData(): Promise<TuitionStudentData[]> {
   const students = await prisma.student.findMany({
     include: {
       enrollments: {
+        where: {
+          status: {
+            not: "DROPPED"
+          }
+        },
         include: { class: true }
       }
     }

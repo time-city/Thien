@@ -4,6 +4,8 @@ import AppLayout from "@/components/AppLayout";
 import { auth } from "@/auth";
 import { redirect } from "next/navigation";
 
+export const dynamic = 'force-dynamic';
+
 export const metadata = {
   title: "Quản lý Học sinh",
 };

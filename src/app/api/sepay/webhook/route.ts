@@ -17,13 +17,16 @@ export async function POST(req: Request) {
     }
 
     if (!signature) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ success: false, message: "Thiếu chữ ký" }, { status: 401 });
     }
 
+    // Cắt bỏ chuỗi 'sha256=' (nếu có) để lấy mã hex thuần
+    const actualSignature = signature.replace(/^sha256=/, "");
+
     // Tính toán mã băm từ raw body
-    const hash = crypto.createHmac("sha256", secretKey).update(rawBody).digest("hex");
-    if (hash !== signature) {
-      return NextResponse.json({ error: "Unauthorized - Invalid Signature" }, { status: 401 });
+    const expectedSignature = crypto.createHmac("sha256", secretKey).update(rawBody).digest("hex");
+    if (expectedSignature !== actualSignature) {
+      return NextResponse.json({ success: false, message: "Sai chữ ký bảo mật" }, { status: 401 });
     }
 
     // 3. TRÍCH XUẤT PAYLOAD
@@ -34,11 +37,12 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: true, reason: "Invalid JSON format" });
     }
 
-    const { id, transferAmount, transferContent, transferType } = body;
+    const { id, transferAmount, transferContent, transferType, content: sepayContent, description } = body;
 
     const sepayId = String(id);
     const amount = Number(transferAmount);
-    const content = String(transferContent).toUpperCase();
+    const contentStr = sepayContent || transferContent || description || "";
+    const content = String(contentStr).toUpperCase();
 
     // CHẶN GIAO DỊCH CHUYỂN TIỀN RA (OUT) HOẶC SỐ TIỀN <= 0
     if (transferType === "out" || isNaN(amount) || amount <= 0) {

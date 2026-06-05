@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/prisma";
 
 export type StudentCourseReport = {
+  enrollmentId: string;
   studentName: string;
   phoneStudent: string | null;
   phoneParent: string | null;
@@ -32,6 +33,12 @@ export async function getStudentCourseReport(studentId: string, classId: string)
   });
   if (!classData) return null;
 
+  const enrollment = await prisma.enrollment.findFirst({
+    where: { studentId, classId, status: { not: "DROPPED" } },
+    select: { id: true }
+  });
+  if (!enrollment) return null;
+
   const logs = await prisma.attendanceLog.findMany({
     where: {
       studentId: studentId,
@@ -52,6 +59,7 @@ export async function getStudentCourseReport(studentId: string, classId: string)
   });
 
   return {
+    enrollmentId: enrollment.id,
     studentName: student.fullName,
     phoneStudent: student.phoneStudent,
     phoneParent: student.phoneParent,

@@ -74,33 +74,50 @@ export async function POST(request: Request) {
       const studentPhoneMatch = htMatch[1]; // Đây là số điện thoại hoặc mã rút gọn hoặc UUID
 
 
-      // Tìm học sinh theo SĐT (phoneStudent) hoặc id/qrCodeId nếu khớp
-      const student = await prisma.student.findFirst({
-        where: {
-          OR: [
-            { phoneStudent: { contains: studentPhoneMatch } },
-            { phoneParent: { contains: studentPhoneMatch } },
-            { id: studentPhoneMatch.length === 36 ? studentPhoneMatch : undefined },
-            { qrCodeId: studentPhoneMatch }
-          ]
-        },
-        include: {
-          enrollments: {
-            include: { class: true }
+      let targetEnrollment: any = null;
+      let student: any = null;
+
+      // 1. Ưu tiên tìm chính xác thẻ học (Enrollment ID) do mã QR mới gen
+      if (studentPhoneMatch.length === 36) {
+        targetEnrollment = await prisma.enrollment.findUnique({
+          where: { id: studentPhoneMatch },
+          include: { class: true, student: true }
+        });
+        if (targetEnrollment) {
+          student = targetEnrollment.student;
+        }
+      }
+
+      // 2. Fallback: Tìm theo Học sinh (SĐT/ID) nếu phụ huynh gõ tay nội dung cũ
+      if (!targetEnrollment) {
+        student = await prisma.student.findFirst({
+          where: {
+            OR: [
+              { phoneStudent: { contains: studentPhoneMatch } },
+              { phoneParent: { contains: studentPhoneMatch } },
+              { id: studentPhoneMatch.length === 36 ? studentPhoneMatch : undefined },
+              { qrCodeId: studentPhoneMatch }
+            ]
+          },
+          include: {
+            enrollments: {
+              include: { class: true }
+            }
+          }
+        });
+
+        if (student) {
+          // Tìm lớp học cần gạch nợ (ưu tiên lớp UNPAID hoặc số buổi còn lại ít nhất)
+          targetEnrollment = student.enrollments.find((e: any) => e.feeStatus === "UNPAID") || null;
+          if (!targetEnrollment && student.enrollments.length > 0) {
+            targetEnrollment = student.enrollments.reduce((prev: any, curr: any) =>
+              (prev.remainingSessions < curr.remainingSessions) ? prev : curr
+            );
           }
         }
-      });
+      }
 
-      if (student) {
-        // Tìm lớp học cần gạch nợ (ưu tiên lớp UNPAID hoặc số buổi còn lại ít nhất)
-        let targetEnrollment = student.enrollments.find(e => e.feeStatus === "UNPAID");
-        if (!targetEnrollment && student.enrollments.length > 0) {
-          targetEnrollment = student.enrollments.reduce((prev, curr) =>
-            (prev.remainingSessions < curr.remainingSessions) ? prev : curr
-          );
-        }
-
-        if (targetEnrollment) {
+      if (student && targetEnrollment) {
           // Thực hiện hạch toán qua Transaction
           await prisma.$transaction(async (tx) => {
             // 1. Tạo lịch sử thanh toán thành công
@@ -126,7 +143,6 @@ export async function POST(request: Request) {
               }
             });
           });
-        }
       }
     }
 

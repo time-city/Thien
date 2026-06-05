@@ -3,8 +3,9 @@ const crypto = require('crypto');
 // --- CẤU HÌNH ---
 // URL của webhook (thay bằng URL vercel nếu muốn test trên mạng)
 const WEBHOOK_URL = 'https://thien-three.vercel.app/api/sepay/webhook';
-// Thay bằng số điện thoại của 1 học sinh ĐANG CÓ TRONG DATABASE để test gạch nợ
-const STUDENT_PHONE = '0903696969';
+// Thay bằng ID Thẻ học (Enrollment ID) của 1 học sinh ĐANG CÓ TRONG DATABASE để test (36 ký tự)
+// Hoặc điền Số điện thoại phụ huynh/học sinh vào đây để test chức năng dự phòng (Fallback)
+const ENROLLMENT_ID = '0903696969';
 // Secret key của bạn (COPY TỪ FILE .env VÀO ĐÂY)
 const SECRET_KEY = 'whsec_isxY69ps1U0M7m0mlMWDR7srSLZsg1kk';
 
@@ -14,10 +15,10 @@ const payload = {
   transactionDate: "2026-06-05 13:04:00",
   accountNumber: "0700107189999",
   subAccount: null,
-  code: `HT${STUDENT_PHONE}`,
-  content: `HT${STUDENT_PHONE}`, // Cú pháp mà Server đang quét
+  code: `HT${ENROLLMENT_ID}`,
+  content: `HT${ENROLLMENT_ID}`, // Cú pháp mà Server đang quét
   transferType: "in",
-  description: `BankAPINotify HT${STUDENT_PHONE}`,
+  description: `BankAPINotify HT${ENROLLMENT_ID}`,
   transferAmount: 10000,
   referenceCode: `FT${Date.now()}`, // Tạo mã ngẫu nhiên để không bị báo trùng
   accumulated: 0,

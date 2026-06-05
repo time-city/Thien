@@ -83,6 +83,7 @@ export default function AdminScheduleClient({
     if (result.success) {
       toast.success("Đã duyệt lịch học!");
       setSelectedSession(null);
+      window.dispatchEvent(new Event("schedule-updated"));
       router.refresh();
     } else {
       toast.error(result.error || "Có lỗi xảy ra");
@@ -98,6 +99,7 @@ export default function AdminScheduleClient({
     if (result.success) {
       toast.success("Đã từ chối lịch học!");
       setSelectedSession(null);
+      window.dispatchEvent(new Event("schedule-updated"));
       router.refresh();
     } else {
       toast.error(result.error || "Có lỗi xảy ra");
@@ -231,6 +233,7 @@ export default function AdminScheduleClient({
                     const isToday = isSameDay(dateForCell, new Date());
 
                     const cellSessions = schedule.filter((s) => {
+                      if (s.status === "REJECTED" || s.status === "CANCELLED") return false;
                       return toISODate(s.date) === dateISO && dayOfWeekMon1Sun7(s.date) === day.id && s.slot === shift.id;
                     });
 
@@ -247,21 +250,27 @@ export default function AdminScheduleClient({
                           <div className="flex flex-col gap-1.5 h-full">
                             {cellSessions.map((ev) => {
                               const isPending = ev.status === "PENDING";
+                              const isCompleted = ev.status === "COMPLETED" || ev.isAttendanceSubmitted;
+
+                              const bgClass = isPending 
+                                ? "bg-amber-100 border-amber-300 text-amber-900 hover:scale-[1.02] cursor-pointer"
+                                : isCompleted 
+                                ? "bg-slate-100 border-slate-200 text-slate-500 cursor-default opacity-80"
+                                : "bg-white border-slate-200 text-slate-700 cursor-default";
+
                               return (
                                 <button
                                   key={ev.id}
                                   onClick={() => isPending && setSelectedSession(ev)}
-                                  className={`p-2 w-full text-left rounded-lg border text-[11px] leading-snug shadow-sm flex flex-col gap-1 transition-all ${
-                                    isPending
-                                      ? "bg-amber-100 border-amber-300 text-amber-900 hover:scale-[1.02] cursor-pointer"
-                                      : "bg-white border-slate-200 text-slate-700 cursor-default"
-                                  }`}
+                                  className={`p-2 w-full text-left rounded-lg border text-[11px] leading-snug shadow-sm flex flex-col gap-1 transition-all ${bgClass}`}
                                 >
                                   <div className="font-extrabold line-clamp-1">{ev.className}</div>
-                                  <div className="font-medium text-slate-600 line-clamp-1">{ev.teacherName}</div>
+                                  <div className="font-medium opacity-80 line-clamp-1">{ev.teacherName}</div>
                                   <div className="text-[10px] font-bold mt-1">
                                     {isPending ? (
                                       <span className="text-amber-600">Chờ duyệt</span>
+                                    ) : isCompleted ? (
+                                      <span className="text-slate-500">Đã xong</span>
                                     ) : (
                                       <span className="text-green-600">Đã duyệt</span>
                                     )}

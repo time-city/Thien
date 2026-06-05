@@ -97,11 +97,11 @@ export default function CourseReportModal({
   // Generate VietQR URL
   const phone = report?.phoneStudent?.replace(/\D/g, "") || "000000";
   const descString = `HT${phone}`;
-  const qrUrl = `https://qr.sepay.vn/img?bank=MBBank&acc=0700107189999&amount=${finalPrice}&des=${encodeURIComponent(descString)}&template=`;
+  const qrUrl = `https://qr.sepay.vn/img?bank=MBBank&acc=0000064221150&amount=${finalPrice}&des=${encodeURIComponent(descString)}&template=`;
 
   console.log("Thông tin tạo mã QR:", {
-    bankName: "MBBank",
-    bankAccount: "0700107189999",
+    bank: "MBBank",
+    bankAccount: "0000064221150",
     amount: finalPrice,
     description: descString,
     qrUrl

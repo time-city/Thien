@@ -4,6 +4,7 @@ import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { signOut } from "next-auth/react";
+import { toast } from "sonner";
 import { 
   Shield, 
   Users, 
@@ -65,7 +66,7 @@ const menuItems: MenuItem[] = [
     title: "Cài đặt",
     href: "/ta/settings",
     icon: Settings2,
-    roles: ["TEACHER"],
+    roles: ["TEACHER", "SUPER_ADMIN"],
     section: "Cá nhân",
   },
   
@@ -140,11 +141,53 @@ export default function Sidebar({ userRole, userName, isOpen, onClose }: Sidebar
   const router = useRouter();
   const [pendingCount, setPendingCount] = useState(0);
 
-  useEffect(() => {
+  const fetchPendingCount = () => {
     if (userRole === "SUPER_ADMIN") {
       getPendingSessionsCount().then(setPendingCount);
     }
+  };
+
+  // 1. Lắng nghe Pending Count
+  useEffect(() => {
+    fetchPendingCount();
+    window.addEventListener("schedule-updated", fetchPendingCount);
+    return () => window.removeEventListener("schedule-updated", fetchPendingCount);
   }, [userRole]);
+
+  // 2. Polling realtime cập nhật khi có thanh toán mới (SePay)
+  useEffect(() => {
+    let lastPaymentTime: string | null = null;
+    let intervalId: NodeJS.Timeout;
+
+    if (userRole === "SUPER_ADMIN") {
+      const checkNewPayments = async () => {
+        try {
+          const res = await fetch("/api/payments/latest", { cache: "no-store" });
+          if (!res.ok) return;
+          const data = await res.json();
+          if (data.latestAt) {
+            // Nếu có thời gian cuối cùng & thời gian trả về khác với thời gian đã lưu => Có GD mới
+            if (lastPaymentTime && data.latestAt !== lastPaymentTime) {
+              toast.success("💳 Có khoản thanh toán mới vừa được ghi nhận!");
+              router.refresh(); // Tự động reload lại data trên trang hiện tại
+            }
+            lastPaymentTime = data.latestAt;
+          }
+        } catch (e) {
+          // Ignore network errors during polling
+        }
+      };
+
+      // Gọi lần đầu để set state ban đầu
+      checkNewPayments();
+      // Polling mỗi 5 giây
+      intervalId = setInterval(checkNewPayments, 5000);
+    }
+
+    return () => {
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, [userRole, router]);
 
   // Lọc menu theo role của user hiện tại
   const filteredNav = menuItems.filter((item) => item.roles.includes(userRole));

@@ -37,7 +37,7 @@ export async function createBulkSchedule(data: {
         roomId,
         date: targetDate,
         slot: pat.slot,
-        status: SessionStatus.SCHEDULED,
+        status: SessionStatus.PENDING,
       });
 
       current.setUTCDate(current.getUTCDate() + 7);

@@ -55,10 +55,11 @@ export async function POST(req: Request) {
     }
 
     // 5. XỬ LÝ NGHIỆP VỤ DB (Thu Học Phí)
-    // Hỗ trợ cú pháp HT + số điện thoại (VD: HT0901234567)
-    const htMatch = content.match(/HT\s*([0-9]+)/);
+    // Hỗ trợ cú pháp HT + số điện thoại (VD: HT0901234567) hoặc HP + UUID (VD: HP 123e4567-...)
+    const htMatch = content.match(/(?:HT|HP)\s*([a-zA-Z0-9-]+)/i);
     if (htMatch) {
-      const studentPhoneMatch = htMatch[1]; // Đây là số điện thoại hoặc mã rút gọn
+      const studentPhoneMatch = htMatch[1]; // Đây là số điện thoại hoặc mã rút gọn hoặc UUID
+
 
       // Tìm học sinh theo SĐT (phoneStudent) hoặc id/qrCodeId nếu khớp
       const student = await prisma.student.findFirst({
@@ -97,6 +98,7 @@ export async function POST(req: Request) {
                 paymentMethod: "BANK_TRANSFER",
                 status: "SUCCESS",
                 transactionCode: sepayId,
+                voucherRef: targetEnrollment!.currentVoucher + 1
               }
             });
 
@@ -105,8 +107,8 @@ export async function POST(req: Request) {
               where: { id: targetEnrollment!.id },
               data: {
                 feeStatus: "PAID",
-                remainingSessions: targetEnrollment!.remainingSessions + targetEnrollment!.class.sessionsPerPackage,
-                currentVoucher: targetEnrollment!.currentVoucher === 0 ? 1 : targetEnrollment!.currentVoucher
+                remainingSessions: { increment: targetEnrollment!.class.sessionsPerPackage },
+                currentVoucher: { increment: 1 }
               }
             });
           });

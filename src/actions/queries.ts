@@ -296,6 +296,8 @@ export type SessionLogData = {
   attendanceStatus: AttendanceStatus;
   homeworkStatus: HomeworkStatus | null;
   note: string | null;
+  classId: string;
+  className: string;
 };
 
 export type EnrolledCourseData = {
@@ -340,7 +342,7 @@ export async function getStudentsDetailed(): Promise<StudentData[]> {
         },
       },
       attendanceLogs: {
-        include: { classSession: true },
+        include: { classSession: { include: { class: true } } },
         orderBy: { classSession: { date: "desc" } },
         take: 10,
       },
@@ -373,6 +375,8 @@ export async function getStudentsDetailed(): Promise<StudentData[]> {
       attendanceStatus: log.attendanceStatus,
       homeworkStatus: log.homeworkStatus,
       note: log.note,
+      classId: log.classSession.classId,
+      className: log.classSession.class.name,
     })),
   }));
 }

@@ -12,7 +12,9 @@ import Link from "next/link";
 import { MapPin, Trash2, CheckSquare, XSquare, ChevronLeft, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 import { deleteBulkSchedules } from "@/actions/schedule";
+import { approveSessionRequest, rejectSessionRequest } from "@/actions/mutations";
 import { useConfirm } from "@/hooks/useconfirm"; 
+import { useRouter } from "next/navigation";
 
 const SHIFTS = [
   { id: 1, label: "Ca 1", time: "07:30 - 09:00" },
@@ -64,6 +66,7 @@ type CellSession = {
   attendanceConflict: boolean;
   teacherId: string;
   isCompleted?: boolean;
+  isPending?: boolean;
 };
 
 function toISODate(d: Date): string {
@@ -84,6 +87,11 @@ export default function WeeklyCalendar({ userRole, sessions }: WeeklyCalendarPro
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const { confirm } = useConfirm();
   const [isDeleting, setIsDeleting] = useState(false); 
+  const router = useRouter();
+
+  // Approve Modal State
+  const [selectedPendingSession, setSelectedPendingSession] = useState<CellSession | null>(null);
+  const [isProcessingApproval, setIsProcessingApproval] = useState(false);
 
   const { startOfThisWeek } = useMemo(() => {
     return { startOfThisWeek: startOfWeek(currentDate, { weekStartsOn: 1 }) };
@@ -143,11 +151,44 @@ export default function WeeklyCalendar({ userRole, sessions }: WeeklyCalendarPro
           toast.success(`Đã xóa thành công ${selectedIds.size} ca học!`);
           setSelectedIds(new Set());
           setIsSelectMode(false);
+          window.dispatchEvent(new Event("schedule-updated"));
         } else {
           toast.error(result.error || "Xóa thất bại!");
         }
       },
     });
+  };
+
+  const handleApprove = async () => {
+    if (!selectedPendingSession) return;
+    setIsProcessingApproval(true);
+    const result = await approveSessionRequest(selectedPendingSession.id);
+    setIsProcessingApproval(false);
+
+    if (result.success) {
+      toast.success("Đã duyệt lịch học!");
+      setSelectedPendingSession(null);
+      window.dispatchEvent(new Event("schedule-updated"));
+      router.refresh();
+    } else {
+      toast.error(result.error || "Có lỗi xảy ra");
+    }
+  };
+
+  const handleReject = async () => {
+    if (!selectedPendingSession) return;
+    setIsProcessingApproval(true);
+    const result = await rejectSessionRequest(selectedPendingSession.id);
+    setIsProcessingApproval(false);
+
+    if (result.success) {
+      toast.success("Đã từ chối lịch học!");
+      setSelectedPendingSession(null);
+      window.dispatchEvent(new Event("schedule-updated"));
+      router.refresh();
+    } else {
+      toast.error(result.error || "Có lỗi xảy ra");
+    }
   };
 
   return (
@@ -307,6 +348,7 @@ export default function WeeklyCalendar({ userRole, sessions }: WeeklyCalendarPro
                         slot: s.slot,
                         attendanceConflict,
                         isCompleted: Boolean((s as any).isAttendanceSubmitted) || s.status === "COMPLETED",
+                        isPending: s.status === "PENDING",
                         teacherId: s.teacherId,
                       };
                     })
@@ -330,6 +372,8 @@ export default function WeeklyCalendar({ userRole, sessions }: WeeklyCalendarPro
                             } ${
                               isSelected
                                 ? "bg-blue-600 border-blue-600 text-white z-10 shadow-blue-500/30"
+                                : ev.isPending
+                                ? "bg-amber-100 border-amber-300 text-amber-900"
                                 : ev.isCompleted
                                 ? "border-slate-100 bg-slate-50 text-slate-400"
                                 : ev.attendanceConflict
@@ -361,6 +405,14 @@ export default function WeeklyCalendar({ userRole, sessions }: WeeklyCalendarPro
                               );
                             }
 
+                            if (isAdmin && ev.isPending) {
+                              return (
+                                <button key={ev.id} onClick={() => setSelectedPendingSession(ev)} className={`${cardStyle} text-left`}>
+                                  {content}
+                                </button>
+                              );
+                            }
+
                             const href = `/ta/?classId=${encodeURIComponent(ev.classId)}&sessionId=${encodeURIComponent(ev.id)}&date=${encodeURIComponent(ev.dateISO)}`;
                             return (
                               <Link key={ev.id} href={href} className={cardStyle}>
@@ -379,6 +431,59 @@ export default function WeeklyCalendar({ userRole, sessions }: WeeklyCalendarPro
 
         </div>
       </div>
+
+      {/* Approve/Reject Modal */}
+      {selectedPendingSession && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm px-4">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-2xl">
+            <h3 className="text-xl font-bold text-slate-900 mb-2">Duyệt Ca Học</h3>
+            <p className="text-sm text-slate-500 mb-6">Xác nhận duyệt hoặc từ chối đăng ký này.</p>
+            
+            <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 mb-6 space-y-2 text-sm">
+              <div className="flex justify-between border-b pb-2">
+                <span className="text-slate-500">Giáo viên:</span>
+                <span className="font-bold text-slate-900">{selectedPendingSession.teacherFullName}</span>
+              </div>
+              <div className="flex justify-between border-b pb-2">
+                <span className="text-slate-500">Lớp học:</span>
+                <span className="font-bold text-slate-900">{selectedPendingSession.className}</span>
+              </div>
+              <div className="flex justify-between border-b pb-2">
+                <span className="text-slate-500">Ngày:</span>
+                <span className="font-bold text-slate-900">{format(new Date(selectedPendingSession.dateISO), "dd/MM/yyyy")}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Ca học:</span>
+                <span className="font-bold text-slate-900">Ca {selectedPendingSession.slot} ({SHIFTS.find(s => s.id === selectedPendingSession.slot)?.time})</span>
+              </div>
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => setSelectedPendingSession(null)}
+                disabled={isProcessingApproval}
+                className="flex-1 px-4 py-2 bg-slate-100 text-slate-700 font-bold rounded-xl hover:bg-slate-200 transition-colors"
+              >
+                Hủy
+              </button>
+              <button
+                onClick={handleReject}
+                disabled={isProcessingApproval}
+                className="flex-1 flex items-center justify-center gap-1.5 px-4 py-2 bg-rose-100 text-rose-700 font-bold rounded-xl hover:bg-rose-200 transition-colors disabled:opacity-50"
+              >
+                <XSquare size={16} /> Từ chối
+              </button>
+              <button
+                onClick={handleApprove}
+                disabled={isProcessingApproval}
+                className="flex-1 flex items-center justify-center gap-1.5 px-4 py-2 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 transition-colors disabled:opacity-50"
+              >
+                <CheckSquare size={16} /> Đồng ý
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -10,7 +10,6 @@ import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { useConfirm } from "@/hooks/useconfirm";
 import { 
-  createClass, updateClassByTeacher, deleteClassByTeacher,
   addStudentByTeacher, updateStudentByTeacher, deleteStudentByTeacher
 } from "@/actions/mutations";
 
@@ -76,19 +75,10 @@ export default function MyClassesClient({
   const [filterClassId, setFilterClassId] = useState<string>("ALL"); 
   const [loading, setLoading] = useState(false);
 
-  // Modal States
-  const [isClassModalOpen, setIsClassModalOpen] = useState(false);
-  const [editingClass, setEditingClass] = useState<ClassData | null>(null);
-  
   const [isStudentModalOpen, setIsStudentModalOpen] = useState(false);
   const [editingStudent, setEditingStudent] = useState<StudentData | null>(null);
-
-  // Form States - Class
-  const [className, setClassName] = useState("");
-  const [classCategory, setClassCategory] = useState("Cấp 3");
-  const [classPrice, setClassPrice] = useState<number | "">("");
-  const [classRoomFee, setClassRoomFee] = useState<number | "">("");
-  const [classSessions, setClassSessions] = useState<number | "">(12);
+  const [isStudentDetailsModalOpen, setIsStudentDetailsModalOpen] = useState(false);
+  const [viewingStudent, setViewingStudent] = useState<StudentData | null>(null);
 
   // Form States - Student
   const [studentName, setStudentName] = useState("");
@@ -123,56 +113,12 @@ export default function MyClassesClient({
     return result;
   }, [initialStudents, search, filterClassId]);
 
-  // --- Handlers: Class ---
-  const openAddClass = () => {
-    setEditingClass(null); setClassName(""); setClassCategory("Cấp 3");
-    setClassPrice(""); setClassRoomFee(""); setClassSessions(12);
-    setIsClassModalOpen(true);
-  };
-
-  const openEditClass = (c: ClassData) => {
-    setEditingClass(c); setClassName(c.name); setClassCategory(c.category);
-    setClassPrice(c.pricePerSession); setClassRoomFee(c.roomFeePerSession); setClassSessions(c.sessionsPerPackage);
-    setIsClassModalOpen(true);
-  };
-
-  const handleSaveClass = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    const payload = {
-      name: className, category: classCategory,
-      pricePerSession: Number(classPrice) || 0,
-      roomFeePerSession: Number(classRoomFee) || 0,
-      sessionsPerPackage: Number(classSessions) || 12,
-    };
-
-    const res = editingClass ? await updateClassByTeacher(editingClass.id, payload) : await createClass(payload);
-    setLoading(false);
-    if (res.success) {
-      toast.success(editingClass ? "Đã cập nhật lớp học!" : "Đã gửi yêu cầu tạo lớp!");
-      setIsClassModalOpen(false); router.refresh();
-    } else {
-      toast.error(res.error || "Lỗi lưu lớp học");
-    }
-  };
-
-  const handleDeleteClass = async (c: ClassData) => {
-    confirm({
-      title: "Xóa Lớp Học",
-      message: `Bạn có chắc chắn muốn xóa lớp "${c.name}"? Hành động này không thể hoàn tác.`,
-      isDestructive: true,
-      onConfirm: async () => {
-        const res = await deleteClassByTeacher(c.id);
-        if (res.success) {
-          toast.success("Đã xóa lớp học!"); router.refresh();
-        } else {
-          toast.error(res.error || "Không thể xóa lớp này");
-        }
-      }
-    });
-  };
-
   // --- Handlers: Student ---
+  const openStudentDetails = (s: StudentData) => {
+    setViewingStudent(s);
+    setIsStudentDetailsModalOpen(true);
+  };
+
   const openAddStudent = () => {
     setEditingStudent(null);
     setStudentName(""); setStudentPhone(""); setGender(""); setDob("");
@@ -276,11 +222,7 @@ export default function MyClassesClient({
             </div>
             
             <div className="w-full sm:w-auto shrink-0">
-              {activeTab === "classes" ? (
-                <button onClick={openAddClass} className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-bold text-sm flex items-center justify-center gap-1.5 transition-all">
-                  <Plus size={16} /> <span>Tạo Lớp</span>
-                </button>
-              ) : (
+              {activeTab === "students" && (
                 <button onClick={openAddStudent} className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-bold text-sm flex items-center justify-center gap-1.5 transition-all">
                   <Plus size={16} /> <span>Thêm HS</span>
                 </button>
@@ -302,23 +244,19 @@ export default function MyClassesClient({
                       <div className="flex-1 min-w-0">
                         <div className="font-bold text-[13px] text-slate-800 truncate mb-1">
                           {c.name}
-                          <span className={`ml-2 px-1.5 py-0.5 rounded text-[9px] font-bold ${c.status === "APPROVED" ? "bg-emerald-50 text-emerald-600 border border-emerald-100" : c.status === "PENDING" ? "bg-amber-50 text-amber-600 border border-amber-100" : "bg-rose-50 text-rose-600 border border-rose-100"}`}>
-                            {c.status === "APPROVED" ? "Đã duyệt" : c.status === "PENDING" ? "Chờ duyệt" : "Từ chối"}
-                          </span>
                         </div>
                         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] font-medium text-slate-500">
                           <span className="flex items-center gap-1"><BookOpen size={12} /> {c.category} ({c.sessionsPerPackage} buổi)</span>
                           <span className="flex items-center gap-1"><CreditCard size={12} /> {Number(c.pricePerSession || 0).toLocaleString('vi-VN')}đ</span>
                         </div>
                       </div>
-                      <div className="flex gap-1 shrink-0 flex-col sm:flex-row">
-                        <Link href={`/myClass/${c.id}`} className="p-2 text-cyan-600 bg-cyan-50 hover:bg-cyan-100 rounded-lg flex items-center justify-center"><Eye size={16} strokeWidth={2.5} /></Link>
-                        {c.createdById === teacherId && (
-                          <>
-                            <button onClick={() => openEditClass(c)} className="p-2 text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg flex items-center justify-center"><Edit2 size={16} strokeWidth={2.5} /></button>
-                            <button onClick={() => handleDeleteClass(c)} className="p-2 text-rose-600 bg-rose-50 hover:bg-rose-100 rounded-lg flex items-center justify-center"><Trash2 size={16} strokeWidth={2.5} /></button>
-                          </>
-                        )}
+                      <div className="flex gap-1 shrink-0">
+                         <button 
+                            onClick={() => { setActiveTab("students"); setFilterClassId(c.id); }} 
+                            className="p-2 text-cyan-600 bg-cyan-50 hover:bg-cyan-100 rounded-lg flex items-center justify-center" 
+                            title="Xem học sinh">
+                            <Eye size={16} strokeWidth={2.5} />
+                          </button>
                       </div>
                     </div>
                   ))}
@@ -330,8 +268,7 @@ export default function MyClassesClient({
                         <th className="py-2.5 px-3">Lớp Học</th>
                         <th className="py-2.5 px-3 w-32">Danh mục</th>
                         <th className="py-2.5 px-3 w-32">Học phí</th>
-                        <th className="py-2.5 px-3 w-28 text-center">Trạng thái</th>
-                        <th className="py-2.5 px-3 w-32 text-center">Thao tác</th>
+                        <th className="py-2.5 px-3 w-28 text-center">Học sinh</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
@@ -341,20 +278,12 @@ export default function MyClassesClient({
                           <td className="py-2 px-3 text-[12px] font-medium text-slate-600">{c.category}</td>
                           <td className="py-2 px-3 text-[12px] font-bold text-slate-700">{Number(c.pricePerSession || 0).toLocaleString('vi-VN')}đ</td>
                           <td className="py-2 px-3 text-center">
-                            <span className={`px-2 py-1 rounded text-[10px] font-bold ${c.status === "APPROVED" ? "bg-emerald-50 text-emerald-600" : c.status === "PENDING" ? "bg-amber-50 text-amber-600" : "bg-rose-50 text-rose-600"}`}>
-                              {c.status === "APPROVED" ? "Đã duyệt" : c.status === "PENDING" ? "Chờ duyệt" : "Từ chối"}
-                            </span>
-                          </td>
-                          <td className="py-2 px-3">
-                            <div className="flex items-center justify-center gap-1.5">
-                              <Link href={`/myClass/${c.id}`} className="p-1.5 text-cyan-600 hover:bg-cyan-50 rounded" title="Xem chi tiết"><Eye size={16} /></Link>
-                              {c.createdById === teacherId && (
-                                <>
-                                  <button onClick={() => openEditClass(c)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded" title="Sửa"><Edit2 size={16} /></button>
-                                  <button onClick={() => handleDeleteClass(c)} className="p-1.5 text-rose-600 hover:bg-rose-50 rounded" title="Xóa"><Trash2 size={16} /></button>
-                                </>
-                              )}
-                            </div>
+                            <button 
+                              onClick={() => { setActiveTab("students"); setFilterClassId(c.id); }} 
+                              className="p-1.5 text-cyan-600 hover:bg-cyan-50 rounded inline-flex items-center justify-center" 
+                              title="Xem danh sách học sinh">
+                              <Eye size={16} />
+                            </button>
                           </td>
                         </tr>
                       ))}
@@ -382,6 +311,7 @@ export default function MyClassesClient({
                           </div>
                         </div>
                         <div className="flex gap-1 shrink-0">
+                          <button onClick={() => openStudentDetails(s)} className="p-2 text-cyan-600 bg-cyan-50 hover:bg-cyan-100 rounded-lg flex items-center justify-center" title="Xem chi tiết"><Eye size={14} strokeWidth={2.5} /></button>
                           <button onClick={() => openEditStudent(s)} className="p-2 text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg flex items-center justify-center"><Edit2 size={14} strokeWidth={2.5} /></button>
                           <button onClick={() => handleDeleteStudent(s)} className="p-2 text-rose-600 bg-rose-50 hover:bg-rose-100 rounded-lg flex items-center justify-center"><Trash2 size={14} strokeWidth={2.5} /></button>
                         </div>
@@ -433,6 +363,7 @@ export default function MyClassesClient({
                           </td>
                           <td className="py-3 px-4">
                             <div className="flex items-center justify-center gap-1.5">
+                              <button onClick={() => openStudentDetails(s)} className="p-1.5 text-cyan-600 hover:bg-cyan-50 rounded" title="Xem chi tiết"><Eye size={16} /></button>
                               <button onClick={() => openEditStudent(s)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded" title="Sửa"><Edit2 size={16} /></button>
                               <button onClick={() => handleDeleteStudent(s)} className="p-1.5 text-rose-600 hover:bg-rose-50 rounded" title="Xóa"><Trash2 size={16} /></button>
                             </div>
@@ -449,27 +380,97 @@ export default function MyClassesClient({
       </div>
 
       {/* MODALS */}
-      {isClassModalOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-sm">
-          <div className="bg-white w-full max-w-md rounded-2xl shadow-xl flex flex-col overflow-hidden">
-            <div className="flex justify-between items-center p-4 border-b border-slate-100 bg-slate-50">
-              <h2 className="font-bold text-slate-800">{editingClass ? "Sửa Lớp Học" : "Yêu Cầu Tạo Lớp"}</h2>
-              <button onClick={() => setIsClassModalOpen(false)} className="p-1 bg-slate-200 rounded-full"><X size={16} /></button>
+
+      {isStudentDetailsModalOpen && viewingStudent && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white w-full max-w-2xl rounded-2xl shadow-xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-200 max-h-[95vh]">
+            <div className="flex justify-between items-center p-5 border-b border-slate-100 bg-slate-50">
+              <h2 className="text-lg font-extrabold text-slate-800">Chi Tiết Học Tập: {viewingStudent.fullName}</h2>
+              <button onClick={() => setIsStudentDetailsModalOpen(false)} className="p-1.5 bg-slate-200 hover:bg-slate-300 rounded-full text-slate-600 transition-colors"><X size={18} /></button>
             </div>
-            <form onSubmit={handleSaveClass} className="p-5 space-y-4">
-              {editingClass && editingClass.status === "APPROVED" && (
-                <div className="p-2.5 bg-amber-50 text-amber-700 text-[11px] font-medium rounded-lg flex gap-2">
-                  <AlertCircle size={14} className="shrink-0 mt-0.5" /> Việc chỉnh sửa sẽ đưa lớp về trạng thái chờ Admin duyệt lại.
+            
+            <div className="p-6 overflow-y-auto space-y-6 custom-scrollbar">
+              {/* Lớp Học Đang Tham Gia (Chỉ hiển thị lớp của giáo viên này) */}
+              <div>
+                <h3 className="text-sm font-bold text-slate-800 mb-3 border-b pb-2 flex items-center gap-2">
+                  <BookOpen size={16} className="text-blue-600" />
+                  Các Lớp Bạn Đang Dạy Học Sinh Này
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {viewingStudent.enrolledCourses?.filter(ec => initialClasses.some(c => c.id === ec.classId)).map((ec) => {
+                    const isZero = ec.remainingSessions <= 0;
+                    return (
+                      <div key={ec.classId} className={`p-3 rounded-xl border ${isZero ? "bg-rose-50 border-rose-200" : "bg-blue-50 border-blue-200"}`}>
+                        <div className="font-bold text-sm text-slate-800 mb-1">{ec.className}</div>
+                        <div className="text-xs font-medium text-slate-600">Trạng thái phí: {ec.feeStatus === "PAID" ? "Đã đóng" : "Chưa đóng"}</div>
+                        <div className={`text-xs font-bold mt-2 ${isZero ? "text-rose-600" : "text-blue-600"}`}>
+                          Còn {ec.remainingSessions} buổi
+                        </div>
+                      </div>
+                    )
+                  })}
+                  {viewingStudent.enrolledCourses?.filter(ec => initialClasses.some(c => c.id === ec.classId)).length === 0 && (
+                    <div className="col-span-2 text-sm text-slate-500 italic">Học sinh này chưa ghi danh vào lớp nào của bạn.</div>
+                  )}
                 </div>
-              )}
-              <input required value={className} onChange={e => setClassName(e.target.value)} placeholder="Tên lớp (VD: Toán 10)" className="w-full h-10 px-3 border rounded-lg text-sm" />
-              <input required type="number" value={classPrice} onChange={e => setClassPrice(e.target.value ? Number(e.target.value) : "")} placeholder="Học phí một khóa (VD: 500000)" className="w-full h-10 px-3 border rounded-lg text-sm" />
-              <input required type="number" value={classSessions} onChange={e => setClassSessions(e.target.value ? Number(e.target.value) : "")} placeholder="Số buổi (VD: 12)" className="w-full h-10 px-3 border rounded-lg text-sm" />
-              <div className="flex justify-end gap-2 mt-4 pt-4 border-t border-slate-100">
-                <button type="button" onClick={() => setIsClassModalOpen(false)} className="px-4 py-2 text-sm font-bold bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors">Hủy</button>
-                <button type="submit" disabled={loading} className="px-5 py-2 text-sm font-bold text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center min-w-[80px]">{loading ? <Loader2 size={16} className="animate-spin" /> : "Lưu"}</button>
               </div>
-            </form>
+
+              {/* Lịch Sử Buổi Học / Đánh Giá */}
+              <div>
+                <h3 className="text-sm font-bold text-slate-800 mb-3 border-b pb-2 flex items-center gap-2">
+                  <Calendar size={16} className="text-blue-600" />
+                  Chi Tiết Đánh Giá Các Buổi Học Gần Đây
+                </h3>
+                <div className="space-y-3">
+                  {/* Bổ sung logic lọc logs từ classId của giáo viên */}
+                  {(() => {
+                    const myClassIds = new Set(initialClasses.map(c => c.id));
+                    const studentLogs = (viewingStudent as any).logs || [];
+                    const filteredLogs = studentLogs.filter((log: any) => myClassIds.has(log.classId));
+
+                    if (filteredLogs.length === 0) {
+                      return <div className="text-sm text-slate-500 italic">Chưa có đánh giá buổi học nào.</div>;
+                    }
+
+                    return filteredLogs.map((log: any) => (
+                      <div key={log.id} className="p-3 border border-slate-100 bg-slate-50 rounded-xl">
+                        <div className="flex justify-between items-start mb-2">
+                          <div className="font-bold text-xs text-blue-700">{log.className}</div>
+                          <div className="text-[10px] font-medium text-slate-500 bg-white px-2 py-0.5 rounded border border-slate-200 shadow-sm">
+                            {new Date(log.date).toLocaleDateString('vi-VN')}
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2 text-xs mb-2">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-slate-500">Điểm danh:</span>
+                            <span className={`font-bold ${log.attendanceStatus === "PRESENT" ? "text-emerald-600" : log.attendanceStatus === "ABSENT" ? "text-rose-600" : "text-amber-600"}`}>
+                              {log.attendanceStatus === "PRESENT" ? "Có mặt" : log.attendanceStatus === "ABSENT" ? "Vắng mặt" : "Đi trễ"}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-slate-500">Bài tập:</span>
+                            <span className={`font-bold ${log.homeworkStatus === "COMPLETED" ? "text-emerald-600" : log.homeworkStatus === "INCOMPLETE" ? "text-rose-600" : "text-amber-600"}`}>
+                              {!log.homeworkStatus ? "Chưa chấm" : log.homeworkStatus === "COMPLETED" ? "Hoàn thành" : log.homeworkStatus === "INCOMPLETE" ? "Chưa xong" : "Chưa hoàn thành"}
+                            </span>
+                          </div>
+                        </div>
+                        {log.note && (
+                          <div className="text-xs bg-white p-2 rounded border border-slate-100 text-slate-600 mt-2 italic">
+                            <span className="font-semibold not-italic">Ghi chú: </span>{log.note}
+                          </div>
+                        )}
+                      </div>
+                    ));
+                  })()}
+                </div>
+              </div>
+            </div>
+            
+            <div className="p-4 border-t border-slate-100 bg-slate-50 flex justify-end">
+              <button onClick={() => setIsStudentDetailsModalOpen(false)} className="px-5 py-2 text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-sm transition-all">
+                Đóng
+              </button>
+            </div>
           </div>
         </div>
       )}

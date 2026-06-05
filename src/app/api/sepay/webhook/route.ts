@@ -2,34 +2,44 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import crypto from "crypto";
 
-export async function POST(req: Request) {
+export async function POST(request: Request) {
   try {
-    // 1. Lấy raw body để xác thực HMAC
-    const rawBody = await req.text();
+    const rawBody = await request.text();
     
-    // 2. BẢO MẬT: Kiểm tra HMAC-SHA256
-    const signature = req.headers.get("x-sepay-signature");
+    // Lấy header (Xử lý case-insensitive)
+    const signatureHeader = request.headers.get("x-sepay-signature") || request.headers.get("X-SePay-Signature");
     const secretKey = process.env.SEPAY_WEBHOOK_SECRET;
 
+    // 1. Kiểm tra biến môi trường và header
     if (!secretKey) {
-      console.warn("Chưa cấu hình SEPAY_WEBHOOK_SECRET trong .env");
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      console.error("🚨 [SEPAY WEBHOOK] LỖI: Thiếu biến môi trường SEPAY_WEBHOOK_SECRET trên Server");
+      return NextResponse.json({ success: false, message: "Server configuration error" }, { status: 500 });
+    }
+    if (!signatureHeader) {
+      console.error("🚨 [SEPAY WEBHOOK] LỖI: Request không có header X-SePay-Signature");
+      return NextResponse.json({ success: false, message: "Missing signature" }, { status: 401 });
     }
 
-    if (!signature) {
-      return NextResponse.json({ success: false, message: "Thiếu chữ ký" }, { status: 401 });
+    // 2. Làm sạch chữ ký (Cắt bỏ tiền tố sha256= nếu có)
+    const actualSignature = signatureHeader.replace(/^sha256=/, "").trim();
+
+    // 3. Băm dữ liệu Raw Body
+    const hmac = crypto.createHmac("sha256", secretKey);
+    hmac.update(rawBody);
+    const expectedSignature = hmac.digest("hex");
+
+    // 4. Đối chiếu và in Log chi tiết nếu sai
+    if (actualSignature !== expectedSignature) {
+      console.error("🚨 [SEPAY WEBHOOK] LỆCH CHỮ KÝ BẢO MẬT!");
+      console.error("   - Header gửi lên :", actualSignature);
+      console.error("   - Server tính ra :", expectedSignature);
+      console.error("   - Raw Body size  :", rawBody.length);
+      return NextResponse.json({ success: false, message: "Invalid signature" }, { status: 401 });
     }
 
-    // Cắt bỏ chuỗi 'sha256=' (nếu có) để lấy mã hex thuần
-    const actualSignature = signature.replace(/^sha256=/, "");
+    console.log("✅ [SEPAY WEBHOOK] Xác thực chữ ký THÀNH CÔNG!");
 
-    // Tính toán mã băm từ raw body
-    const expectedSignature = crypto.createHmac("sha256", secretKey).update(rawBody).digest("hex");
-    if (expectedSignature !== actualSignature) {
-      return NextResponse.json({ success: false, message: "Sai chữ ký bảo mật" }, { status: 401 });
-    }
-
-    // 3. TRÍCH XUẤT PAYLOAD
+    // --- BẮT ĐẦU LOGIC PARSE JSON VÀ UPDATE DATABASE Ở ĐÂY ---
     let body;
     try {
       body = JSON.parse(rawBody);

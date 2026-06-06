@@ -182,12 +182,13 @@ export async function POST(request: Request) {
               });
 
               if (trEnrollment) {
+                const actualItemPaid = invoice ? Math.max(0, Math.min(remainingAmount, itemAmount)) : amount;
                 // Ghi nhận lịch sử thanh toán
                 await tx.paymentHistory.create({
                   data: {
                     studentId: student.id,
                     classId: trEnrollment.classId,
-                    amount: invoice ? Math.max(0, Math.min(remainingAmount, itemAmount)) : amount,
+                    amount: actualItemPaid,
                     paymentMethod: "BANK_TRANSFER",
                     status: "SUCCESS",
                     transactionCode: `${sepayId}-${itemIndex++}`,
@@ -195,8 +196,8 @@ export async function POST(request: Request) {
                   }
                 });
 
-                // Cộng buổi học nếu là học phí mới
-                if (itemType === "TUITION") {
+                // Cộng buổi học nếu là học phí mới và có thực thanh toán
+                if (itemType === "TUITION" && actualItemPaid > 0) {
                   await tx.enrollment.update({
                     where: { id: trEnrollment.id },
                     data: {

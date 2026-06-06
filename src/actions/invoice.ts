@@ -129,12 +129,13 @@ export async function payInvoiceByCash(invoiceId: string, amountPaid: number) {
           });
 
           if (targetEnrollment) {
+            const actualItemPaid = Math.max(0, Math.min(remainingAmount, itemAmount));
             // Ghi nhận lịch sử thanh toán cho classId này
             await tx.paymentHistory.create({
               data: {
                 studentId: invoice.studentId,
                 classId: targetEnrollment.classId,
-                amount: Math.max(0, Math.min(remainingAmount, itemAmount)), // Đảm bảo không bị âm
+                amount: actualItemPaid, // Đảm bảo không bị âm
                 paymentMethod: "CASH",
                 status: "SUCCESS",
                 transactionCode: `${transactionCode}-${itemIndex++}`,
@@ -142,8 +143,8 @@ export async function payInvoiceByCash(invoiceId: string, amountPaid: number) {
               }
             });
 
-            // Nếu là học phí mới -> Cộng buổi
-            if (itemType === "TUITION") {
+            // Nếu là học phí mới VÀ có thực sự được thanh toán (actualItemPaid > 0) -> Cộng buổi
+            if (itemType === "TUITION" && actualItemPaid > 0) {
               await tx.enrollment.update({
                 where: { id: targetEnrollment.id },
                 data: {

@@ -35,6 +35,13 @@ export default function CourseReportModal({
 
   useEffect(() => {
     if (!isOpen) return;
+    
+    // Reset state khi mở modal cho học sinh mới
+    setCashAmount("");
+    setInvoiceId(null);
+    setDiscountPercent(0);
+    setReport(null);
+
     let isMounted = true;
     setLoading(true);
     getStudentCombinedReport(studentId).then(async (data) => {
@@ -171,7 +178,7 @@ export default function CourseReportModal({
             <h2 className="text-lg font-extrabold text-slate-800 flex items-center gap-2">
               <FileText size={20} className="text-blue-600" /> Thanh Toán
             </h2>
-            <button onClick={onClose} className="p-1.5 bg-slate-200 hover:bg-slate-300 rounded-full text-slate-600 transition-colors md:hidden">
+            <button onClick={onClose} disabled={loading} className="p-1.5 bg-slate-200 hover:bg-slate-300 rounded-full text-slate-600 transition-colors md:hidden disabled:opacity-50 disabled:cursor-not-allowed">
               <X size={18} />
             </button>
           </div>
@@ -207,18 +214,18 @@ export default function CourseReportModal({
             {invoiceId && (
               <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 mt-4">
                 <label className="text-xs font-bold text-emerald-700 uppercase mb-2 block">Xác Nhận Thu Tiền Mặt</label>
-                <div className="flex gap-2">
+                <div className="flex flex-col sm:flex-row gap-2">
                   <input
                     type="number"
                     placeholder="Nhập số tiền..."
                     value={cashAmount}
                     onChange={(e) => setCashAmount(e.target.value)}
-                    className="flex-1 h-10 px-3 border border-emerald-200 rounded-lg text-sm outline-none focus:border-emerald-400"
+                    className="flex-1 w-full h-10 px-3 border border-emerald-200 rounded-lg text-sm outline-none focus:border-emerald-400"
                   />
                   <button
                     onClick={handlePayCash}
-                    disabled={isProcessing || !cashAmount}
-                    className="h-10 px-4 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-lg font-bold text-sm transition-colors flex items-center justify-center"
+                    disabled={isProcessing || !cashAmount || loading}
+                    className="h-10 px-4 whitespace-nowrap sm:w-auto w-full bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg font-bold text-sm transition-colors flex items-center justify-center"
                   >
                     {isProcessing ? <Loader2 size={16} className="animate-spin" /> : "Xác nhận"}
                   </button>
@@ -235,12 +242,12 @@ export default function CourseReportModal({
             <button
               onClick={handleExportPng}
               disabled={loading || exporting || !report}
-              className="w-full h-12 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-sm transition-all shadow-sm flex items-center justify-center gap-2 disabled:opacity-70"
+              className="w-full h-12 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-sm transition-all shadow-sm flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
             >
               {exporting ? <Loader2 size={18} className="animate-spin" /> : <Download size={18} />}
               {exporting ? "Đang xuất ảnh..." : "Tải báo cáo ảnh (PNG)"}
             </button>
-            <button onClick={onClose} className="w-full mt-2 h-10 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-xl font-bold text-sm transition-all hidden md:block">
+            <button onClick={onClose} disabled={loading} className="w-full mt-2 h-10 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-xl font-bold text-sm transition-all hidden md:block disabled:opacity-50 disabled:cursor-not-allowed">
               Đóng
             </button>
           </div>

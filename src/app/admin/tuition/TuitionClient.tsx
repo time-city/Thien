@@ -311,8 +311,6 @@ export default function TuitionClient({
           onClose={() => setReportModalOpen(false)}
           studentId={reportData.studentId}
           studentName={reportData.studentName}
-          classId={reportData.classId}
-          className={reportData.className}
         />
       )}
     </div>

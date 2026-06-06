@@ -42,6 +42,10 @@ export async function POST(request: Request) {
     let body;
     try {
       body = JSON.parse(rawBody);
+      console.log("==========================================");
+      console.log("📦 DỮ LIỆU WEBHOOK NHẬN ĐƯỢC TỪ SEPAY:");
+      console.log(JSON.stringify(body, null, 2));
+      console.log("==========================================");
     } catch (e) {
       return NextResponse.json({ success: true, reason: "Invalid JSON format" });
     }
@@ -74,144 +78,43 @@ export async function POST(request: Request) {
       const studentPhoneMatch = htMatch[1]; // Đây là số điện thoại hoặc mã rút gọn hoặc UUID
 
 
-      let targetEnrollment: any = null;
-      let student: any = null;
+      let studentId: string | null = null;
 
-      let invoice: any = null;
-
-      // 1. Ưu tiên tìm Hóa đơn (Invoice ID) do mã QR mới gen
+      // 1. Tìm theo ID học sinh (do app sinh ra: HT + studentId)
       if (studentPhoneMatch.length === 36) {
-        invoice = await prisma.invoice.findUnique({
+        const student = await prisma.student.findUnique({
           where: { id: studentPhoneMatch },
-          include: { enrollment: { include: { class: true } }, student: true }
+          select: { id: true }
         });
-
-        if (invoice) {
-          targetEnrollment = invoice.enrollment;
-          student = invoice.student;
-        } else {
-          // Fallback 1: Thử tìm Enrollment ID (mã QR cũ không có invoice)
-          targetEnrollment = await prisma.enrollment.findUnique({
-            where: { id: studentPhoneMatch },
-            include: { class: true, student: true }
-          });
-          if (targetEnrollment) {
-            student = targetEnrollment.student;
-          }
-        }
+        if (student) studentId = student.id;
       }
 
-      // 2. Fallback: Tìm theo Học sinh (SĐT/ID) nếu phụ huynh gõ tay nội dung cũ
-      if (!targetEnrollment) {
-        student = await prisma.student.findFirst({
+      // 2. Fallback: Tìm theo SĐT hoặc QRCodeId
+      if (!studentId) {
+        const student = await prisma.student.findFirst({
           where: {
             OR: [
               { phoneStudent: { contains: studentPhoneMatch } },
               { phoneParent: { contains: studentPhoneMatch } },
-              { id: studentPhoneMatch.length === 36 ? studentPhoneMatch : undefined },
               { qrCodeId: studentPhoneMatch }
             ]
           },
-          include: {
-            enrollments: {
-              include: { class: true }
-            }
-          }
+          select: { id: true }
         });
-
-        if (student) {
-          // Tìm lớp học cần gạch nợ (ưu tiên lớp UNPAID hoặc số buổi còn lại ít nhất)
-          targetEnrollment = student.enrollments.find((e: any) => e.feeStatus === "UNPAID") || null;
-          if (!targetEnrollment && student.enrollments.length > 0) {
-            targetEnrollment = student.enrollments.reduce((prev: any, curr: any) =>
-              (prev.remainingSessions < curr.remainingSessions) ? prev : curr
-            );
-          }
-        }
+        if (student) studentId = student.id;
       }
 
-      if (student && (targetEnrollment || invoice)) {
-        let invoiceStatus: "PAID" | "UNDERPAID" | "OVERPAID" | "PENDING" = "PAID";
-        let newAmountPaid = amount;
-
-        if (invoice) {
-          const remainingDebt = invoice.expectedAmount - invoice.amountPaid;
-          if (amount < remainingDebt) invoiceStatus = "UNDERPAID";
-          else if (amount > remainingDebt) invoiceStatus = "OVERPAID";
-
-          newAmountPaid = invoice.amountPaid + amount;
+      // 3. Tiến hành thanh toán thác nước
+      if (studentId) {
+        const { processStudentPayment } = await import("@/actions/invoice");
+        const result = await processStudentPayment(studentId, amount, "BANK_TRANSFER", sepayId);
+        if (result.success) {
+          console.log(`✅ Đã thanh toán thành công ${amount} cho học sinh ${studentId} qua Webhook`);
+        } else {
+          console.error(`❌ Lỗi khi thanh toán cho học sinh ${studentId}:`, result.message);
         }
-
-        // Thực hiện hạch toán qua Transaction
-        await prisma.$transaction(async (tx) => {
-          // 0. Cập nhật hóa đơn (không sinh nợ rời)
-          if (invoice) {
-            await tx.invoice.update({
-              where: { id: invoice.id },
-              data: {
-                status: invoiceStatus,
-                amountPaid: newAmountPaid,
-                transactionCode: sepayId,
-              }
-            });
-          }
-
-          // Phân bổ số tiền (Tạo PaymentHistory và cộng buổi học)
-          const details = (invoice && Array.isArray(invoice.details) ? invoice.details : []) as any[];
-          let remainingAmount = amount;
-
-          // Fallback nếu không có details (đóng qua cú pháp cũ hoặc hóa đơn cũ)
-          if (details.length === 0 && targetEnrollment) {
-            details.push({
-              enrollmentId: targetEnrollment.id,
-              amount: invoice?.expectedAmount || amount,
-              type: invoice?.isDebt ? "DEBT" : "TUITION"
-            });
-          }
-
-          let itemIndex = 0;
-          for (const item of details) {
-            const itemAmount = Number(item.amount) || 0;
-            const itemType = item.type || "TUITION";
-            const enrollmentId = item.enrollmentId;
-
-            if (enrollmentId) {
-              const trEnrollment = await tx.enrollment.findUnique({
-                where: { id: enrollmentId },
-                include: { class: true }
-              });
-
-              if (trEnrollment) {
-                const actualItemPaid = invoice ? Math.max(0, Math.min(remainingAmount, itemAmount)) : amount;
-                // Ghi nhận lịch sử thanh toán
-                await tx.paymentHistory.create({
-                  data: {
-                    studentId: student.id,
-                    classId: trEnrollment.classId,
-                    amount: actualItemPaid,
-                    paymentMethod: "BANK_TRANSFER",
-                    status: "SUCCESS",
-                    transactionCode: `${sepayId}-${itemIndex++}`,
-                    voucherRef: trEnrollment.currentVoucher + (itemType === "TUITION" ? 1 : 0)
-                  }
-                });
-
-                // Cộng buổi học nếu là học phí mới và có thực thanh toán
-                if (itemType === "TUITION" && actualItemPaid > 0) {
-                  await tx.enrollment.update({
-                    where: { id: trEnrollment.id },
-                    data: {
-                      feeStatus: "PAID",
-                      remainingSessions: { increment: trEnrollment.class.sessionsPerPackage },
-                      currentVoucher: { increment: 1 }
-                    }
-                  });
-                }
-              }
-            }
-            remainingAmount -= itemAmount;
-          }
-        });
+      } else {
+        console.warn(`⚠️ Webhook nhận được tiền nhưng không tìm thấy học sinh khớp với mã: ${studentPhoneMatch}`);
       }
     }
 

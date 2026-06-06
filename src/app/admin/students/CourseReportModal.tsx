@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { X, Download, FileText, Loader2, Banknote, CreditCard } from "lucide-react";
 import { getStudentCombinedReport, StudentCombinedReport } from "@/actions/report";
-import { createCombinedInvoice, payInvoiceByCash } from "@/actions/invoice";
+import { processStudentPayment } from "@/actions/invoice";
 import { toast } from "sonner";
 import { toPng } from "html-to-image";
 
@@ -17,28 +17,21 @@ export default function CourseReportModal({
   onClose: () => void;
   studentId: string;
   studentName: string;
-  classId?: string; // legacy prop, not used anymore
-  className?: string; // legacy prop, not used anymore
 }) {
   const [report, setReport] = useState<StudentCombinedReport | null>(null);
   const [loading, setLoading] = useState(false);
   const [discountPercent, setDiscountPercent] = useState<number>(0);
   const [exporting, setExporting] = useState(false);
 
-  // Mặc định, nếu trong items có pendingInvoiceId thì ta lấy cái đầu tiên.
-  // Tuy nhiên, logic chuẩn là tạo Hóa đơn gộp (Combined Invoice) mới nếu chưa có
-  const [invoiceId, setInvoiceId] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
-
-  // Số tiền thu tiền mặt
   const [cashAmount, setCashAmount] = useState<string>("");
+  const [initialDebt, setInitialDebt] = useState<number>(0);
 
   useEffect(() => {
     if (!isOpen) return;
     
     // Reset state khi mở modal cho học sinh mới
     setCashAmount("");
-    setInvoiceId(null);
     setDiscountPercent(0);
     setReport(null);
 
@@ -47,17 +40,8 @@ export default function CourseReportModal({
     getStudentCombinedReport(studentId).then(async (data) => {
       if (!isMounted) return;
       setReport(data);
-
-      if (data && data.items.length > 0) {
-        // Tự động tạo luôn hóa đơn mới nhất với tổng tiền hiện tại
-        try {
-          const res = await createCombinedInvoice(studentId, data.totalExpectedAmount, data.items);
-          if (res.success && res.invoiceId) {
-            setInvoiceId(res.invoiceId);
-          }
-        } catch (e) {
-          console.error("Lỗi tự động tạo QR", e);
-        }
+      if (data) {
+        setInitialDebt(data.totalExpectedAmount);
       }
       setLoading(false);
     }).catch(() => {
@@ -68,6 +52,31 @@ export default function CourseReportModal({
     });
     return () => { isMounted = false; };
   }, [isOpen, studentId]);
+
+  useEffect(() => {
+    if (!isOpen || initialDebt <= 0) return;
+
+    // Polling database để kiểm tra trạng thái thanh toán từ Webhook
+    const interval = setInterval(async () => {
+      try {
+        const inv = await import("@/actions/invoice").then(m => m.checkInvoiceStatus(studentId));
+        if (!inv) return;
+        
+        if (inv.status === "PAID") {
+          clearInterval(interval);
+          toast.success("Thanh toán thành công qua mã QR!");
+          onClose(); // Đóng modal tự động
+          window.location.reload(); // Refresh toàn trang cho chắc chắn ăn dữ liệu
+        } else if (inv.status === "UNDERPAID") {
+          // Bỏ qua, tiếp tục đợi thanh toán thêm hoặc user tự đóng
+        }
+      } catch (e) {
+        // Im lặng bỏ qua nếu lỗi mạng
+      }
+    }, 3000);
+
+    return () => clearInterval(interval);
+  }, [isOpen, studentId, initialDebt, onClose]);
 
   if (!isOpen) return null;
 
@@ -102,10 +111,12 @@ export default function CourseReportModal({
   const originalPrice = report ? report.totalExpectedAmount : 0;
   const finalPrice = Math.max(0, originalPrice - (originalPrice * discountPercent) / 100);
 
-  // Generate VietQR URL
-  const identifier = invoiceId || "000000";
-  const descString = `HT${identifier}`;
+  // Generate VietQR URL sử dụng studentId thay vì invoiceId
+  const descString = `HT${studentId}`;
   const qrUrl = `https://qr.sepay.vn/img?bank=MBBank&acc=0700107189999&amount=${finalPrice}&des=${encodeURIComponent(descString)}&template=`;
+  
+  // Log ra console để tiện việc test Webhook
+  console.log(`[DEBUG QR] Nội dung quét: ${descString} | Số tiền: ${finalPrice}`);
 
   const handleDownloadQr = async () => {
     try {
@@ -124,35 +135,17 @@ export default function CourseReportModal({
     }
   };
 
-  const handleCreateCombinedInvoice = async () => {
-    if (!report || report.items.length === 0) return toast.error("Không có khoản thu nào để tạo hóa đơn");
-    setIsProcessing(true);
-    try {
-      const res = await createCombinedInvoice(studentId, finalPrice, report.items);
-      if (res.success && res.invoiceId) {
-        setInvoiceId(res.invoiceId);
-        toast.success("Đã chốt số tiền và tạo Hóa Đơn Tổng");
-      } else {
-        toast.error(res.message);
-      }
-    } catch (e) {
-      toast.error("Lỗi khi tạo hóa đơn");
-    } finally {
-      setIsProcessing(false);
-    }
-  };
-
   const handlePayCash = async () => {
-    if (!invoiceId) return toast.error("Vui lòng tạo hóa đơn trước khi thu tiền mặt");
     const amount = parseInt(cashAmount);
     if (isNaN(amount) || amount <= 0) return toast.error("Số tiền không hợp lệ");
 
     setIsProcessing(true);
     try {
-      const res = await payInvoiceByCash(invoiceId, amount);
+      const res = await processStudentPayment(studentId, amount, "CASH");
       if (res.success) {
         toast.success("Đã xác nhận thu tiền mặt thành công");
         onClose(); // Đóng modal và để trang refresh
+        window.location.reload();
       } else {
         toast.error(res.message || "Lỗi thu tiền mặt");
       }
@@ -165,7 +158,6 @@ export default function CourseReportModal({
 
   const handleDiscountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setDiscountPercent(Number(e.target.value) || 0);
-    setInvoiceId(null); // Yêu cầu tạo lại hóa đơn nếu đổi giá
   };
 
   return (
@@ -211,27 +203,25 @@ export default function CourseReportModal({
               </div>
             </div>
 
-            {invoiceId && (
-              <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 mt-4">
-                <label className="text-xs font-bold text-emerald-700 uppercase mb-2 block">Xác Nhận Thu Tiền Mặt</label>
-                <div className="flex flex-col sm:flex-row gap-2">
-                  <input
-                    type="number"
-                    placeholder="Nhập số tiền..."
-                    value={cashAmount}
-                    onChange={(e) => setCashAmount(e.target.value)}
-                    className="flex-1 w-full h-10 px-3 border border-emerald-200 rounded-lg text-sm outline-none focus:border-emerald-400"
-                  />
-                  <button
-                    onClick={handlePayCash}
-                    disabled={isProcessing || !cashAmount || loading}
-                    className="h-10 px-4 whitespace-nowrap sm:w-auto w-full bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg font-bold text-sm transition-colors flex items-center justify-center"
-                  >
-                    {isProcessing ? <Loader2 size={16} className="animate-spin" /> : "Xác nhận"}
-                  </button>
-                </div>
+            <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 mt-4">
+              <label className="text-xs font-bold text-emerald-700 uppercase mb-2 block">Xác Nhận Thu Tiền Mặt</label>
+              <div className="flex flex-col sm:flex-row gap-2">
+                <input
+                  type="number"
+                  placeholder="Nhập số tiền..."
+                  value={cashAmount}
+                  onChange={(e) => setCashAmount(e.target.value)}
+                  className="flex-1 w-full h-10 px-3 border border-emerald-200 rounded-lg text-sm outline-none focus:border-emerald-400"
+                />
+                <button
+                  onClick={handlePayCash}
+                  disabled={isProcessing || !cashAmount || loading}
+                  className="h-10 px-4 whitespace-nowrap sm:w-auto w-full bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg font-bold text-sm transition-colors flex items-center justify-center"
+                >
+                  {isProcessing ? <Loader2 size={16} className="animate-spin" /> : "Xác nhận"}
+                </button>
               </div>
-            )}
+            </div>
 
             <div className="bg-blue-50 text-blue-700 text-xs p-3 rounded-xl border border-blue-100 leading-relaxed">
               Kiểm tra các khoản thu bên phải. Bấm "Tạo Mã QR" để chốt tổng tiền. Bạn có thể cho phụ huynh quét mã, hoặc thu tiền mặt trực tiếp.
@@ -289,43 +279,24 @@ export default function CourseReportModal({
               {/* QR Section */}
               <div className="bg-slate-50 p-6 flex items-center justify-between border-t border-slate-100">
                 <div className="flex items-center gap-4">
-                  {!invoiceId ? (
-                    <div className="flex flex-col items-start gap-2">
-                      <p className="text-slate-500 text-sm font-medium">Bấm để chốt số tiền và lấy mã QR thanh toán tổng</p>
-                      <button
-                        onClick={handleCreateCombinedInvoice}
-                        disabled={isProcessing}
-                        className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold text-sm transition-all shadow-sm flex items-center gap-2 disabled:opacity-70"
-                      >
-                        {isProcessing ? <Loader2 size={16} className="animate-spin" /> : <Banknote size={16} />}
-                        {isProcessing ? "Đang tạo..." : "Tạo mã QR Tổng"}
+                  <div className="p-1 bg-white rounded-xl shadow-sm border border-slate-200">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={qrUrl} alt="QR Code" crossOrigin="anonymous" className="w-24 h-24 object-contain" />
+                  </div>
+                  <div>
+                    <p className="font-bold text-slate-800 flex items-center gap-2">
+                      Quét mã thanh toán
+                      <span className="bg-emerald-100 text-emerald-700 text-[10px] uppercase font-black px-2 py-0.5 rounded-full">
+                        VietQR
+                      </span>
+                    </p>
+                    <p className="text-sm text-slate-500 mt-1 mb-2">Học sinh: <span className="font-mono">{studentName}</span></p>
+                    <div className="flex gap-2">
+                      <button onClick={handleDownloadQr} className="text-xs font-bold text-blue-600 hover:text-blue-800 transition-colors flex items-center gap-1">
+                        <Download size={14} /> Tải mã QR
                       </button>
                     </div>
-                  ) : (
-                    <>
-                      <div className="p-1 bg-white rounded-xl shadow-sm border border-slate-200">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={qrUrl} alt="QR Code" crossOrigin="anonymous" className="w-24 h-24 object-contain" />
-                      </div>
-                      <div>
-                        <p className="font-bold text-slate-800 flex items-center gap-2">
-                          Quét mã thanh toán
-                          <span className="bg-emerald-100 text-emerald-700 text-[10px] uppercase font-black px-2 py-0.5 rounded-full">
-                            VietQR
-                          </span>
-                        </p>
-                        <p className="text-sm text-slate-500 mt-1 mb-2">Mã Hóa Đơn: <span className="font-mono">{invoiceId.substring(0, 8)}...</span></p>
-                        <div className="flex gap-2">
-                          <button onClick={handleDownloadQr} className="text-xs font-bold text-blue-600 hover:text-blue-800 transition-colors flex items-center gap-1">
-                            <Download size={14} /> Tải mã QR
-                          </button>
-                          <button onClick={handleCreateCombinedInvoice} disabled={isProcessing} className="text-xs font-bold text-amber-600 hover:text-amber-800 transition-colors flex items-center gap-1">
-                            <Banknote size={14} /> Cập nhật mã mới
-                          </button>
-                        </div>
-                      </div>
-                    </>
-                  )}
+                  </div>
                 </div>
               </div>
 

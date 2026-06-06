@@ -49,7 +49,10 @@ export default function TuitionClient({
   const [selectedTeacher, setSelectedTeacher] = useState<TeacherFinanceViewData | null>(null);
   const [isPayingSalary, setIsPayingSalary] = useState(false);
   const studentsWithLowSessions = useMemo(() => {
-    return students.filter((s) => s.enrolledCourses.some((c) => c.remainingSessions <= 2));
+    return students.filter((s) => 
+      s.enrolledCourses.some((c) => c.remainingSessions <= 2 || c.pendingInvoices.length > 0) ||
+      (s.allPendingInvoices && s.allPendingInvoices.length > 0)
+    );
   }, [students]);
 
   const formatCurrency = (amount: number) => {
@@ -127,38 +130,50 @@ export default function TuitionClient({
                     <div className="font-semibold text-slate-900">{student.fullName}</div>
                     <div className="text-xs text-slate-500">ID: {student.id.substring(0, 8)}</div>
                   </td>
-                  <td className="py-3 px-4 hidden sm:table-cell">{student.enrolledCourses[0]?.className ?? "-"}</td>
+                  <td className="py-3 px-4 hidden sm:table-cell">
+                    {student.enrolledCourses[0]?.className ?? (student.allPendingInvoices?.length ? (student.allPendingInvoices[0].isDebt ? "Nợ Cũ" : "Hóa đơn") : "-")}
+                  </td>
                   <td className="py-3 px-4">
-                    <div className="flex flex-wrap gap-1.5">
+                    <div className="flex flex-wrap gap-1.5 flex-col">
                       {student.enrolledCourses
-                        .filter((c) => c.remainingSessions <= 2)
+                        .filter((c) => c.remainingSessions <= 2 || c.pendingInvoices.length > 0)
                         .map((c) => (
-                          <span
-                            key={c.enrollmentId}
-                            className="bg-rose-50 text-rose-700 font-bold px-2 py-0.5 rounded text-[11px] border border-rose-100 whitespace-nowrap"
-                          >
-                            {c.className} ({c.remainingSessions} buổi)
-                          </span>
+                          <div key={c.enrollmentId} className="flex gap-1 flex-wrap">
+                            {c.remainingSessions <= 2 && (
+                              <span
+                                className="bg-rose-50 text-rose-700 font-bold px-2 py-0.5 rounded text-[11px] border border-rose-100 whitespace-nowrap"
+                              >
+                                {c.className} ({c.remainingSessions} buổi)
+                              </span>
+                            )}
+                            {c.pendingInvoices.length > 0 && c.pendingInvoices.map(inv => (
+                              <span key={inv.id} className={`${inv.status === "UNDERPAID" ? "bg-rose-100 text-rose-700 border-rose-200" : "bg-amber-100 text-amber-700 border-amber-200"} font-bold px-2 py-0.5 rounded text-[11px] border whitespace-nowrap`}>
+                                Hóa đơn: {inv.status === "UNDERPAID" ? "THIẾU TIỀN" : "CHỜ T.TOÁN"}
+                              </span>
+                            ))}
+                          </div>
                         ))}
+                      
+                      {/* Hiển thị các hóa đơn nợ/tổng hợp (không dính trực tiếp với 1 enrollment) */}
+                      {student.allPendingInvoices?.map(inv => (
+                        <div key={inv.id} className="flex gap-1 flex-wrap">
+                          <span className="bg-orange-100 text-orange-700 border-orange-200 font-bold px-2 py-0.5 rounded text-[11px] border whitespace-nowrap">
+                            {inv.isDebt ? "Nợ cũ" : "Hóa đơn"}: {new Intl.NumberFormat("vi-VN").format(inv.expectedAmount - inv.amountPaid)}đ
+                          </span>
+                        </div>
+                      ))}
                     </div>
                   </td>
                   <td className="py-3 px-4 text-right">
-                    <div className="flex flex-col gap-2 items-end">
-                      {student.enrolledCourses
-                        .filter((c) => c.remainingSessions <= 2)
-                        .map((c) => (
-                          <button
-                            key={c.enrollmentId}
-                            onClick={() => {
-                              setReportData({ studentId: student.id, studentName: student.fullName, classId: c.classId, className: c.className });
-                              setReportModalOpen(true);
-                            }}
-                            className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-1.5 px-3 rounded shadow-sm transition-colors text-xs whitespace-nowrap flex items-center justify-center"
-                          >
-                            Xuất báo cáo: {c.className}
-                          </button>
-                        ))}
-                    </div>
+                    <button
+                      onClick={() => {
+                        setReportData({ studentId: student.id, studentName: student.fullName, classId: "", className: "" });
+                        setReportModalOpen(true);
+                      }}
+                      className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-1.5 px-4 rounded shadow-sm transition-colors text-xs whitespace-nowrap"
+                    >
+                      Xử lý Thu Phí
+                    </button>
                   </td>
                 </tr>
               ))}

@@ -66,6 +66,16 @@ enum RentalStatus {
   @@schema("public")
 }
 
+enum InvoiceStatus {
+  PENDING
+  PAID
+  UNDERPAID
+  OVERPAID
+  CANCELLED
+  MERGED_TO_NEXT
+  @@schema("public")
+}
+
 enum Gender {
   MALE
   FEMALE
@@ -196,6 +206,7 @@ model Student {
   payments            PaymentHistory[]
   attendanceLogs      AttendanceLog[]
   pendingTransactions PendingTransaction[]
+  invoices            Invoice[]
 
   @@map("students")
   @@schema("public")
@@ -215,8 +226,30 @@ model Enrollment {
 
   student           Student          @relation(fields: [studentId], references: [id], onDelete: Cascade)
   class             Class            @relation(fields: [classId], references: [id], onDelete: Cascade)
+  invoices          Invoice[]
 
   @@map("enrollments")
+  @@schema("public")
+}
+
+model Invoice {
+  id             String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  enrollmentId   String?       @db.Uuid
+  studentId      String        @db.Uuid
+  expectedAmount Int
+  amountPaid     Int           @default(0)
+  status         InvoiceStatus @default(PENDING)
+  transactionCode String?
+  isDebt         Boolean       @default(false)
+  details        Json?         
+
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  enrollment     Enrollment?   @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  student        Student       @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@map("invoices")
   @@schema("public")
 }
 

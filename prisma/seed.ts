@@ -1,195 +1,155 @@
-import { PrismaClient } from "@prisma/client";
-import bcrypt from "bcryptjs";
+import { PrismaClient } from '@prisma/client'
+import bcrypt from "bcryptjs"
 import { Pool } from "pg";
 import { PrismaPg } from "@prisma/adapter-pg";
-import "dotenv/config"; 
+import "dotenv/config";
 
-const connectionString = "postgresql://postgres.cpzrjkwwnsdymeglwiyh:@nguyenha17022005@aws-1-ap-northeast-1.pooler.supabase.com:6543/postgres?pgbouncer=true"
+// 🛑 Đã sửa: Dùng trực tiếp biến môi trường từ file .env
+const connectionString = process.env.DATABASE_URL;
+
+if (!connectionString) {
+  throw new Error("🚨 THIẾU DATABASE_URL TRONG FILE .env");
+}
+
 const pool = new Pool({ connectionString });
 const adapter = new PrismaPg(pool);
 const prisma = new PrismaClient({ adapter });
 
 async function main() {
-  console.log("⏳ Bắt đầu nạp dữ liệu Seed (Bản Full Schema Mới)...");
+  console.log('Bắt đầu dọn dẹp dữ liệu cũ (Reset DB)...')
+  await prisma.attendanceLog.deleteMany()
+  await prisma.roomRentalLog.deleteMany()
+  await prisma.classSession.deleteMany()
+  await prisma.paymentHistory.deleteMany()
+  await prisma.invoice.deleteMany()
+  await prisma.enrollment.deleteMany()
+  await prisma.classTeacher.deleteMany()
+  await prisma.pendingTransaction.deleteMany()
+  await prisma.student.deleteMany()
+  await prisma.class.deleteMany()
+  await prisma.room.deleteMany()
+  await prisma.salaryPayment.deleteMany()
+  await prisma.user.deleteMany()
 
-  // =============================================================
-  // 0. DỌN DẸP DỮ LIỆU CŨ (Tránh lỗi Duplicate)
-  // Xóa theo thứ tự từ bảng con (chứa khóa ngoại) lên bảng cha
-  // =============================================================
-  console.log("🧹 Đang dọn dẹp dữ liệu cũ...");
-  await prisma.attendanceLog.deleteMany();
-  await prisma.roomRentalLog.deleteMany();
-  await prisma.classSession.deleteMany();
-  await prisma.paymentHistory.deleteMany();
-  await prisma.enrollment.deleteMany();
-  await prisma.classTeacher.deleteMany();
-  await prisma.pendingTransaction.deleteMany();
-  await prisma.student.deleteMany();
-  await prisma.class.deleteMany();
-  await prisma.room.deleteMany();
-  await prisma.salaryPayment.deleteMany();
-  await prisma.user.deleteMany();
+  console.log('Đang tạo dữ liệu mẫu (Seeding)...')
 
-  // =============================================================
-  // 1. TẠO TÀI KHOẢN (1 ADMIN + 2 GIÁO VIÊN)
-  // =============================================================
-  console.log("👤 Đang tạo Users (1 Admin & 2 Giáo viên)...");
-  const defaultPassword = await bcrypt.hash("123456", 10);
+  const pass = '123456'
+  const hashedPassword = await bcrypt.hash(pass, 10)
 
+  // 1. TẠO USERS (Admin & Giáo viên)
   const admin = await prisma.user.create({
-    data: {
-      username: "admin",
-      passwordHash: defaultPassword,
-      fullName: "Hoàn Thiện",
-      role: "SUPER_ADMIN",
-      isActive: true,
-    },
-  });
+    data: { username: 'admin', passwordHash: hashedPassword, fullName: 'Quản Trị Viên', role: 'SUPER_ADMIN' },
+  })
 
   const teacher1 = await prisma.user.create({
-    data: {
-      username: "gv_toan",
-      passwordHash: defaultPassword,
-      fullName: "Thầy Nguyễn Văn Toán",
-      role: "TEACHER",
-      isActive: true,
-      salaryBalance: 1500000, 
-    },
-  });
+    data: { username: 'gv.nguyenvan', passwordHash: hashedPassword, fullName: 'Nguyễn Văn A', role: 'TEACHER' },
+  })
 
-  const teacher2 = await prisma.user.create({
-    data: {
-      username: "gv_anh",
-      passwordHash: defaultPassword,
-      fullName: "Cô Trần Thị Anh",
-      role: "TEACHER",
-      isActive: true,
-      salaryBalance: 2000000, 
-    },
-  });
+  // 2. TẠO PHÒNG HỌC & LỚP HỌC
+  const room1 = await prisma.room.create({ data: { name: 'Phòng 101', capacity: 20 } })
+  const classToan = await prisma.class.create({
+    data: { name: 'Toán Lớp 10 - Tăng Cường', category: 'Toán Học', roomFeePerSession: 50000, pricePerSession: 100000, sessionsPerPackage: 12, createdById: admin.id },
+  })
+  const classIelts = await prisma.class.create({
+    data: { name: 'IELTS Foundation', category: 'Tiếng Anh', roomFeePerSession: 80000, pricePerSession: 150000, sessionsPerPackage: 24, createdById: admin.id },
+  })
 
-  // =============================================================
-  // 2. TẠO PHÒNG HỌC (2 PHÒNG)
-  // =============================================================
-  console.log("🏫 Đang tạo 2 Phòng học...");
-  const room1 = await prisma.room.create({
-    data: { name: "Phòng Cơ Sở 1", capacity: 25, isActive: true }
-  });
+  await prisma.classTeacher.create({ data: { classId: classToan.id, teacherId: teacher1.id, subModule: 'Đại Số' } })
 
-  const room2 = await prisma.room.create({
-    data: { name: "Phòng Cơ Sở 2", capacity: 30, isActive: true }
-  });
+  // 3. DANH SÁCH NHIỀU HỌC SINH MẪU
+  const listHocSinh = [
+    { fullName: 'Trần Thị B', dob: '2010-05-15', gender: 'FEMALE', qrCodeId: 'HS-001' },
+    { fullName: 'Nguyễn Hoàng Nam', dob: '2009-08-20', gender: 'MALE', qrCodeId: 'HS-002' },
+    { fullName: 'Lê Minh Khang', dob: '2011-01-10', gender: 'MALE', qrCodeId: 'HS-003' },
+    { fullName: 'Phạm Phương Trinh', dob: '2010-11-25', gender: 'FEMALE', qrCodeId: 'HS-004' },
+    { fullName: 'Vũ Hải Yến', dob: '2008-03-08', gender: 'FEMALE', qrCodeId: 'HS-005' },
+    { fullName: 'Đinh Tuấn Kiệt', dob: '2010-09-09', gender: 'MALE', qrCodeId: 'HS-006' },
+    { fullName: 'Bùi Thị Thu Hà', dob: '2009-12-12', gender: 'FEMALE', qrCodeId: 'HS-007' },
+    { fullName: 'Hoàng Quốc Việt', dob: '2011-04-30', gender: 'MALE', qrCodeId: 'HS-008' },
+  ]
 
-  // =============================================================
-  // 3. TẠO LỚP HỌC (5 LỚP) GÁN CHO GIÁO VIÊN
-  // =============================================================
-  console.log("📚 Đang tạo 5 Lớp học...");
-  const classConfigs = [
-    { name: "Toán 10 Cơ Bản", category: "Cấp 3", price: 500000, roomFee: 50000, sessions: 12, teacherId: teacher1.id },
-    { name: "Toán 12 Luyện Thi", category: "Cấp 3", price: 800000, roomFee: 60000, sessions: 15, teacherId: teacher1.id },
-    { name: "Toán 9 Cấp Tốc", category: "Cấp 2", price: 400000, roomFee: 40000, sessions: 10, teacherId: teacher1.id },
-    { name: "IELTS Foundation", category: "Tiếng Anh", price: 1200000, roomFee: 80000, sessions: 20, teacherId: teacher2.id },
-    { name: "Anh Văn Giao Tiếp", category: "Tiếng Anh", price: 900000, roomFee: 50000, sessions: 15, teacherId: teacher2.id },
-  ];
+  const students = []
+  for (const raw of listHocSinh) {
+    const st = await prisma.student.create({
+      data: { ...raw, gender: raw.gender as 'MALE' | 'FEMALE' | 'OTHER', dob: new Date(raw.dob), phoneStudent: '090100000' + raw.qrCodeId.slice(-1) }
+    })
+    students.push(st)
+  }
 
-  const createdClasses = [];
-  for (const c of classConfigs) {
-    const newClass = await prisma.class.create({
-      data: {
-        name: c.name,
-        category: c.category,
-        pricePerSession: c.price,
-        roomFeePerSession: c.roomFee,
-        sessionsPerPackage: c.sessions,
-        status: "APPROVED", // Đã duyệt
-        createdById: admin.id,
-        teachers: {
-          create: { teacherId: c.teacherId }
+  // 4. GHI DANH & TẠO HÓA ĐƠN CHO TỪNG HỌC SINH
+  console.log('Đang phân bổ lớp học và tạo hóa đơn (Đủ/Thiếu/Dư)...')
+
+  for (let i = 0; i < students.length; i++) {
+    const student = students[i]
+
+    if (i === 0) {
+      // Trường hợp 1: Học sinh có 1 lớp cạn buổi học (chưa có hóa đơn)
+      await prisma.enrollment.create({
+        data: {
+          studentId: student.id, classId: classToan.id, remainingSessions: 0, feeStatus: 'UNPAID', status: 'ACTIVE',
         }
-      }
-    });
-    createdClasses.push(newClass);
+      })
+    } else if (i === 1) {
+      // Trường hợp 2: Học sinh học 2 lớp song song và cả 2 lớp đều cạn buổi học
+      await prisma.enrollment.create({
+        data: { studentId: student.id, classId: classToan.id, remainingSessions: 0, feeStatus: 'UNPAID', status: 'ACTIVE' }
+      })
+      await prisma.enrollment.create({
+        data: { studentId: student.id, classId: classIelts.id, remainingSessions: 0, feeStatus: 'UNPAID', status: 'ACTIVE' }
+      })
+    } else if (i === 2) {
+      // Trường hợp 3: 1 hóa đơn nợ cũ (UNDERPAID) + 1 lớp cạn buổi
+      await prisma.enrollment.create({
+        data: { studentId: student.id, classId: classToan.id, remainingSessions: 0, feeStatus: 'UNPAID', status: 'ACTIVE' }
+      })
+      await prisma.invoice.create({
+        data: {
+          studentId: student.id, expectedAmount: 100000, amountPaid: 0, status: 'UNDERPAID', isDebt: true,
+          details: [{ type: "DEBT", amount: 100000 }]
+        }
+      })
+    } else if (i === 3) {
+      // Trường hợp 4: Học sinh chỉ có 1 khoản nợ duy nhất (lớp vẫn còn buổi)
+      await prisma.enrollment.create({
+        data: { studentId: student.id, classId: classIelts.id, remainingSessions: 10, feeStatus: 'PAID', status: 'ACTIVE' }
+      })
+      await prisma.invoice.create({
+        data: {
+          studentId: student.id, expectedAmount: 200000, amountPaid: 0, status: 'UNDERPAID', isDebt: true,
+          details: [{ type: "DEBT", amount: 200000 }]
+        }
+      })
+    } else {
+      // Các học sinh còn lại: Bình thường (đã đóng đủ)
+      const targetClass = i % 2 === 0 ? classToan : classIelts
+      const expectedAmount = targetClass.pricePerSession * targetClass.sessionsPerPackage
+      const enrollment = await prisma.enrollment.create({
+        data: { studentId: student.id, classId: targetClass.id, remainingSessions: targetClass.sessionsPerPackage, feeStatus: 'PAID', status: 'ACTIVE' }
+      })
+      await prisma.invoice.create({
+        data: {
+          enrollmentId: enrollment.id, studentId: student.id, expectedAmount: expectedAmount, amountPaid: expectedAmount,
+          status: 'PAID', transactionCode: `SEPAY-${1000 + i}`,
+          details: [{ enrollmentId: enrollment.id, amount: expectedAmount, type: "TUITION" }]
+        }
+      })
+    }
   }
 
-  // =============================================================
-  // 4. TẠO 100 HỌC SINH (MỖI LỚP CHÍNH XÁC 20 HỌC SINH)
-  // =============================================================
-  console.log("🎓 Đang tạo 100 Học sinh và ghi danh (Mỗi lớp 20 HS)...");
-  const schoolsList = ["THPT Phan Châu Trinh", "THPT Hoàng Hoa Thám", "THCS Trưng Vương", "THCS Tây Sơn"];
-  
-  for (let i = 0; i < createdClasses.length; i++) {
-    const targetClass = createdClasses[i];
-    const classConfig = classConfigs[i];
+  // 5. TẠO LỊCH HỌC VÀ ĐIỂM DANH (Cho một lớp để test)
+  const session1 = await prisma.classSession.create({
+    data: { classId: classToan.id, teacherId: teacher1.id, roomId: room1.id, date: new Date(), slot: 1, status: 'COMPLETED' }
+  })
 
-    // Tạo 20 học sinh cho từng lớp
-    const studentData = Array.from({ length: 20 }).map((_, index) => {
-      const studentNumber = i * 20 + index + 1;
-      return {
-        fullName: `Học Sinh Lớp ${i + 1} - ${index + 1}`,
-        phoneStudent: `09${Math.floor(10000000 + Math.random() * 90000000)}`,
-        parentName: `Phụ Huynh HS ${studentNumber}`,
-        phoneParent: `09${Math.floor(10000000 + Math.random() * 90000000)}`,
-        gender: index % 2 === 0 ? "MALE" : "FEMALE" as any,
-        school: schoolsList[Math.floor(Math.random() * schoolsList.length)],
-        dob: new Date(2008, 5, 15),
-      };
-    });
-
-    // Insert 20 học sinh vào Database
-    await prisma.student.createMany({ data: studentData });
-
-    // Lấy 20 học sinh vừa insert (mẹo: lấy 20 người mới nhất theo fullName)
-    const insertedStudents = await prisma.student.findMany({
-      where: { fullName: { startsWith: `Học Sinh Lớp ${i + 1} -` } }
-    });
-
-    // Tạo ghi danh (Enrollment) cho 20 bé này vào Lớp tương ứng
-    const enrollmentData = insertedStudents.map(student => ({
-      studentId: student.id,
-      classId: targetClass.id,
-      status: "ACTIVE" as any,
-      feeStatus: "PAID" as any, // Mặc định đã đóng tiền
-      remainingSessions: classConfig.sessions, 
-    }));
-
-    await prisma.enrollment.createMany({ data: enrollmentData });
+  for (let i = 0; i < students.length; i += 2) {
+    await prisma.attendanceLog.create({
+      data: { classSessionId: session1.id, studentId: students[i].id, attendanceStatus: 'PRESENT', homeworkStatus: 'DONE' }
+    })
   }
 
-  // =============================================================
-  // 5. TẠO SẴN MỘT VÀI CA HỌC (SESSIONS) ĐỂ TEST LỊCH & PHÒNG
-  // =============================================================
-  console.log("📅 Đang xếp một vài lịch dạy demo vào phòng học...");
-  const today = new Date();
-  
-  await prisma.classSession.createMany({
-    data: [
-      {
-        classId: createdClasses[0].id,
-        teacherId: teacher1.id,
-        roomId: room1.id, // Dạy phòng 1
-        date: today,
-        slot: 1, // Ca 1 (vd: 17:30 - 19:00)
-        status: "SCHEDULED"
-      },
-      {
-        classId: createdClasses[3].id,
-        teacherId: teacher2.id,
-        roomId: room2.id, // Dạy phòng 2 cùng giờ Ca 1
-        date: today,
-        slot: 1, 
-        status: "SCHEDULED"
-      }
-    ]
-  });
-
-  console.log("✅ HOÀN TẤT! Đã nạp thành công bộ dữ liệu chuẩn.");
+  console.log('✅ Seeding thành công! Đã thêm 8 học sinh với đủ các trạng thái Hóa đơn.')
 }
 
 main()
-  .catch((e) => {
-    console.error("❌ Có lỗi xảy ra:", e);
-    process.exit(1);
-  })
-  .finally(async () => {
-    await prisma.$disconnect();
-  });
+  .catch((e) => { console.error(e); process.exit(1) })
+  .finally(async () => { await prisma.$disconnect() })

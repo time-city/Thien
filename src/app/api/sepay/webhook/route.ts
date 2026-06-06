@@ -77,14 +77,27 @@ export async function POST(request: Request) {
       let targetEnrollment: any = null;
       let student: any = null;
 
-      // 1. Ưu tiên tìm chính xác thẻ học (Enrollment ID) do mã QR mới gen
+      let invoice: any = null;
+
+      // 1. Ưu tiên tìm Hóa đơn (Invoice ID) do mã QR mới gen
       if (studentPhoneMatch.length === 36) {
-        targetEnrollment = await prisma.enrollment.findUnique({
+        invoice = await prisma.invoice.findUnique({
           where: { id: studentPhoneMatch },
-          include: { class: true, student: true }
+          include: { enrollment: { include: { class: true } }, student: true }
         });
-        if (targetEnrollment) {
-          student = targetEnrollment.student;
+
+        if (invoice) {
+          targetEnrollment = invoice.enrollment;
+          student = invoice.student;
+        } else {
+          // Fallback 1: Thử tìm Enrollment ID (mã QR cũ không có invoice)
+          targetEnrollment = await prisma.enrollment.findUnique({
+            where: { id: studentPhoneMatch },
+            include: { class: true, student: true }
+          });
+          if (targetEnrollment) {
+            student = targetEnrollment.student;
+          }
         }
       }
 
@@ -117,32 +130,87 @@ export async function POST(request: Request) {
         }
       }
 
-      if (student && targetEnrollment) {
-          // Thực hiện hạch toán qua Transaction
-          await prisma.$transaction(async (tx) => {
-            // 1. Tạo lịch sử thanh toán thành công
-            await tx.paymentHistory.create({
-              data: {
-                studentId: student.id,
-                classId: targetEnrollment!.classId,
-                amount: amount,
-                paymentMethod: "BANK_TRANSFER",
-                status: "SUCCESS",
-                transactionCode: sepayId,
-                voucherRef: targetEnrollment!.currentVoucher + 1
-              }
-            });
+      if (student && (targetEnrollment || invoice)) {
+        let invoiceStatus: "PAID" | "UNDERPAID" | "OVERPAID" | "PENDING" = "PAID";
+        let newAmountPaid = amount;
 
-            // 2. Cập nhật enrollment (Cộng buổi)
-            await tx.enrollment.update({
-              where: { id: targetEnrollment!.id },
+        if (invoice) {
+          const remainingDebt = invoice.expectedAmount - invoice.amountPaid;
+          if (amount < remainingDebt) invoiceStatus = "UNDERPAID";
+          else if (amount > remainingDebt) invoiceStatus = "OVERPAID";
+
+          newAmountPaid = invoice.amountPaid + amount;
+        }
+
+        // Thực hiện hạch toán qua Transaction
+        await prisma.$transaction(async (tx) => {
+          // 0. Cập nhật hóa đơn (không sinh nợ rời)
+          if (invoice) {
+            await tx.invoice.update({
+              where: { id: invoice.id },
               data: {
-                feeStatus: "PAID",
-                remainingSessions: { increment: targetEnrollment!.class.sessionsPerPackage },
-                currentVoucher: { increment: 1 }
+                status: invoiceStatus,
+                amountPaid: newAmountPaid,
+                transactionCode: sepayId,
               }
             });
-          });
+          }
+
+          // Phân bổ số tiền (Tạo PaymentHistory và cộng buổi học)
+          const details = (invoice && Array.isArray(invoice.details) ? invoice.details : []) as any[];
+          let remainingAmount = amount;
+
+          // Fallback nếu không có details (đóng qua cú pháp cũ hoặc hóa đơn cũ)
+          if (details.length === 0 && targetEnrollment) {
+            details.push({
+              enrollmentId: targetEnrollment.id,
+              amount: invoice?.expectedAmount || amount,
+              type: invoice?.isDebt ? "DEBT" : "TUITION"
+            });
+          }
+
+          let itemIndex = 0;
+          for (const item of details) {
+            const itemAmount = Number(item.amount) || 0;
+            const itemType = item.type || "TUITION";
+            const enrollmentId = item.enrollmentId;
+
+            if (enrollmentId) {
+              const trEnrollment = await tx.enrollment.findUnique({
+                where: { id: enrollmentId },
+                include: { class: true }
+              });
+
+              if (trEnrollment) {
+                // Ghi nhận lịch sử thanh toán
+                await tx.paymentHistory.create({
+                  data: {
+                    studentId: student.id,
+                    classId: trEnrollment.classId,
+                    amount: invoice ? Math.max(0, Math.min(remainingAmount, itemAmount)) : amount,
+                    paymentMethod: "BANK_TRANSFER",
+                    status: "SUCCESS",
+                    transactionCode: `${sepayId}-${itemIndex++}`,
+                    voucherRef: trEnrollment.currentVoucher + (itemType === "TUITION" ? 1 : 0)
+                  }
+                });
+
+                // Cộng buổi học nếu là học phí mới
+                if (itemType === "TUITION") {
+                  await tx.enrollment.update({
+                    where: { id: trEnrollment.id },
+                    data: {
+                      feeStatus: "PAID",
+                      remainingSessions: { increment: trEnrollment.class.sessionsPerPackage },
+                      currentVoucher: { increment: 1 }
+                    }
+                  });
+                }
+              }
+            }
+            remainingAmount -= itemAmount;
+          }
+        });
       }
     }
 

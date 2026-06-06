@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/prisma";
 import { Prisma, SessionStatus } from "@prisma/client";
 import { revalidatePath } from "next/cache";
+import { auth } from "@/auth";
 
 export async function createBulkSchedule(data: {
   classId: string;
@@ -21,6 +22,10 @@ export async function createBulkSchedule(data: {
   const sessionsToCreate: Prisma.ClassSessionCreateManyInput[] = [];
   const datesToCheck: { date: Date; slot: number }[] = [];
 
+  const session = await auth();
+  const isAdmin = session?.user?.role === "SUPER_ADMIN";
+  const defaultStatus = isAdmin ? SessionStatus.SCHEDULED : SessionStatus.PENDING;
+
   // Quét vòng lặp theo khoảng ngày và các ô lưới được chọn
   for (const pat of patterns) {
     const current = new Date(start);
@@ -37,7 +42,7 @@ export async function createBulkSchedule(data: {
         roomId,
         date: targetDate,
         slot: pat.slot,
-        status: SessionStatus.PENDING,
+        status: defaultStatus,
       });
 
       current.setUTCDate(current.getUTCDate() + 7);

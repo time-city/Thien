@@ -7,9 +7,9 @@ async function run() {
   });
   console.log("Student ID:", student.id);
 
-  const invoices = await prisma.invoice.findMany({
-    where: { studentId: student.id },
+  const pendingInvoices = await prisma.invoice.findMany({
+    where: { studentId: student.id, status: { in: ["PENDING", "UNDERPAID"] } },
   });
-  console.log(invoices);
+  console.log("Pending Invoices:", pendingInvoices);
 }
 run();

@@ -96,8 +96,10 @@ export type TuitionStudentData = {
     feeStatus: string;
     remainingSessions: number;
     price: number;
-    sessionsPerPackage: number; // Bổ sung biến này để Frontend biết cộng bao nhiêu buổi
+    sessionsPerPackage: number;
+    pendingInvoices: { id: string; status: string; expectedAmount: number; amountPaid: number }[];
   }[];
+  allPendingInvoices?: { id: string; status: string; expectedAmount: number; amountPaid: number; isDebt: boolean }[];
 };
 
 export async function getTuitionData(): Promise<TuitionStudentData[]> {
@@ -109,7 +111,19 @@ export async function getTuitionData(): Promise<TuitionStudentData[]> {
             not: "DROPPED"
           }
         },
-        include: { class: true }
+        include: { 
+          class: true,
+          invoices: {
+            where: {
+              status: { in: ["PENDING", "UNDERPAID"] }
+            }
+          }
+        }
+      },
+      invoices: {
+        where: {
+          status: { in: ["PENDING", "UNDERPAID"] }
+        }
       }
     }
   });
@@ -119,16 +133,27 @@ export async function getTuitionData(): Promise<TuitionStudentData[]> {
     fullName: s.fullName,
     phoneStudent: s.phoneStudent,
     phoneParent: s.phoneParent,
+    allPendingInvoices: s.invoices.map(inv => ({
+      id: inv.id,
+      status: inv.status,
+      expectedAmount: inv.expectedAmount,
+      amountPaid: inv.amountPaid,
+      isDebt: inv.isDebt
+    })),
     enrolledCourses: s.enrollments.map(e => ({
       enrollmentId: e.id,
       classId: e.classId,
       className: e.class.name,
       feeStatus: e.feeStatus,
       remainingSessions: e.remainingSessions,
-      // Đã FIX: Giá của gói học lấy thẳng từ pricePerSession (vì DB lưu cục tiền nguyên khóa)
       price: e.class.pricePerSession,
-      // Đã FIX: Truyền số buổi của gói học xuống Client
-      sessionsPerPackage: e.class.sessionsPerPackage
+      sessionsPerPackage: e.class.sessionsPerPackage,
+      pendingInvoices: e.invoices.map(inv => ({
+        id: inv.id,
+        status: inv.status,
+        expectedAmount: inv.expectedAmount,
+        amountPaid: inv.amountPaid
+      }))
     }))
   }));
 }
@@ -158,11 +183,14 @@ export type RoomData = {
 export type TuitionHistoryItem = {
   id: string;
   paymentDate: Date;
+  expectedAmount?: number;
   amount: number;
+  status?: string;
   paymentMethod: string;
   transactionCode: string | null;
   studentName: string;
   className: string;
+  isInvoice: boolean;
 };
 
 export type SalaryHistoryItem = {
@@ -193,6 +221,17 @@ export async function getRooms(): Promise<RoomData[]> {
 }
 
 export async function getAdminTuitionHistory(): Promise<TuitionHistoryItem[]> {
+  const invoices = await prisma.invoice.findMany({
+    where: {
+      status: { notIn: ["CANCELLED", "MERGED_TO_NEXT"] } // 🟢 Ẩn đi những nợ cũ đã gộp
+    },
+    include: {
+      student: { select: { fullName: true } },
+      enrollment: { include: { class: { select: { name: true } } } },
+    },
+    orderBy: { updatedAt: "desc" },
+  });
+
   const histories = await prisma.paymentHistory.findMany({
     include: {
       student: { select: { fullName: true } },
@@ -201,15 +240,36 @@ export async function getAdminTuitionHistory(): Promise<TuitionHistoryItem[]> {
     orderBy: { paymentDate: "desc" },
   });
 
-  return histories.map((item) => ({
-    id: item.id,
-    paymentDate: item.paymentDate,
-    amount: item.amount,
-    paymentMethod: item.paymentMethod,
-    transactionCode: item.transactionCode,
-    studentName: item.student.fullName,
-    className: item.class.name,
-  }));
+  const merged: TuitionHistoryItem[] = [
+    ...invoices.map((inv: any) => ({
+      id: inv.id,
+      paymentDate: inv.updatedAt,
+      expectedAmount: inv.expectedAmount,
+      amount: inv.amountPaid,
+      status: inv.status,
+      paymentMethod: "BANK_TRANSFER",
+      transactionCode: inv.transactionCode,
+      studentName: inv.student?.fullName || "Không xác định",
+      className: inv.enrollment?.class?.name || (inv.isDebt ? "Thu Nợ" : "Thu Tổng Hợp"),
+      isInvoice: true,
+    })),
+    ...histories.map((h: any) => ({
+      id: h.id,
+      paymentDate: h.paymentDate,
+      expectedAmount: h.amount,
+      amount: h.amount,
+      status: "PAID",
+      paymentMethod: h.paymentMethod,
+      transactionCode: h.transactionCode,
+      studentName: h.student.fullName,
+      className: h.class.name,
+      isInvoice: false,
+    })),
+  ];
+
+  merged.sort((a, b) => b.paymentDate.getTime() - a.paymentDate.getTime());
+
+  return merged;
 }
 
 export async function getAdminSalaryHistory(): Promise<SalaryHistoryItem[]> {

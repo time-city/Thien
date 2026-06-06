@@ -1317,8 +1317,12 @@ export async function requestRoomBooking(data: {
   date: string;
   slot: number;
 }) {
-  const teacherSession = await requireTeacherSession();
-  if (!teacherSession.success || !teacherSession.teacherId) return { success: false, error: "Không tìm thấy phiên đăng nhập giáo viên" };
+  const session = await auth();
+  if (!session?.user) return { success: false, error: "Vui lòng đăng nhập" };
+  const role = session.user.role;
+  const isTeacherOrAdmin = role === "TEACHER" || role === "SUPER_ADMIN";
+  if (!isTeacherOrAdmin) return { success: false, error: "Không đủ quyền đăng ký phòng" };
+  const teacherId = session.user.id;
 
   try {
     const dateObj = new Date(data.date);
@@ -1339,7 +1343,7 @@ export async function requestRoomBooking(data: {
     // Kiểm tra trùng lặp thời gian giáo viên
     const existingTeacher = await prisma.classSession.findFirst({
       where: {
-        teacherId: teacherSession.teacherId,
+        teacherId: teacherId,
         date: dateObj,
         slot: data.slot,
       },
@@ -1352,11 +1356,11 @@ export async function requestRoomBooking(data: {
     await prisma.classSession.create({
       data: {
         classId: data.classId,
-        teacherId: teacherSession.teacherId,
+        teacherId: teacherId,
         roomId: data.roomId,
         date: dateObj,
         slot: data.slot,
-        status: "PENDING",
+        status: role === "SUPER_ADMIN" ? "SCHEDULED" : "PENDING",
       },
     });
 

@@ -63,6 +63,7 @@ enum HomeworkStatus {
 enum RentalStatus {
   PENDING
   PAID
+  REFUNDED
   @@schema("public")
 }
 
@@ -139,13 +140,14 @@ model SalaryPayment {
 
 // 🟢 MỚI: Bảng quản lý phòng học
 model Room {
-  id          String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  name        String         @unique // VD: "Phòng 1", "Phòng 2"
-  capacity    Int?           
-  isActive    Boolean        @default(true)
-  createdAt   DateTime       @default(now())
+  id            String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name          String         @unique // VD: "Phòng 1", "Phòng 2"
+  capacity      Int?
+  feePerSession Float          @default(0) // Phí thuê phòng/ca
+  isActive      Boolean        @default(true)
+  createdAt     DateTime       @default(now())
 
-  sessions    ClassSession[]
+  sessions      ClassSession[]
 
   @@map("rooms")
   @@schema("public")
@@ -155,7 +157,6 @@ model Class {
   id                 String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   name               String
   category           String
-  roomFeePerSession  Float            @default(0)
   pricePerSession    Float            @default(0)
   sessionsPerPackage Int              @default(12)
   
@@ -178,10 +179,11 @@ model Class {
 }
 
 model ClassTeacher {
-  id        String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  classId   String  @db.Uuid
-  teacherId String  @db.Uuid
-  subModule String?
+  id               String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  classId          String  @db.Uuid
+  teacherId        String  @db.Uuid
+  subModule        String?
+  salaryPerSession Float   @default(0) // 🟢 MỚI: Lương cứng mỗi buổi (0 = Lớp Freelance)
 
   class     Class   @relation(fields: [classId], references: [id], onDelete: Cascade)
   teacher   User    @relation(fields: [teacherId], references: [id], onDelete: Cascade)
@@ -274,16 +276,19 @@ model PaymentHistory {
 
 model ClassSession {
   id                    String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  classId               String        @db.Uuid
+  classId               String?       @db.Uuid // 🟢 CẬP NHẬT: Cho phép null (Lớp Freelance)
   teacherId             String        @db.Uuid
-  roomId                String?       @db.Uuid   // 🟢 MỚI: Cho phép xếp phòng học
+  roomId                String?       @db.Uuid   // Cho phép xếp phòng học
   date                  DateTime      @db.Date
   slot                  Int
   status                SessionStatus @default(SCHEDULED)
   isAttendanceSubmitted Boolean       @default(false)
   attendanceSubmittedAt DateTime?
+  isPaid                Boolean       @default(false) // Đã kết toán lương chưa
+  isCancelRequested     Boolean       @default(false)
+  cancelReason          String?
 
-  class                 Class         @relation(fields: [classId], references: [id], onDelete: Cascade)
+  class                 Class?        @relation(fields: [classId], references: [id], onDelete: Cascade)
   teacher               User          @relation(fields: [teacherId], references: [id], onDelete: Cascade)
   room                  Room?         @relation(fields: [roomId], references: [id], onDelete: SetNull) // 🟢 MỚI
 
@@ -340,5 +345,15 @@ model PendingTransaction {
   student         Student?          @relation(fields: [studentId], references: [id], onDelete: SetNull)
 
   @@map("pending_transactions")
+  @@schema("public")
+}
+
+// 🟢 MỚI: Bảng cài đặt hệ thống (vd: lưu Phí Thuê Phòng Chung)
+model SystemSetting {
+  id    String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  key   String @unique // VD: "GLOBAL_ROOM_FEE"
+  value String         // Lưu giá trị dạng string
+  
+  @@map("system_settings")
   @@schema("public")
 }

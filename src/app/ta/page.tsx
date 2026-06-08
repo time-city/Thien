@@ -48,7 +48,9 @@ export default async function ClassRosterPage({
   const pageSize = 10;
   const skip = (currentPage - 1) * pageSize;
 
-  const totalStudents = await prisma.enrollment.count({
+  const isFreelance = classId === "freelance";
+
+  const totalStudents = isFreelance ? 0 : await prisma.enrollment.count({
     where: { classId: classId, status: "ACTIVE" }
   });
   const totalPages = Math.ceil(totalStudents / pageSize) || 1;
@@ -58,7 +60,7 @@ export default async function ClassRosterPage({
   console.log("2. Tính toán: currentPage =", currentPage, "| skip =", skip, "| take =", pageSize);
   console.log("3. Tổng số học sinh lớp này:", totalStudents, "=> Tổng số trang:", totalPages);
 
-  const enrollments = await prisma.enrollment.findMany({
+  const enrollments = isFreelance ? [] : await prisma.enrollment.findMany({
     where: { classId: classId, status: "ACTIVE" },
     skip: skip,
     take: pageSize,
@@ -89,7 +91,7 @@ export default async function ClassRosterPage({
     return {
       id: e.student.id,
       fullName: e.student.fullName,
-      className: sessionInfo.class.name,
+      className: sessionInfo.class?.name || "Lớp Tự Do",
       seat: stt, 
       attendance: currentLog?.attendanceStatus || undefined,
       homework: currentLog?.homeworkStatus || undefined,
@@ -106,7 +108,7 @@ export default async function ClassRosterPage({
     <TaCheckInClient
       sessionInfo={{
         teacherId: sessionInfo.teacherId, // ✅ Bổ sung ID của giáo viên vào đây
-        className: sessionInfo.class.name,
+        className: sessionInfo.class?.name || "Lớp Tự Do",
         teacherName: sessionInfo.teacher.fullName,
         date: sessionInfo.date.toISOString(),
         slot: sessionInfo.slot,

@@ -6,7 +6,7 @@ import { revalidatePath } from "next/cache";
 import { auth } from "@/auth";
 
 export async function createBulkSchedule(data: {
-  classId: string;
+  classId: string | null;
   teacherId: string;
   roomId: string;
   patterns: { day: number; slot: number }[]; // Dữ liệu mới: Mảng chứa các ô lưới được chọn
@@ -70,7 +70,38 @@ export async function createBulkSchedule(data: {
     }
 
     // 2. LƯU VÀO DB NẾU AN TOÀN
-    await prisma.classSession.createMany({ data: sessionsToCreate });
+    await prisma.$transaction(async (tx) => {
+      // Dùng create để lấy ID tạo roomRentalLog
+      const createdSessions = [];
+      for (const data of sessionsToCreate) {
+        const session = await tx.classSession.create({ data });
+        createdSessions.push(session);
+      }
+
+      // Nếu là lớp tự do, trừ tiền và tạo log
+      if (classId === null) {
+        const room = await tx.room.findUnique({ where: { id: roomId } });
+        const roomFee = room?.feePerSession ?? 0;
+        
+        if (roomFee > 0) {
+          const totalFee = roomFee * createdSessions.length;
+          await tx.user.update({
+            where: { id: teacherId },
+            data: { salaryBalance: { decrement: totalFee } }
+          });
+
+          await tx.roomRentalLog.createMany({
+            data: createdSessions.map(s => ({
+              teacherId: teacherId,
+              classSessionId: s.id,
+              feeCalculated: roomFee,
+              status: "PAID"
+            }))
+          });
+        }
+      }
+    });
+
     revalidatePath("/schedule"); 
     return { success: true };
 
@@ -119,7 +150,7 @@ export async function getScheduleByDateRange(
     date: s.date,
     slot: s.slot,
     status: s.status,
-    className: s.class.name,
+    className: s.class?.name || "Lớp Tự Do (Thuê phòng)",
     teacherFullName: s.teacher.fullName,
   }));
 }

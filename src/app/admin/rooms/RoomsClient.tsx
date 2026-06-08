@@ -5,12 +5,14 @@ import { Plus, Edit2, Trash2, X, Loader2, Building2, CheckCircle2, Wrench } from
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { useConfirm } from "@/hooks/useconfirm";
+import { CurrencyInput } from "@/components/ui/CurrencyInput";
 import { createRoom, updateRoom, deleteRoom, getRoomDeletionImpact } from "@/actions/mutations";
 
 type RoomItem = {
   id: string;
   name: string;
   capacity: number | null;
+  feePerSession: number;
   isActive: boolean;
   sessionCount: number;
 };
@@ -18,6 +20,7 @@ type RoomItem = {
 type RoomFormState = {
   name: string;
   capacity: string;
+  feePerSession: number;
   isActive: boolean;
 };
 
@@ -28,7 +31,7 @@ export default function RoomsClient({ initialRooms }: { initialRooms: RoomItem[]
   const [rooms, setRooms] = useState<RoomItem[]>(initialRooms);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingRoom, setEditingRoom] = useState<RoomItem | null>(null);
-  const [form, setForm] = useState<RoomFormState>({ name: "", capacity: "", isActive: true });
+  const [form, setForm] = useState<RoomFormState>({ name: "", capacity: "", feePerSession: 0, isActive: true });
   const [loading, setLoading] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
@@ -41,7 +44,7 @@ export default function RoomsClient({ initialRooms }: { initialRooms: RoomItem[]
 
   const openCreate = () => {
     setEditingRoom(null);
-    setForm({ name: "", capacity: "", isActive: true });
+    setForm({ name: "", capacity: "", feePerSession: 0, isActive: true });
     setIsModalOpen(true);
   };
 
@@ -50,6 +53,7 @@ export default function RoomsClient({ initialRooms }: { initialRooms: RoomItem[]
     setForm({
       name: room.name,
       capacity: room.capacity === null ? "" : String(room.capacity),
+      feePerSession: room.feePerSession ?? 0,
       isActive: room.isActive,
     });
     setIsModalOpen(true);
@@ -67,6 +71,7 @@ export default function RoomsClient({ initialRooms }: { initialRooms: RoomItem[]
     const payload = {
       name: form.name,
       capacity: form.capacity.trim() === "" ? undefined : Number(form.capacity),
+      feePerSession: form.feePerSession,
       isActive: form.isActive,
     };
 
@@ -79,7 +84,7 @@ export default function RoomsClient({ initialRooms }: { initialRooms: RoomItem[]
         }
         toast.success("Cập nhật phòng học thành công");
       } else {
-        const res = await createRoom({ name: form.name, capacity: payload.capacity });
+        const res = await createRoom({ name: form.name, capacity: payload.capacity, feePerSession: payload.feePerSession });
         if (!res.success) {
           toast.error(res.error || "Lỗi tạo phòng học");
           return;
@@ -175,8 +180,8 @@ export default function RoomsClient({ initialRooms }: { initialRooms: RoomItem[]
               <tr className="bg-slate-50 border-b border-slate-200 text-[11px] uppercase tracking-widest font-extrabold text-slate-500">
                 <th className="py-3 px-4">Tên phòng</th>
                 <th className="py-3 px-4 hidden sm:table-cell">Sức chứa</th>
+                <th className="py-3 px-4 hidden sm:table-cell">Phí / Ca</th>
                 <th className="py-3 px-4 hidden md:table-cell">Trạng thái</th>
-                <th className="py-3 px-4 hidden lg:table-cell">Ca đang dùng</th>
                 <th className="py-3 px-4 w-28 text-center">Thao tác</th>
               </tr>
             </thead>
@@ -201,15 +206,18 @@ export default function RoomsClient({ initialRooms }: { initialRooms: RoomItem[]
                         {room.capacity ?? "-"} chỗ
                       </span>
                     </td>
+                    <td className="py-3 px-4 hidden sm:table-cell">
+                      <span className="font-bold text-blue-700 text-sm">
+                        {Number(room.feePerSession ?? 0).toLocaleString('vi-VN')}đ
+                      </span>
+                    </td>
                     <td className="py-3 px-4 hidden md:table-cell">
                       <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-bold border ${room.isActive ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-amber-50 text-amber-700 border-amber-200"}`}>
                         {room.isActive ? <CheckCircle2 size={12} /> : <Wrench size={12} />}
                         {room.isActive ? "Hoạt động" : "Bảo trì"}
                       </span>
                     </td>
-                    <td className="py-3 px-4 hidden lg:table-cell">
-                      <span className="text-sm font-bold text-slate-700">{room.sessionCount}</span>
-                    </td>
+
                     <td className="py-3 px-4">
                       <div className="flex items-center justify-center gap-1">
                         <button
@@ -277,6 +285,15 @@ export default function RoomsClient({ initialRooms }: { initialRooms: RoomItem[]
                   onChange={(e) => setForm((prev) => ({ ...prev, capacity: e.target.value }))}
                   className="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
                   placeholder="Ví dụ: 20"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mb-2">Phí phòng / Ca (VNĐ)</label>
+                <CurrencyInput
+                  value={form.feePerSession}
+                  onChange={(val) => setForm((prev) => ({ ...prev, feePerSession: val }))}
+                  className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-100 focus:border-blue-500 outline-none transition-all text-sm"
                 />
               </div>
 

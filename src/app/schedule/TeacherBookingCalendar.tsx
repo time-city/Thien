@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { format, addDays, startOfWeek, isSameDay, addWeeks } from "date-fns";
 import { ChevronLeft, ChevronRight, XCircle, MapPin, CalendarPlus } from "lucide-react";
 import { toast } from "sonner";
-import { requestRoomBooking, rejectSessionRequest } from "@/actions/mutations";
+import { requestRoomBooking, rejectSessionRequest, requestCancelSession } from "@/actions/mutations";
 import type { RoomData, ScheduleItemData, ClassData } from "@/actions/queries";
 
 const SHIFTS = [
@@ -62,6 +62,7 @@ export default function TeacherBookingCalendar({
   const [bookingSlot, setBookingSlot] = useState<{ date: Date; slot: number } | null>(null);
   const [selectedClassId, setSelectedClassId] = useState("");
   const [cancelSession, setCancelSession] = useState<ScheduleItemData | null>(null);
+  const [cancelReason, setCancelReason] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
 
   // NO MANUAL F5 RULE
@@ -111,15 +112,29 @@ export default function TeacherBookingCalendar({
   const handleCancelRequest = async () => {
     if (!cancelSession) return;
     setIsProcessing(true);
-    const result = await rejectSessionRequest(cancelSession.id);
-    setIsProcessing(false);
+    
+    let result;
+    if (cancelSession.status === "PENDING") {
+      result = await rejectSessionRequest(cancelSession.id);
+    } else if (cancelSession.status === "SCHEDULED") {
+      if (!cancelReason.trim()) {
+        toast.warning("Vui lòng nhập lý do huỷ ca.");
+        setIsProcessing(false);
+        return;
+      }
+      result = await requestCancelSession(cancelSession.id, cancelReason);
+    }
 
-    if (result.success) {
-      toast.success("Đã hủy đăng ký phòng");
+    setIsProcessing(false);
+    
+    if (result && result.success) {
+      toast.success(cancelSession.status === "PENDING" ? "Đã hủy yêu cầu đặt phòng!" : "Đã gửi yêu cầu huỷ ca!");
       setCancelSession(null);
+      setCancelReason("");
+      window.dispatchEvent(new Event("schedule-updated"));
       router.refresh();
     } else {
-      toast.error(result.error || "Có lỗi xảy ra");
+      toast.error(result?.error || "Có lỗi xảy ra");
     }
   };
 
@@ -140,7 +155,7 @@ export default function TeacherBookingCalendar({
             <option value="">-- Chọn Phòng Để Xem Lịch --</option>
             {rooms.map((room) => (
               <option key={room.id} value={room.id}>
-                {room.name}
+                {room.name} {room.feePerSession > 0 ? `(Phí: ${Number(room.feePerSession).toLocaleString('vi-VN')}đ)` : ""}
               </option>
             ))}
           </select>
@@ -294,19 +309,31 @@ export default function TeacherBookingCalendar({
                             ) : (
                               // CA CỦA CHÍNH MÌNH
                               <button
-                                onClick={() => session.status === "PENDING" && setCancelSession(session)}
+                                onClick={() => {
+                                  if (session.status === "PENDING" || (session.status === "SCHEDULED" && !session.isCancelRequested)) {
+                                    setCancelSession(session);
+                                    setCancelReason("");
+                                  }
+                                }}
                                 className={`w-full h-full min-h-[60px] p-2 text-left rounded-lg border text-[11px] leading-snug shadow-sm flex flex-col gap-1 transition-all ${
                                   session.status === "PENDING"
                                     ? "bg-amber-100 border-amber-300 text-amber-900 hover:scale-[1.02] cursor-pointer"
-                                    : "bg-blue-50 border-blue-200 text-blue-900 cursor-default"
+                                    : session.isCancelRequested
+                                    ? "bg-rose-50 border-rose-200 text-rose-800 cursor-default opacity-80"
+                                    : "bg-blue-50 border-blue-200 text-blue-900 hover:scale-[1.02] cursor-pointer"
                                 }`}
                               >
                                 <div className="font-extrabold line-clamp-1">{session.className}</div>
                                 <div className="text-[10px] font-bold mt-auto">
                                   {session.status === "PENDING" ? (
                                     <span className="text-amber-600">Chờ duyệt (Nhấn hủy)</span>
+                                  ) : session.isCancelRequested ? (
+                                    <span className="text-rose-600 font-bold">Đang chờ duyệt huỷ ca</span>
                                   ) : (
-                                    <span className="text-blue-600 font-bold">Đã được duyệt</span>
+                                    <span className="text-blue-600 font-bold flex flex-col">
+                                      <span>Đã duyệt</span>
+                                      <span className="text-[9px] text-blue-500 opacity-80">(Nhấn để xin huỷ)</span>
+                                    </span>
                                   )}
                                 </div>
                               </button>
@@ -333,7 +360,12 @@ export default function TeacherBookingCalendar({
             <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 mb-4 space-y-2 text-sm">
               <div className="flex justify-between border-b pb-2">
                 <span className="text-slate-500">Phòng:</span>
-                <span className="font-bold text-slate-900">{rooms.find(r => r.id === selectedRoomId)?.name}</span>
+                <span className="font-bold text-slate-900">
+                  {rooms.find(r => r.id === selectedRoomId)?.name} 
+                  <span className="text-blue-600 ml-1">
+                    ({Number(rooms.find(r => r.id === selectedRoomId)?.feePerSession || 0).toLocaleString('vi-VN')}đ/Ca)
+                  </span>
+                </span>
               </div>
               <div className="flex justify-between border-b pb-2">
                 <span className="text-slate-500">Ngày:</span>
@@ -353,6 +385,7 @@ export default function TeacherBookingCalendar({
                 className="w-full border border-slate-300 rounded-lg px-4 py-2.5 bg-white text-sm focus:ring-2 focus:ring-blue-500 outline-none"
               >
                 <option value="">-- Chọn Lớp Học --</option>
+                <option value="freelance" className="font-bold text-blue-700 bg-blue-50">🌟 Lớp Tự Do (Thuê phòng)</option>
                 {classes.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.name}
@@ -391,12 +424,29 @@ export default function TeacherBookingCalendar({
             <div className="w-16 h-16 bg-rose-100 rounded-full flex items-center justify-center mx-auto mb-4">
               <XCircle size={32} className="text-rose-600" />
             </div>
-            <h3 className="text-xl font-bold text-slate-900 mb-2">Hủy Đăng Ký?</h3>
-            <p className="text-sm text-slate-500 mb-6">Bạn có chắc chắn muốn hủy yêu cầu đặt phòng cho lớp <strong>{cancelSession.className}</strong> không?</p>
+            <h3 className="text-xl font-bold text-slate-900 mb-2">
+              {cancelSession.status === "PENDING" ? "Hủy Đăng Ký?" : "Yêu Cầu Huỷ Ca"}
+            </h3>
+            <p className="text-sm text-slate-500 mb-4">
+              {cancelSession.status === "PENDING" 
+                ? <>Bạn có chắc chắn muốn hủy yêu cầu đặt phòng cho lớp <strong>{cancelSession.className}</strong> không?</>
+                : <>Bạn đang yêu cầu huỷ ca học đã được duyệt của lớp <strong>{cancelSession.className}</strong>. Xin lưu ý: nếu được duyệt, tiền phòng sẽ được hoàn lại.</>
+              }
+            </p>
+            
+            {cancelSession.status === "SCHEDULED" && (
+              <textarea
+                placeholder="Nhập lý do xin huỷ ca (VD: Ốm đột xuất...)"
+                value={cancelReason}
+                onChange={(e) => setCancelReason(e.target.value)}
+                className="w-full text-sm p-3 border border-slate-200 rounded-xl mb-6 outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500"
+                rows={3}
+              />
+            )}
             
             <div className="flex gap-3">
               <button
-                onClick={() => setCancelSession(null)}
+                onClick={() => { setCancelSession(null); setCancelReason(""); }}
                 disabled={isProcessing}
                 className="flex-1 px-4 py-2.5 bg-slate-100 text-slate-700 font-bold rounded-xl hover:bg-slate-200 transition-colors"
               >
@@ -407,7 +457,7 @@ export default function TeacherBookingCalendar({
                 disabled={isProcessing}
                 className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-rose-600 text-white font-bold rounded-xl hover:bg-rose-700 transition-colors disabled:opacity-50"
               >
-                Đồng ý Hủy
+                {cancelSession.status === "PENDING" ? "Đồng ý Hủy" : "Gửi Yêu Cầu Huỷ"}
               </button>
             </div>
           </div>

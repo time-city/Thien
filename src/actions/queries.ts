@@ -73,6 +73,7 @@ export async function getAllAvailableTeachers() {
     select: {
       id: true,
       fullName: true,
+      role: true,
     },
     orderBy: {
       fullName: "asc",
@@ -166,16 +167,16 @@ export type ClassData = {
   status: ClassStatus;
   creatorName: string | null;
   createdById: string | null;
-  roomFeePerSession: number;
   pricePerSession: number;
   sessionsPerPackage: number;
-  teachers: { teacherId: string; teacherName: string }[];
+  teachers: { teacherId: string; teacherName: string; salaryPerSession?: number }[];
 };
 
 export type RoomData = {
   id: string;
   name: string;
   capacity: number | null;
+  feePerSession: number;
   isActive: boolean;
   sessionCount: number;
 };
@@ -215,6 +216,7 @@ export async function getRooms(): Promise<RoomData[]> {
     id: room.id,
     name: room.name,
     capacity: room.capacity,
+    feePerSession: room.feePerSession,
     isActive: room.isActive,
     sessionCount: room._count.sessions,
   }));
@@ -324,13 +326,13 @@ export async function getAllClasses(): Promise<ClassData[]> {
     status: c.status,
     creatorName: c.createdBy?.fullName ?? null,
     createdById: c.createdById,
-    roomFeePerSession: c.roomFeePerSession,
     pricePerSession: c.pricePerSession,
     sessionsPerPackage: c.sessionsPerPackage,
-    teachers: c.teachers.map(ct => ({
-      teacherId: ct.teacherId,
-      teacherName: ct.teacher.fullName
-    }))
+    teachers: c.teachers.map((t) => ({
+      teacherId: t.teacherId,
+      teacherName: t.teacher.fullName,
+      salaryPerSession: t.salaryPerSession,
+    })),
   }));
 }
 
@@ -363,7 +365,7 @@ export type SessionLogData = {
   attendanceStatus: AttendanceStatus;
   homeworkStatus: HomeworkStatus | null;
   note: string | null;
-  classId: string;
+  classId: string | null;
   className: string;
 };
 
@@ -443,7 +445,7 @@ export async function getStudentsDetailed(): Promise<StudentData[]> {
       homeworkStatus: log.homeworkStatus,
       note: log.note,
       classId: log.classSession.classId,
-      className: log.classSession.class.name,
+      className: log.classSession.class?.name || "Lớp Tự Do (Thuê phòng)",
     })),
   }));
 }
@@ -472,6 +474,8 @@ export type ScheduleItemData = {
   slot: number;
   status: string;
   isAttendanceSubmitted: boolean;
+  isCancelRequested?: boolean;
+  cancelReason?: string | null;
 };
 
 export async function getSchedule(roomId?: string, teacherId?: string, status?: string): Promise<ScheduleItemData[]> {
@@ -487,8 +491,8 @@ export async function getSchedule(roomId?: string, teacherId?: string, status?: 
 
   return sessions.map(s => ({
     id: s.id,
-    classId: s.classId,
-    className: s.class.name,
+    classId: s.classId || "freelance",
+    className: s.class?.name || "Lớp Tự Do (Thuê phòng)",
     teacherId: s.teacherId,
     teacherName: s.teacher.fullName,
     roomId: s.roomId,
@@ -496,7 +500,9 @@ export async function getSchedule(roomId?: string, teacherId?: string, status?: 
     date: s.date,
     slot: s.slot,
     status: s.status,
-    isAttendanceSubmitted: s.isAttendanceSubmitted
+    isAttendanceSubmitted: s.isAttendanceSubmitted,
+    isCancelRequested: s.isCancelRequested,
+    cancelReason: s.cancelReason
   }));
 }
 
@@ -521,8 +527,8 @@ export async function getTeacherBookingHistory(teacherId: string): Promise<Teach
 
   return sessions.map(s => ({
     id: s.id,
-    classId: s.classId,
-    className: s.class.name,
+    classId: s.classId || "freelance",
+    className: s.class?.name || "Lớp Tự Do (Thuê phòng)",
     roomId: s.roomId,
     roomName: s.room?.name ?? null,
     date: s.date,
@@ -546,8 +552,8 @@ export async function getCompletedSessions(): Promise<ScheduleItemData[]> {
 
   return sessions.map(s => ({
     id: s.id,
-    classId: s.classId,
-    className: s.class.name,
+    classId: s.classId || "freelance",
+    className: s.class?.name || "Lớp Tự Do (Thuê phòng)",
     teacherId: s.teacherId,
     teacherName: s.teacher.fullName,
     roomId: s.roomId,
@@ -555,7 +561,9 @@ export async function getCompletedSessions(): Promise<ScheduleItemData[]> {
     date: s.date,
     slot: s.slot,
     status: s.status,
-    isAttendanceSubmitted: s.isAttendanceSubmitted
+    isAttendanceSubmitted: s.isAttendanceSubmitted,
+    isCancelRequested: s.isCancelRequested,
+    cancelReason: s.cancelReason
   }));
 }
 
@@ -595,7 +603,7 @@ export async function getRentalLogs(): Promise<RentalLogData[]> {
     teacherId: log.teacherId,
     teacherName: log.teacher.fullName,
     classSessionId: log.classSessionId,
-    className: log.classSession.class.name,
+    className: log.classSession.class?.name || "Lớp Tự Do (Thuê phòng)",
     date: log.classSession.date,
     slot: log.classSession.slot,
     feeCalculated: log.feeCalculated,
@@ -629,6 +637,8 @@ export type TeachingHistory = {
   slot: number;
   className: string;
   status: "completed" | "scheduled";
+  isCancelRequested?: boolean;
+  cancelReason?: string | null;
 };
 
 export async function getTeacherSettingsInfo(teacherId: string) {
@@ -660,8 +670,10 @@ export async function getTeacherSettingsInfo(teacherId: string) {
     id: s.id,
     date: s.date,
     slot: s.slot,
-    className: s.class.name,
+    className: s.class?.name || "Lớp Tự Do (Thuê phòng)",
     status: s.status === "COMPLETED" ? "completed" : "scheduled",
+    isCancelRequested: s.isCancelRequested,
+    cancelReason: s.cancelReason,
   }));
 
   return {

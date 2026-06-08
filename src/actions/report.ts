@@ -189,7 +189,7 @@ export async function getStudentCombinedReport(studentId: string): Promise<Stude
     items,
     totalExpectedAmount,
     logs: logs.map(log => ({
-      className: log.classSession.class.name,
+      className: log.classSession.class?.name || "Lớp Tự Do",
       date: log.classSession.date,
       slot: log.classSession.slot,
       attendanceStatus: log.attendanceStatus,

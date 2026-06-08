@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { format, addDays, startOfWeek, isSameDay, addWeeks } from "date-fns";
 import { ChevronLeft, ChevronRight, CheckCircle, XCircle } from "lucide-react";
 import { toast } from "sonner";
-import { approveSessionRequest, rejectSessionRequest } from "@/actions/mutations";
+import { approveSessionRequest, rejectSessionRequest, approveCancelSession, rejectCancelSession } from "@/actions/mutations";
 import type { RoomData, ScheduleItemData } from "@/actions/queries";
 
 const SHIFTS = [
@@ -106,6 +106,38 @@ export default function AdminScheduleClient({
     }
   };
 
+  const handleApproveCancel = async () => {
+    if (!selectedSession) return;
+    setIsProcessing(true);
+    const result = await approveCancelSession(selectedSession.id);
+    setIsProcessing(false);
+
+    if (result.success) {
+      toast.success("Đã duyệt huỷ ca!");
+      setSelectedSession(null);
+      window.dispatchEvent(new Event("schedule-updated"));
+      router.refresh();
+    } else {
+      toast.error(result.error || "Có lỗi xảy ra");
+    }
+  };
+
+  const handleRejectCancel = async () => {
+    if (!selectedSession) return;
+    setIsProcessing(true);
+    const result = await rejectCancelSession(selectedSession.id);
+    setIsProcessing(false);
+
+    if (result.success) {
+      toast.success("Đã từ chối huỷ ca!");
+      setSelectedSession(null);
+      window.dispatchEvent(new Event("schedule-updated"));
+      router.refresh();
+    } else {
+      toast.error(result.error || "Có lỗi xảy ra");
+    }
+  };
+
   return (
     <div className="max-w-7xl mx-auto p-4 md:p-8">
       <div className="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -133,32 +165,43 @@ export default function AdminScheduleClient({
       {!selectedRoomId ? (
         <div className="space-y-4">
           <h2 className="text-lg font-bold text-slate-800">Yêu Cầu Chờ Duyệt</h2>
-          {schedule.filter(s => s.status === "PENDING").length === 0 ? (
+          {schedule.filter(s => s.status === "PENDING" || s.isCancelRequested).length === 0 ? (
             <div className="bg-white border border-slate-200 rounded-xl p-12 text-center text-slate-500">
               Không có yêu cầu duyệt nào. Vui lòng chọn phòng học để xem lịch tuần.
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {schedule.filter(s => s.status === "PENDING").map(s => (
-                <div key={s.id} className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm flex flex-col gap-2 relative transition-all hover:shadow-md">
-                  <div className="font-extrabold text-blue-700 text-lg">{s.className}</div>
-                  <div className="text-sm text-slate-600 flex justify-between">
-                    <span><strong>Giáo viên:</strong> {s.teacherName}</span>
+              {schedule.filter(s => s.status === "PENDING" || s.isCancelRequested).map(s => {
+                const isCancel = s.isCancelRequested;
+                return (
+                  <div key={s.id} className={`bg-white border rounded-xl p-5 shadow-sm flex flex-col gap-2 relative transition-all hover:shadow-md ${isCancel ? "border-rose-200" : "border-slate-200"}`}>
+                    <div className="flex justify-between items-start">
+                      <div className="font-extrabold text-blue-700 text-lg">{s.className}</div>
+                      {isCancel && <span className="px-2 py-1 bg-rose-100 text-rose-700 text-[10px] font-bold rounded-lg">Xin Huỷ Ca</span>}
+                    </div>
+                    <div className="text-sm text-slate-600 flex justify-between">
+                      <span><strong>Giáo viên:</strong> {s.teacherName}</span>
+                    </div>
+                    <div className="text-sm text-slate-600">
+                      <strong>Phòng:</strong> {rooms.find(r => r.id === s.roomId)?.name || "Chưa rõ"}
+                    </div>
+                    <div className="text-sm text-slate-600">
+                      <strong>Thời gian:</strong> {format(new Date(s.date), "dd/MM/yyyy")} - Ca {s.slot} ({SHIFTS.find(shift => shift.id === s.slot)?.time})
+                    </div>
+                    {isCancel && s.cancelReason && (
+                      <div className="text-sm bg-rose-50/50 p-2 rounded-lg text-rose-800 italic mt-1">
+                        <strong>Lý do:</strong> {s.cancelReason}
+                      </div>
+                    )}
+                    <button 
+                      onClick={() => setSelectedSession(s)} 
+                      className="mt-3 w-full py-2 bg-amber-100 text-amber-800 font-bold rounded-lg hover:bg-amber-200 transition-colors flex items-center justify-center gap-2"
+                    >
+                      Xử lý ngay
+                    </button>
                   </div>
-                  <div className="text-sm text-slate-600">
-                    <strong>Phòng:</strong> {rooms.find(r => r.id === s.roomId)?.name || "Chưa rõ"}
-                  </div>
-                  <div className="text-sm text-slate-600">
-                    <strong>Thời gian:</strong> {format(new Date(s.date), "dd/MM/yyyy")} - Ca {s.slot} ({SHIFTS.find(shift => shift.id === s.slot)?.time})
-                  </div>
-                  <button 
-                    onClick={() => setSelectedSession(s)} 
-                    className="mt-3 w-full py-2 bg-amber-100 text-amber-800 font-bold rounded-lg hover:bg-amber-200 transition-colors flex items-center justify-center gap-2"
-                  >
-                    Xử lý ngay
-                  </button>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
@@ -294,8 +337,14 @@ export default function AdminScheduleClient({
       {selectedSession && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm px-4">
           <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-2xl">
-            <h3 className="text-xl font-bold text-slate-900 mb-2">Duyệt Ca Học</h3>
-            <p className="text-sm text-slate-500 mb-6">Xác nhận duyệt hoặc từ chối đăng ký này.</p>
+            <h3 className="text-xl font-bold text-slate-900 mb-2">
+              {selectedSession.isCancelRequested ? "Duyệt Huỷ Ca" : "Duyệt Ca Học"}
+            </h3>
+            <p className="text-sm text-slate-500 mb-6">
+              {selectedSession.isCancelRequested 
+                ? "Giáo viên đang yêu cầu huỷ ca này. Nếu đồng ý huỷ, tiền thuê phòng tự do sẽ được hoàn lại (nếu có)."
+                : "Xác nhận duyệt hoặc từ chối đăng ký này."}
+            </p>
             
             <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 mb-6 space-y-2 text-sm">
               <div className="flex justify-between border-b pb-2">
@@ -316,27 +365,34 @@ export default function AdminScheduleClient({
               </div>
             </div>
 
+            {selectedSession.isCancelRequested && selectedSession.cancelReason && (
+              <div className="mb-6 bg-rose-50 p-3 rounded-lg border border-rose-100 text-sm">
+                <div className="text-rose-800 font-bold mb-1">Lý do huỷ:</div>
+                <div className="text-rose-700">{selectedSession.cancelReason}</div>
+              </div>
+            )}
+
             <div className="flex gap-3">
               <button
                 onClick={() => setSelectedSession(null)}
                 disabled={isProcessing}
                 className="flex-1 px-4 py-2 bg-slate-100 text-slate-700 font-bold rounded-xl hover:bg-slate-200 transition-colors"
               >
-                Hủy
+                Đóng
               </button>
               <button
-                onClick={handleReject}
+                onClick={selectedSession.isCancelRequested ? handleRejectCancel : handleReject}
                 disabled={isProcessing}
                 className="flex-1 flex items-center justify-center gap-1.5 px-4 py-2 bg-rose-100 text-rose-700 font-bold rounded-xl hover:bg-rose-200 transition-colors disabled:opacity-50"
               >
-                <XCircle size={16} /> Từ chối
+                <XCircle size={16} /> Từ chối {selectedSession.isCancelRequested && "Huỷ"}
               </button>
               <button
-                onClick={handleApprove}
+                onClick={selectedSession.isCancelRequested ? handleApproveCancel : handleApprove}
                 disabled={isProcessing}
                 className="flex-1 flex items-center justify-center gap-1.5 px-4 py-2 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 transition-colors disabled:opacity-50"
               >
-                <CheckCircle size={16} /> Đồng ý
+                <CheckCircle size={16} /> Đồng ý {selectedSession.isCancelRequested && "Huỷ"}
               </button>
             </div>
           </div>

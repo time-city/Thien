@@ -19,7 +19,6 @@ export type ClassData = {
   name: string;
   category: string;
   pricePerSession: number;
-  roomFeePerSession: number;
   sessionsPerPackage: number;
   status: "APPROVED" | "PENDING" | "REJECTED";
   createdById: string | null;

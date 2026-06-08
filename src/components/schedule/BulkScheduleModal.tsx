@@ -24,7 +24,7 @@ type SchedulePattern = {
   slot: number;
 };
 
-export default function BulkScheduleModal({ classes, rooms = [] }: BulkScheduleModalProps) {
+export default function BulkScheduleModal({ classes, rooms = [], teachers = [] }: BulkScheduleModalProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -45,9 +45,14 @@ export default function BulkScheduleModal({ classes, rooms = [] }: BulkScheduleM
   const { confirm } = useConfirm();
 
   // TỰ ĐỘNG TÌM GIÁO VIÊN VÀ MÔN HỌC DỰA VÀO LỚP ĐANG CHỌN
+  const isFreelance = classId === "freelance";
   const selectedClassObj = classes.find(c => c.id === classId);
-  const assignedTeacherId = selectedClassObj?.teachers?.[0]?.teacherId || null;
-  const assignedTeacherName = selectedClassObj?.teachers?.[0]?.teacherName || "Chưa phân công";
+  const [freelanceTeacherId, setFreelanceTeacherId] = useState("");
+  
+  const assignedTeacherId = isFreelance ? freelanceTeacherId : (selectedClassObj?.teachers?.[0]?.teacherId || null);
+  const assignedTeacherName = isFreelance 
+    ? (teachers?.find(t => t.id === freelanceTeacherId)?.fullName || "Chưa chọn giáo viên")
+    : (selectedClassObj?.teachers?.[0]?.teacherName || "Chưa phân công");
 
   // Quét lịch trống
   useEffect(() => {
@@ -110,7 +115,7 @@ export default function BulkScheduleModal({ classes, rooms = [] }: BulkScheduleM
       title: "Xác nhận tạo lịch học",
       message: (
         <>
-          Bạn đang chuẩn bị tạo lịch cho lớp <strong>{selectedClassObj?.name}</strong> do giáo viên <strong>{assignedTeacherName}</strong> phụ trách tại phòng <strong>{rooms.find(r => r.id === roomId)?.name || "Chưa rõ"}</strong>.<br/><br/>
+          Bạn đang chuẩn bị tạo lịch {isFreelance ? "thuê phòng tự do" : <>cho lớp <strong>{selectedClassObj?.name}</strong></>} do giáo viên <strong>{assignedTeacherName}</strong> phụ trách tại phòng <strong>{rooms.find(r => r.id === roomId)?.name || "Chưa rõ"}</strong>.<br/><br/>
           Tần suất: <strong>{selectedPatterns.length} ca/tuần</strong>, từ ngày <strong>{new Date(startDate).toLocaleDateString('vi-VN')}</strong> đến ngày <strong>{new Date(endDate).toLocaleDateString('vi-VN')}</strong>.<br/><br/>
           Bạn có chắc chắn muốn tiếp tục?
         </>
@@ -121,7 +126,7 @@ export default function BulkScheduleModal({ classes, rooms = [] }: BulkScheduleM
       onConfirm: async () => {
         setIsLoading(true);
         const result = await createBulkSchedule({
-          classId,
+          classId: isFreelance ? null : classId,
           teacherId: assignedTeacherId, // Lấy ID giáo viên đã được trích xuất tự động
           roomId,
           patterns: selectedPatterns,
@@ -181,10 +186,14 @@ export default function BulkScheduleModal({ classes, rooms = [] }: BulkScheduleM
                   </label>
                   <select 
                     value={classId}
-                    onChange={(e) => setClassId(e.target.value)}
+                    onChange={(e) => {
+                      setClassId(e.target.value);
+                      if (e.target.value !== "freelance") setFreelanceTeacherId("");
+                    }}
                     className="w-full h-11 px-3 border border-slate-200 rounded-xl bg-slate-50 text-sm font-semibold focus:ring-2 focus:ring-blue-100 outline-none cursor-pointer"
                     required
                   >
+                    <option value="freelance" className="font-bold text-blue-700 bg-blue-50">🌟 Lớp Tự Do (Thuê phòng)</option>
                     {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                   </select>
                 </div>
@@ -194,9 +203,21 @@ export default function BulkScheduleModal({ classes, rooms = [] }: BulkScheduleM
                   <label className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
                     <UserCircle size={14}/> Giáo viên phụ trách
                   </label>
-                  <div className={`w-full h-11 px-3 border border-slate-200 rounded-xl flex items-center text-sm font-semibold ${assignedTeacherId ? "bg-blue-50 text-blue-700 border-blue-200" : "bg-rose-50 text-rose-600 border-rose-200"}`}>
-                     {assignedTeacherName}
-                  </div>
+                  {isFreelance ? (
+                    <select
+                      value={freelanceTeacherId}
+                      onChange={(e) => setFreelanceTeacherId(e.target.value)}
+                      className="w-full h-11 px-3 border border-slate-200 rounded-xl bg-slate-50 text-sm font-semibold focus:ring-2 focus:ring-blue-100 outline-none cursor-pointer"
+                      required
+                    >
+                      <option value="">-- Chọn Giáo Viên --</option>
+                      {teachers?.map(t => <option key={t.id} value={t.id}>{t.fullName}</option>)}
+                    </select>
+                  ) : (
+                    <div className={`w-full h-11 px-3 border border-slate-200 rounded-xl flex items-center text-sm font-semibold ${assignedTeacherId ? "bg-blue-50 text-blue-700 border-blue-200" : "bg-rose-50 text-rose-600 border-rose-200"}`}>
+                       {assignedTeacherName}
+                    </div>
+                  )}
                 </div>
               </div>
               

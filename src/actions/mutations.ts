@@ -373,13 +373,14 @@ export async function addStudentByTeacher(data: TeacherStudentPayload) {
 // 1B. ACTIONS CHO PHÒNG HỌC (ROOMS)
 // ==========================================
 
-export async function createRoom(data: { name: string; capacity?: number }) {
+export async function createRoom(data: { name: string; capacity?: number; feePerSession?: number }) {
   await checkSuperAdmin();
   try {
     await prisma.room.create({
       data: {
         name: data.name.trim(),
         capacity: typeof data.capacity === "number" ? data.capacity : null,
+        feePerSession: typeof data.feePerSession === "number" ? data.feePerSession : 0,
       },
     });
 
@@ -393,7 +394,7 @@ export async function createRoom(data: { name: string; capacity?: number }) {
 
 export async function updateRoom(
   id: string,
-  data: { name: string; capacity?: number; isActive?: boolean }
+  data: { name: string; capacity?: number; feePerSession?: number; isActive?: boolean }
 ) {
   await checkSuperAdmin();
   try {
@@ -402,6 +403,7 @@ export async function updateRoom(
       data: {
         name: data.name.trim(),
         capacity: typeof data.capacity === "number" ? data.capacity : null,
+        feePerSession: typeof data.feePerSession === "number" ? data.feePerSession : undefined,
         ...(typeof data.isActive === "boolean" ? { isActive: data.isActive } : {}),
       },
     });
@@ -788,7 +790,6 @@ export async function deleteTeacher(teacherId: string) {
 export async function createClass(data: { 
   name: string; 
   category: string; 
-  roomFeePerSession: number; 
   pricePerSession: number;
   sessionsPerPackage: number;
   teacherId?: string 
@@ -813,7 +814,6 @@ export async function createClass(data: {
       data: {
         name: data.name,
         category: data.category,
-        roomFeePerSession: data.roomFeePerSession,
         pricePerSession: data.pricePerSession,
         sessionsPerPackage: data.sessionsPerPackage,
         status,
@@ -860,7 +860,6 @@ export async function updateClass(
   data: { 
     name?: string; 
     category?: string; 
-    roomFeePerSession?: number; 
     pricePerSession?: number;
     sessionsPerPackage?: number;
     teacherId?: string 
@@ -876,7 +875,6 @@ export async function updateClass(
         data: {
           name: data.name,
           category: data.category,
-          roomFeePerSession: data.roomFeePerSession,
           pricePerSession: data.pricePerSession,
           sessionsPerPackage: data.sessionsPerPackage,
         },
@@ -904,7 +902,6 @@ export async function updateClassByTeacher(
   data: {
     name?: string;
     category?: string;
-    roomFeePerSession?: number;
     pricePerSession?: number;
     sessionsPerPackage?: number;
   }
@@ -931,7 +928,6 @@ export async function updateClassByTeacher(
       data: {
         ...(data.name !== undefined ? { name: data.name } : {}),
         ...(data.category !== undefined ? { category: data.category } : {}),
-        ...(data.roomFeePerSession !== undefined ? { roomFeePerSession: data.roomFeePerSession } : {}),
         ...(data.pricePerSession !== undefined ? { pricePerSession: data.pricePerSession } : {}),
         ...(data.sessionsPerPackage !== undefined ? { sessionsPerPackage: data.sessionsPerPackage } : {}),
         status: classRecord.status === ClassStatus.APPROVED ? ClassStatus.PENDING : classRecord.status,
@@ -1048,37 +1044,34 @@ export async function submitAttendanceAndCalculateFinance(
     }
 
     const classId = sessionInfo.classId;
-    const roomFee = sessionInfo.class.roomFeePerSession;
+    const roomFee = 0; // Lớp trung tâm không tính phí phòng
     const now = new Date();
     
     const studentIds = attendanceData.map((r) => r.studentId);
+
+    if (!classId) {
+      throw new Error("Lớp tự do (Freelance) không có danh sách học sinh để điểm danh.");
+    }
 
     let salaryCalculated = 0;
     let netIncome = 0;
 
     await prisma.$transaction(async (tx) => {
       // ==========================================
-      // BƯỚC 1: TÍNH LƯƠNG THEO CÔNG THỨC MỚI
+      // BƯỚC 1: TÍNH LƯƠNG GIÁO VIÊN DẠY CA NÀY
       // ==========================================
-      if (studentIds.length > 0) {
-        const enrollments = await tx.enrollment.findMany({
-          where: {
-            classId: classId,
-            studentId: { in: studentIds },
-          },
-          include: { class: true },
-        });
+      const classTeacher = await tx.classTeacher.findFirst({
+        where: {
+          classId: classId,
+          teacherId: teacherId,
+        },
+      });
 
-        enrollments.forEach((enrollment) => {
-          let phieuValue = 0;
-          if (enrollment.remainingSessions > 0) {
-            phieuValue = (enrollment.class.pricePerSession * enrollment.class.sessionsPerPackage) / enrollment.remainingSessions;
-          }
-          salaryCalculated += phieuValue;
-        });
+      if (classTeacher && classTeacher.salaryPerSession > 0) {
+        salaryCalculated = classTeacher.salaryPerSession;
       }
 
-      // Thực nhận = Tổng giá trị phiếu - Tiền phòng hôm nay
+      // Thực nhận = Lương dạy - Tiền phòng (nếu có)
       netIncome = salaryCalculated - roomFee;
 
       // ==========================================
@@ -1312,7 +1305,7 @@ export async function payTeacherSalary(teacherId: string, amount: number) {
 // ==========================================
 
 export async function requestRoomBooking(data: {
-  classId: string;
+  classId: string | null;
   roomId: string;
   date: string;
   slot: number;
@@ -1355,7 +1348,7 @@ export async function requestRoomBooking(data: {
 
     await prisma.classSession.create({
       data: {
-        classId: data.classId,
+        classId: data.classId === "freelance" ? null : data.classId,
         teacherId: teacherId,
         roomId: data.roomId,
         date: dateObj,
@@ -1374,14 +1367,135 @@ export async function requestRoomBooking(data: {
 export async function approveSessionRequest(sessionId: string) {
   await checkSuperAdmin();
   try {
-    await prisma.classSession.update({
-      where: { id: sessionId },
-      data: { status: "SCHEDULED" },
+    return await prisma.$transaction(async (tx) => {
+      const session = await tx.classSession.findUnique({
+        where: { id: sessionId },
+        include: { room: true }
+      });
+
+      if (!session) throw new Error("Không tìm thấy phiên đăng ký");
+
+      // Nếu là lớp tự do (Freelance), trừ tiền phòng NGAY LẬP TỨC khi duyệt
+      if (session.classId === null) {
+        const roomFee = session.room?.feePerSession ?? 0;
+        
+        if (roomFee > 0) {
+          await tx.user.update({
+            where: { id: session.teacherId },
+            data: { salaryBalance: { decrement: roomFee } }
+          });
+
+          await tx.roomRentalLog.create({
+            data: {
+              teacherId: session.teacherId,
+              classSessionId: session.id,
+              feeCalculated: roomFee,
+              status: "PAID"
+            }
+          });
+        }
+      }
+
+      await tx.classSession.update({
+        where: { id: sessionId },
+        data: { status: "SCHEDULED" },
+      });
+
+      return { success: true, error: undefined };
     });
-    return { success: true };
   } catch (error) {
     console.error("approveSessionRequest error:", error);
     return { success: false, error: "Lỗi duyệt phòng" };
+  }
+}
+
+export async function requestCancelSession(sessionId: string, reason: string) {
+  const userSession = await auth();
+  if (!userSession?.user) return { success: false, error: "Chưa đăng nhập" };
+
+  try {
+    const classSession = await prisma.classSession.findUnique({
+      where: { id: sessionId },
+    });
+
+    if (!classSession) return { success: false, error: "Không tìm thấy phiên đăng ký" };
+    
+    if (classSession.teacherId !== userSession.user.id && userSession.user.role !== "SUPER_ADMIN") {
+      return { success: false, error: "Không đủ quyền" };
+    }
+
+    if (classSession.status !== "SCHEDULED") {
+      return { success: false, error: "Chỉ có thể yêu cầu huỷ ca đã được duyệt (SCHEDULED)" };
+    }
+
+    await prisma.classSession.update({
+      where: { id: sessionId },
+      data: { isCancelRequested: true, cancelReason: reason }
+    });
+
+    return { success: true, error: undefined };
+  } catch (error) {
+    console.error("requestCancelSession error:", error);
+    return { success: false, error: "Lỗi khi gửi yêu cầu huỷ ca" };
+  }
+}
+
+export async function approveCancelSession(sessionId: string) {
+  await checkSuperAdmin();
+  try {
+    return await prisma.$transaction(async (tx) => {
+      const session = await tx.classSession.findUnique({
+        where: { id: sessionId }
+      });
+
+      if (!session) throw new Error("Không tìm thấy ca học");
+      if (!session.isCancelRequested) throw new Error("Ca này không có yêu cầu huỷ");
+
+      // Nếu là lớp tự do, hoàn tiền phòng
+      if (session.classId === null) {
+        const log = await tx.roomRentalLog.findFirst({
+          where: { classSessionId: session.id, status: "PAID" }
+        });
+
+        if (log) {
+          // Hoàn tiền vào ví
+          await tx.user.update({
+            where: { id: session.teacherId },
+            data: { salaryBalance: { increment: log.feeCalculated } }
+          });
+          
+          // Cập nhật trạng thái log thành REFUNDED
+          await tx.roomRentalLog.update({
+            where: { id: log.id },
+            data: { status: "REFUNDED" }
+          });
+        }
+      }
+
+      await tx.classSession.update({
+        where: { id: sessionId },
+        data: { status: "CANCELLED", isCancelRequested: false, cancelReason: null }
+      });
+
+      return { success: true, error: undefined };
+    });
+  } catch (error) {
+    console.error("approveCancelSession error:", error);
+    return { success: false, error: "Lỗi khi duyệt huỷ ca" };
+  }
+}
+
+export async function rejectCancelSession(sessionId: string) {
+  await checkSuperAdmin();
+  try {
+    await prisma.classSession.update({
+      where: { id: sessionId },
+      data: { isCancelRequested: false, cancelReason: null }
+    });
+    return { success: true, error: undefined };
+  } catch (error) {
+    console.error("rejectCancelSession error:", error);
+    return { success: false, error: "Lỗi khi từ chối huỷ ca" };
   }
 }
 

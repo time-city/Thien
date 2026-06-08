@@ -42,19 +42,34 @@ async function main() {
   })
 
   const teacher1 = await prisma.user.create({
-    data: { username: 'gv.nguyenvan', passwordHash: hashedPassword, fullName: 'Nguyễn Văn A', role: 'TEACHER' },
+    data: { username: 'gv.nguyenvan', passwordHash: hashedPassword, fullName: 'Nguyễn Văn A (Lương cứng)', role: 'TEACHER', salaryBalance: 500000 },
+  })
+
+  const teacher2 = await prisma.user.create({
+    data: { username: 'gv.tranb', passwordHash: hashedPassword, fullName: 'Trần Văn B (Freelance)', role: 'TEACHER', salaryBalance: 1500000 },
   })
 
   // 2. TẠO PHÒNG HỌC & LỚP HỌC
-  const room1 = await prisma.room.create({ data: { name: 'Phòng 101', capacity: 20 } })
+  const room1 = await prisma.room.create({ data: { name: 'Phòng 101', capacity: 20, feePerSession: 50000 } })
+  const room2 = await prisma.room.create({ data: { name: 'Phòng 202', capacity: 30, feePerSession: 80000 } })
+
+  // Lớp Lương Cứng: Giáo viên được trả lương cứng mỗi buổi.
   const classToan = await prisma.class.create({
-    data: { name: 'Toán Lớp 10 - Tăng Cường', category: 'Toán Học', roomFeePerSession: 50000, pricePerSession: 100000, sessionsPerPackage: 12, createdById: admin.id },
+    data: { name: 'Toán Lớp 10 - Tăng Cường', category: 'Toán Học', pricePerSession: 100000, sessionsPerPackage: 12, createdById: admin.id },
   })
+  
+  // Lớp Trung Tâm khác
   const classIelts = await prisma.class.create({
-    data: { name: 'IELTS Foundation', category: 'Tiếng Anh', roomFeePerSession: 80000, pricePerSession: 150000, sessionsPerPackage: 24, createdById: admin.id },
+    data: { name: 'IELTS Foundation', category: 'Tiếng Anh', pricePerSession: 150000, sessionsPerPackage: 24, createdById: admin.id },
   })
 
-  await prisma.classTeacher.create({ data: { classId: classToan.id, teacherId: teacher1.id, subModule: 'Đại Số' } })
+  // Phân công giáo viên
+  await prisma.classTeacher.create({ 
+    data: { classId: classToan.id, teacherId: teacher1.id, subModule: 'Đại Số', salaryPerSession: 200000 } 
+  })
+  await prisma.classTeacher.create({ 
+    data: { classId: classIelts.id, teacherId: teacher2.id, subModule: 'Listening', salaryPerSession: 0 } 
+  })
 
   // 3. DANH SÁCH NHIỀU HỌC SINH MẪU
   const listHocSinh = [
@@ -83,10 +98,10 @@ async function main() {
     const student = students[i]
 
     if (i === 0) {
-      // Trường hợp 1: Học sinh có 1 lớp cạn buổi học (chưa có hóa đơn)
+      // Trường hợp 1: Học sinh có 1 lớp cạn buổi học (chưa có hóa đơn) - Đăng ký lớp Freelance để test webhook
       await prisma.enrollment.create({
         data: {
-          studentId: student.id, classId: classToan.id, remainingSessions: 0, feeStatus: 'UNPAID', status: 'ACTIVE',
+          studentId: student.id, classId: classIelts.id, remainingSessions: 0, feeStatus: 'UNPAID', status: 'ACTIVE',
         }
       })
     } else if (i === 1) {
@@ -138,7 +153,13 @@ async function main() {
 
   // 5. TẠO LỊCH HỌC VÀ ĐIỂM DANH (Cho một lớp để test)
   const session1 = await prisma.classSession.create({
-    data: { classId: classToan.id, teacherId: teacher1.id, roomId: room1.id, date: new Date(), slot: 1, status: 'COMPLETED' }
+    data: { classId: classToan.id, teacherId: teacher1.id, roomId: room1.id, date: new Date(), slot: 1, status: 'COMPLETED', isPaid: false }
+  })
+
+  // Đã thanh toán lương thử nghiệm
+  await prisma.classSession.update({
+    where: { id: session1.id },
+    data: { isPaid: true }
   })
 
   for (let i = 0; i < students.length; i += 2) {
@@ -147,7 +168,16 @@ async function main() {
     })
   }
 
-  console.log('✅ Seeding thành công! Đã thêm 8 học sinh với đủ các trạng thái Hóa đơn.')
+  // TẠO CÁC BUỔI HỌC SCHEDULED ĐỂ USER TEST TÍNH NĂNG COMPLETED
+  await prisma.classSession.create({
+    data: { classId: classToan.id, teacherId: teacher1.id, roomId: room1.id, date: new Date(new Date().setDate(new Date().getDate() + 1)), slot: 2, status: 'SCHEDULED', isPaid: false }
+  })
+
+  await prisma.classSession.create({
+    data: { classId: classIelts.id, teacherId: teacher2.id, roomId: room2.id, date: new Date(new Date().setDate(new Date().getDate() + 2)), slot: 3, status: 'SCHEDULED', isPaid: false }
+  })
+
+  console.log('✅ Seeding thành công! Đã setup đầy đủ lớp Lương cứng, lớp Freelance, và ví giáo viên để test tính lương.')
 }
 
 main()

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Eye, Search, ChevronLeft, ChevronRight, Plus, Edit2, Trash2, X, Tag, DollarSign, CalendarDays, Layers, Loader2 } from "lucide-react";
+import { CurrencyInput } from "@/components/ui/CurrencyInput";
 import { createClass, updateClass, deleteClass, getClassDeletionImpact } from "@/actions/mutations";
 import { ClassData } from "@/actions/queries";
 import { toast } from "sonner";
@@ -12,7 +13,7 @@ function formatVnCurrency(amount: number) {
   return Number(amount || 0).toLocaleString("vi-VN");
 }
 
-export type TeacherOption = { id: string; fullName: string };
+export type TeacherOption = { id: string; fullName: string; role?: string };
 
 export default function ClassesClient({
   initialClasses,
@@ -29,9 +30,9 @@ export default function ClassesClient({
   const [className, setClassName] = useState("");
   const [category, setCategory] = useState("");
   const [teacherId, setTeacherId] = useState<string>("");
-  const [roomFeePerSession, setRoomFeePerSession] = useState<number>(0);
   const [pricePerSession, setPricePerSession] = useState<number>(0);
   const [sessionsPerPackage, setSessionsPerPackage] = useState<number>(12);
+  const [salaryPerSession, setSalaryPerSession] = useState<number>(0);
 
   // ====== STATE CHUNG & HOOK ======
   const [loading, setLoading] = useState(false);
@@ -54,9 +55,9 @@ export default function ClassesClient({
     setClassName("");
     setCategory("");
     setTeacherId("");
-    setRoomFeePerSession(0);
     setPricePerSession(0);
     setSessionsPerPackage(12);
+    setSalaryPerSession(0);
     setIsClassModalOpen(true);
   };
 
@@ -65,9 +66,9 @@ export default function ClassesClient({
     setClassName(c.name);
     setCategory(c.category);
     setTeacherId(c.teachers?.[0]?.teacherId || "");
-    setRoomFeePerSession(c.roomFeePerSession ?? 0);
     setPricePerSession(c.pricePerSession ?? 0);
     setSessionsPerPackage(c.sessionsPerPackage ?? 12);
+    setSalaryPerSession(c.teachers?.[0]?.salaryPerSession ?? 0);
     setIsClassModalOpen(true);
   };
 
@@ -108,10 +109,10 @@ export default function ClassesClient({
     const payload = {
       name: className,
       category,
-      roomFeePerSession,
       pricePerSession,
       sessionsPerPackage,
       teacherId: teacherId || undefined, 
+      salaryPerSession: salaryPerSession || 0,
     };
 
     if (editingClass) {
@@ -234,7 +235,6 @@ export default function ClassesClient({
                 <th className="py-3 px-4 w-32 hidden md:table-cell">Danh mục</th>
                 <th className="py-3 px-4 hidden lg:table-cell">Học phí/phiếu</th>
                 <th className="py-3 px-4 hidden lg:table-cell">Số buổi/Khóa</th>
-                <th className="py-3 px-4 hidden lg:table-cell">Phí phòng/Ca</th>
                 <th className="py-3 px-4 hidden sm:table-cell">Giáo viên</th>
                 <th className="py-3 px-4 w-28 sm:w-32 text-center">Thao tác</th>
               </tr>
@@ -276,11 +276,6 @@ export default function ClassesClient({
                     <td className="py-2.5 px-4 hidden lg:table-cell">
                       <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-purple-50 text-purple-700 text-xs font-bold border border-purple-200 whitespace-nowrap">
                         <CalendarDays size={14} /> {c.sessionsPerPackage ?? 0} buổi
-                      </span>
-                    </td>
-                    <td className="py-2.5 px-4 hidden lg:table-cell">
-                      <span className="text-sm font-bold text-blue-700 whitespace-nowrap">
-                        {formatVnCurrency(c.roomFeePerSession ?? 0)}đ
                       </span>
                     </td>
                     <td className="py-2.5 px-4 hidden sm:table-cell">
@@ -586,12 +581,11 @@ export default function ClassesClient({
                   <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Học phí / Phiếu</label>
                   <div className="relative">
                     <DollarSign size={16} className="absolute left-3 top-3 text-slate-400" />
-                    <input
+                    <CurrencyInput
                       required
-                      type="number"
                       min={0}
                       value={pricePerSession}
-                      onChange={(e) => setPricePerSession(Number(e.target.value))}
+                      onChange={(val) => setPricePerSession(val)}
                       className="w-full h-10 pl-9 pr-3 border border-slate-200 rounded-xl bg-slate-50 text-sm font-semibold focus:ring-2 focus:ring-blue-100 outline-none transition-all"
                     />
                   </div>
@@ -614,25 +608,17 @@ export default function ClassesClient({
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Phí phòng / Ca (VNĐ)</label>
-                <div className="relative">
-                  <DollarSign size={16} className="absolute left-3 top-3 text-slate-400" />
-                  <input
-                    required
-                    type="number"
-                    min={0}
-                    value={roomFeePerSession}
-                    onChange={(e) => setRoomFeePerSession(Number(e.target.value))}
-                    className="w-full h-10 pl-9 pr-3 border border-slate-200 rounded-xl bg-slate-50 text-sm font-semibold focus:ring-2 focus:ring-blue-100 outline-none transition-all"
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-1.5">
                 <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Giáo viên phụ trách</label>
                 <select
                   value={teacherId}
-                  onChange={(e) => setTeacherId(e.target.value)}
+                  onChange={(e) => {
+                    const selectedId = e.target.value;
+                    setTeacherId(selectedId);
+                    const tRole = teachers.find(t => t.id === selectedId)?.role;
+                    if (tRole === "SUPER_ADMIN") {
+                      setSalaryPerSession(0);
+                    }
+                  }}
                   className="w-full h-10 px-3 border border-slate-200 rounded-xl bg-slate-50 text-sm font-semibold focus:ring-2 focus:ring-blue-100 outline-none transition-all cursor-pointer"
                 >
                   <option value="">--- Chưa phân công ---</option>
@@ -643,6 +629,25 @@ export default function ClassesClient({
                   ))}
                 </select>
               </div>
+
+              {teacherId && (
+                <div className="space-y-1.5">
+                  <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                    Lương cứng / Ca dạy {teachers.find(t => t.id === teacherId)?.role === "SUPER_ADMIN" ? "(Admin miễn lương)" : ""}
+                  </label>
+                  <div className="relative">
+                    <DollarSign size={16} className="absolute left-3 top-3 text-slate-400" />
+                    <CurrencyInput
+                      required={teachers.find(t => t.id === teacherId)?.role === "TEACHER"}
+                      disabled={teachers.find(t => t.id === teacherId)?.role === "SUPER_ADMIN"}
+                      min={0}
+                      value={salaryPerSession}
+                      onChange={(val) => setSalaryPerSession(val)}
+                      className="w-full h-10 pl-9 pr-3 border border-slate-200 rounded-xl bg-slate-50 text-sm font-semibold focus:ring-2 focus:ring-blue-100 outline-none transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                    />
+                  </div>
+                </div>
+              )}
 
               <div className="mt-6 pt-4 border-t border-slate-100 flex justify-end gap-3">
                 <button

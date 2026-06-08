@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { X, Download, FileText, Loader2, Banknote, CreditCard } from "lucide-react";
 import { getStudentCombinedReport, StudentCombinedReport } from "@/actions/report";
 import { processStudentPayment } from "@/actions/invoice";
+import { CurrencyInput } from "@/components/ui/CurrencyInput";
 import { toast } from "sonner";
 import { toPng } from "html-to-image";
 
@@ -59,16 +60,19 @@ export default function CourseReportModal({
     // Polling database để kiểm tra trạng thái thanh toán từ Webhook
     const interval = setInterval(async () => {
       try {
-        const inv = await import("@/actions/invoice").then(m => m.checkInvoiceStatus(studentId));
-        if (!inv) return;
+        const debt = await import("@/actions/invoice").then(m => m.getTotalDebt(studentId));
         
-        if (inv.status === "PAID") {
+        if (debt <= 0) {
           clearInterval(interval);
-          toast.success("Thanh toán thành công qua mã QR!");
+          toast.success("Thanh toán thành công toàn bộ nợ qua mã QR!");
           onClose(); // Đóng modal tự động
           window.location.reload(); // Refresh toàn trang cho chắc chắn ăn dữ liệu
-        } else if (inv.status === "UNDERPAID") {
-          // Bỏ qua, tiếp tục đợi thanh toán thêm hoặc user tự đóng
+        } else if (debt < initialDebt) {
+          // Bắt được giao dịch chuyển thiếu tiền (UNDERPAID) -> Xử lý như tiền mặt
+          clearInterval(interval);
+          toast.success(`Đã nhận thanh toán một phần qua mã QR! Còn nợ: ${debt.toLocaleString("vi-VN")} đ`);
+          onClose();
+          window.location.reload();
         }
       } catch (e) {
         // Im lặng bỏ qua nếu lỗi mạng
@@ -136,7 +140,7 @@ export default function CourseReportModal({
   };
 
   const handlePayCash = async () => {
-    const amount = parseInt(cashAmount);
+    const amount = Number(cashAmount);
     if (isNaN(amount) || amount <= 0) return toast.error("Số tiền không hợp lệ");
 
     setIsProcessing(true);
@@ -206,11 +210,10 @@ export default function CourseReportModal({
             <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 mt-4">
               <label className="text-xs font-bold text-emerald-700 uppercase mb-2 block">Xác Nhận Thu Tiền Mặt</label>
               <div className="flex flex-col sm:flex-row gap-2">
-                <input
-                  type="number"
+                <CurrencyInput
                   placeholder="Nhập số tiền..."
                   value={cashAmount}
-                  onChange={(e) => setCashAmount(e.target.value)}
+                  onChange={(val) => setCashAmount(val.toString())}
                   className="flex-1 w-full h-10 px-3 border border-emerald-200 rounded-lg text-sm outline-none focus:border-emerald-400"
                 />
                 <button

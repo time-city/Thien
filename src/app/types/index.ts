@@ -108,7 +108,6 @@ export type ClassData = {
   id: string;
   name: string;
   category: string;
-  roomFeePerSession: number;
   pricePerSession: number;
   sessionsPerPackage: number;
   teachers: { teacherId: string; teacherName: string }[];

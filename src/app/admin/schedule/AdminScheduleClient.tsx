@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { format, addDays, startOfWeek, isSameDay, addWeeks } from "date-fns";
-import { ChevronLeft, ChevronRight, CheckCircle, XCircle } from "lucide-react";
+import { ChevronLeft, ChevronRight, CheckCircle, XCircle, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { approveSessionRequest, rejectSessionRequest, approveCancelSession, rejectCancelSession } from "@/actions/mutations";
 import type { RoomData, ScheduleItemData } from "@/actions/queries";
@@ -65,13 +65,17 @@ export default function AdminScheduleClient({
     return { startOfThisWeek: startOfWeek(currentDate, { weekStartsOn: 1 }) };
   }, [currentDate]);
 
+  const [isPending, startTransition] = useTransition();
+
   const handleRoomChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const roomId = e.target.value;
-    if (roomId) {
-      router.push(`/admin/schedule?roomId=${roomId}`);
-    } else {
-      router.push(`/admin/schedule`);
-    }
+    startTransition(() => {
+      if (roomId) {
+        router.push(`/admin/schedule?roomId=${roomId}`);
+      } else {
+        router.push(`/admin/schedule`);
+      }
+    });
   };
 
   const handleApprove = async () => {
@@ -146,11 +150,12 @@ export default function AdminScheduleClient({
           <p className="text-sm text-slate-500 mt-1">Quản lý và duyệt lịch dạy của giáo viên</p>
         </div>
 
-        <div className="flex flex-col sm:flex-row gap-3">
+        <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
           <select
             value={selectedRoomId}
+            disabled={isPending}
             onChange={handleRoomChange}
-            className="border border-slate-300 rounded-lg px-4 py-2 bg-white text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+            className="border border-slate-300 rounded-lg px-4 py-2 bg-white text-sm focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-50"
           >
             <option value="">-- Chọn Phòng --</option>
             {rooms.map((room) => (
@@ -159,6 +164,7 @@ export default function AdminScheduleClient({
               </option>
             ))}
           </select>
+          {isPending && <Loader2 className="w-5 h-5 animate-spin text-blue-600" />}
         </div>
       </div>
 

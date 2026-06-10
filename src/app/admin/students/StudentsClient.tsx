@@ -114,7 +114,7 @@ export default function StudentsClient({
 
   const downloadSampleCsv = () => {
     const BOM = "\uFEFF"; 
-    const csvContent = BOM + "fullname,phonestudent,parentname,phoneparent,gender\nNguyễn Văn A,0901234567,Nguyễn Văn B,0987654321,Nam\nTrần Thị C,,Trần Văn D,,Nữ";
+    const csvContent = BOM + "HỌC SINH,,,THÔNG TIN HỌC SINH,,,,,THÔNG TIN PHỤ HUYNH,,THỜI GIAN HỌC,,TRẠNG THÁI HỌC PHÍ,\nSTT,Họ và tên,Lớp,\"Số điện thoại\nHọc sinh\",Trường,Ngày sinh,Giới tính,Trạng thái,Họ và tên Phụ huynh,Số điện thoại Phụ huynh,Ngày bắt đầu,Ngày kết thúc,Phiếu đang sử dụng,Trạng thái học phí\n1,Nguyễn Văn A,Lớp 9,0901234567,THCS Lê Lợi,15/05/2012,Nam,,Nguyễn Văn B,0987654321,01/06/2026,,Phiếu 1,Đã thanh toán\n2,Trần Thị C,Lớp 9,,THCS Nguyễn Bỉnh Khiêm,20/10/2012,Nữ,,Trần Văn D,0912345678,01/06/2026,,Phiếu 1,";
     
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);

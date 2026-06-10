@@ -31,17 +31,25 @@ async function autoCreateInvoices(studentId: string) {
     const existingInv = await prisma.invoice.findFirst({
       where: { enrollmentId: enr.id, status: { in: ["PENDING", "UNDERPAID"] } }
     });
+    
+    const correctAmount = enr.class.pricePerSession;
+
     if (!existingInv) {
-      const amount = enr.class.pricePerSession * enr.class.sessionsPerPackage;
       await prisma.invoice.create({
         data: {
           enrollmentId: enr.id,
           studentId: studentId,
-          expectedAmount: amount,
+          expectedAmount: correctAmount,
           amountPaid: 0,
           status: "PENDING",
           transactionCode: `AUTO-${Date.now()}`
         }
+      });
+    } else if (existingInv.status === "PENDING" && existingInv.expectedAmount !== correctAmount) {
+      // Fix already auto-generated invoices that had wrong amount
+      await prisma.invoice.update({
+        where: { id: existingInv.id },
+        data: { expectedAmount: correctAmount }
       });
     }
   }

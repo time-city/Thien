@@ -144,7 +144,7 @@ export async function getStudentCombinedReport(studentId: string): Promise<Stude
   for (const enr of enrollments) {
     // Check if there's already a pending invoice specifically for this enrollment
     const inv = pendingInvoices.find(i => !i.isDebt && i.enrollmentId === enr.id);
-    const amount = inv ? inv.expectedAmount : (enr.class.pricePerSession * enr.class.sessionsPerPackage);
+    const amount = inv ? inv.expectedAmount : enr.class.pricePerSession;
     
     items.push({
       type: "TUITION",

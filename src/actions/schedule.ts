@@ -71,12 +71,10 @@ export async function createBulkSchedule(data: {
 
     // 2. LƯU VÀO DB NẾU AN TOÀN
     await prisma.$transaction(async (tx) => {
-      // Dùng create để lấy ID tạo roomRentalLog
-      const createdSessions = [];
-      for (const data of sessionsToCreate) {
-        const session = await tx.classSession.create({ data });
-        createdSessions.push(session);
-      }
+      // Dùng createManyAndReturn để chèn toàn bộ dữ liệu 1 lần và trả về ID
+      const createdSessions = await tx.classSession.createManyAndReturn({
+        data: sessionsToCreate
+      });
 
       // Nếu là lớp tự do, trừ tiền và tạo log
       if (classId === null) {

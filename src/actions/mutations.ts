@@ -251,7 +251,7 @@ export async function importStudentsCsv(data: {
         });
       }
     }, {
-      timeout: 30000, // Tăng timeout lên 30 giây thay vì 5 giây mặc định
+      timeout: 60000, // Tăng timeout lên 60 giây cho các file CSV cực lớn
     });
 
     revalidatePath("/admin/students");

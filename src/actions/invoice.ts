@@ -123,8 +123,8 @@ export async function processStudentPayment(
               }
             });
 
-            // Chỉ cộng buổi học MỘT LẦN DUY NHẤT nếu feeStatus đang là UNPAID hoặc OVERDUE
-            if (trEnrollment.feeStatus !== "PAID") {
+            // Cộng buổi học khi hóa đơn này được thanh toán HOÀN TẤT
+            if (newStatus === "PAID" && invoice.status !== "PAID") {
               await tx.enrollment.update({
                 where: { id: trEnrollment.id },
                 data: {

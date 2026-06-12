@@ -12,6 +12,7 @@ import {
   Clock,
   Loader2,
   TrendingUp,
+  MessageCircle,
 } from "lucide-react";
 
 import { useSession } from "next-auth/react";
@@ -22,7 +23,7 @@ function formatVnd(amount: number) {
   return new Intl.NumberFormat("vi-VN").format(Math.round(amount)) + "đ";
 }
 
-type TabType = "profile" | "wallet";
+type TabType = "profile" | "wallet" | "zalo";
 
 function formatDateVn(d: Date | string) {
   const dateObj = typeof d === "string" ? new Date(d) : d;
@@ -36,9 +37,11 @@ function formatDateVn(d: Date | string) {
 export default function TeacherSettingsPage({
   teacherInfo,
   teachingHistory = [],
+  isAdmin = false,
 }: {
   teacherInfo: TeacherInfo;
   teachingHistory: TeachingHistory[];
+  isAdmin?: boolean;
 }) {
   const { update } = useSession();
   const [activeTab, setActiveTab] = useState<TabType>("profile");
@@ -136,6 +139,19 @@ export default function TeacherSettingsPage({
             <Wallet size={16} strokeWidth={2.5} />
             <span>Thu nhập</span>
           </button>
+          {isAdmin && (
+            <button
+              onClick={() => setActiveTab("zalo")}
+              className={`flex-1 md:w-32 flex justify-center items-center gap-2 py-2 text-sm font-semibold rounded-lg transition-all ${
+                activeTab === "zalo"
+                  ? "bg-white text-slate-900 shadow-sm ring-1 ring-slate-200/50"
+                  : "text-slate-500 hover:text-slate-700"
+              }`}
+            >
+              <MessageCircle size={16} strokeWidth={2.5} />
+              <span>Zalo Bot</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -317,6 +333,102 @@ export default function TeacherSettingsPage({
           </div>
         </div>
       )}
+      {/* Tab 3: Zalo Bot Connection */}
+      {isAdmin && activeTab === "zalo" && (
+        <ZaloConnectionWidget />
+      )}
+    </div>
+  );
+}
+
+function ZaloConnectionWidget() {
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [qrUrl, setQrUrl] = useState<string | null>(null);
+  const [statusMessage, setStatusMessage] = useState<string>('Đang kiểm tra trạng thái...');
+  
+  // Let me just use standard let for poll.
+  useEffect(() => {
+    let pollInterval: NodeJS.Timeout | null = null;
+    const checkStatus = async () => {
+      try {
+        const response = await fetch('http://localhost:8080/status');
+        const data = await response.json().catch(() => null);
+        const isConnected = data?.isLoggedIn || data?.status === 'ready' || data?.status === 'logged_in';
+        if (isConnected) {
+          setIsLoggedIn(true);
+          setStatusMessage('✅ Đã kết nối thành công với Zalo Bot!');
+          setQrUrl(null);
+        } else {
+          setIsLoggedIn(false);
+          setStatusMessage(data?.message || 'Chưa kết nối. Vui lòng lấy mã QR để đăng nhập.');
+        }
+      } catch (error) {
+        setIsLoggedIn(false);
+        setStatusMessage('❌ Không thể kết nối tới server Zalo Bot (http://localhost:8080)');
+      }
+    };
+
+    checkStatus();
+
+    if (qrUrl && !isLoggedIn) {
+      pollInterval = setInterval(checkStatus, 3000);
+    }
+
+    return () => {
+      if (pollInterval) clearInterval(pollInterval);
+    };
+  }, [qrUrl, isLoggedIn]);
+
+  const handleGetQR = () => {
+    setQrUrl(`http://localhost:8080/login?t=${Date.now()}`);
+    setStatusMessage('Vui lòng quét mã QR trên bằng ứng dụng Zalo (hoặc Zalo Zavi) để đăng nhập.');
+  };
+
+  return (
+    <div className="bg-white border border-slate-200 rounded-2xl p-5 md:p-7 shadow-sm">
+      <div className="flex flex-col items-center justify-center space-y-6 py-4 animate-in fade-in zoom-in-95 duration-500">
+        <div className={`p-4 rounded-full shadow-inner ${isLoggedIn ? 'bg-emerald-100 text-emerald-600' : 'bg-blue-100 text-blue-600'}`}>
+          {isLoggedIn ? (
+             <CheckCircle2 size={32} />
+          ) : (
+             <MessageCircle size={32} />
+          )}
+        </div>
+        
+        <div className="text-center space-y-2">
+          <h3 className="text-xl font-extrabold text-slate-800 tracking-tight">{isLoggedIn ? 'Zalo Bot Đã Sẵn Sàng' : 'Kết Nối Zalo Bot'}</h3>
+          <p className="text-slate-500 text-sm">{statusMessage}</p>
+        </div>
+
+        {!isLoggedIn && (
+          <div className="flex flex-col items-center gap-5 w-full max-w-sm mt-2">
+            <button 
+              type="button"
+              onClick={handleGetQR}
+              className="w-full py-2.5 px-4 bg-slate-900 hover:bg-slate-800 text-white rounded-lg font-bold text-sm shadow-md transition-all flex items-center justify-center gap-2"
+            >
+              <MessageCircle size={16} />
+              Lấy mã QR Đăng Nhập
+            </button>
+            
+            {qrUrl && (
+              <div className="p-4 bg-white border-2 border-dashed border-slate-200 rounded-xl flex flex-col items-center gap-3 w-full shadow-sm">
+                <p className="text-xs font-bold text-slate-500 uppercase tracking-widest text-center">Quét mã bằng Zalo</p>
+                <div className="p-2 bg-white border border-slate-100 shadow-sm rounded-lg">
+                  <img src={qrUrl} alt="Zalo Login QR" className="w-40 h-40 object-contain" />
+                </div>
+                <div className="flex items-center gap-2 text-[11px] font-medium text-blue-600 mt-1">
+                  <span className="relative flex h-2.5 w-2.5">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-blue-500"></span>
+                  </span>
+                  Đang chờ quét / xác nhận trên Zalo...
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

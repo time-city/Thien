@@ -2,7 +2,7 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   output: "standalone",
-  allowedDevOrigins: ['192.168.1.121', '192.168.1.146', '192.168.100.38'],
+  allowedDevOrigins: ['192.168.1.121', '192.168.1.146', '192.168.100.44', '192.168.1.222', '192.168.100.38'],
   turbopack: {
     root: "/Users/admin/Documents/Thien",
   },

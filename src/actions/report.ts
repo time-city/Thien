@@ -75,11 +75,13 @@ export async function getStudentCourseReport(studentId: string, classId: string)
     pricePerSession: classData.pricePerSession,
     pendingInvoice,
     logs: logs.map(log => ({
+      id: log.id,
       date: log.classSession.date,
       slot: log.classSession.slot,
       attendanceStatus: log.attendanceStatus,
       homeworkStatus: log.homeworkStatus,
       note: log.note,
+      isReportSent: log.isReportSent,
       teacherName: log.classSession.teacher.fullName
     }))
   };
@@ -173,6 +175,7 @@ export async function getStudentCombinedReport(studentId: string): Promise<Stude
   const logs = await prisma.attendanceLog.findMany({
     where: {
       studentId: studentId,
+      isReportSent: false,
       classSession: { classId: { in: classIds } }
     },
     include: {
@@ -181,6 +184,16 @@ export async function getStudentCombinedReport(studentId: string): Promise<Stude
     orderBy: { classSession: { date: "asc" } }
   });
 
+  // Deduplicate logs by date and slot (or classSessionId) to prevent duplicates from bad test data
+  const uniqueLogs = [];
+  const seenSessions = new Set();
+  for (const log of logs) {
+    if (!seenSessions.has(log.classSessionId)) {
+      seenSessions.add(log.classSessionId);
+      uniqueLogs.push(log);
+    }
+  }
+
   return {
     studentId,
     studentName: student.fullName,
@@ -188,7 +201,8 @@ export async function getStudentCombinedReport(studentId: string): Promise<Stude
     phoneParent: student.phoneParent,
     items,
     totalExpectedAmount,
-    logs: logs.map(log => ({
+    logs: uniqueLogs.map(log => ({
+      id: log.id,
       className: log.classSession.class?.name || "Lớp Tự Do",
       date: log.classSession.date,
       slot: log.classSession.slot,

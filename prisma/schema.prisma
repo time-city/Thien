@@ -41,7 +41,7 @@ enum SessionStatus {
   PENDING       // 🟢 MỚI: Giáo viên xin lịch, chờ duyệt
   SCHEDULED
   COMPLETED
-  CANCELLED
+    CANCELLED
   @@schema("public")
 }
 
@@ -310,6 +310,7 @@ model AttendanceLog {
   attendanceStatus AttendanceStatus
   homeworkStatus   HomeworkStatus?
   note             String?
+  isReportSent     Boolean          @default(false)
   createdAt        DateTime         @default(now())
 
   classSession     ClassSession     @relation(fields: [classSessionId], references: [id], onDelete: Cascade)

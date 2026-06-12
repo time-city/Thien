@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { X, Download, FileText, Loader2, Banknote, CreditCard } from "lucide-react";
+import { X, Download, FileText, Loader2, Banknote, CreditCard, Send, AlertTriangle } from "lucide-react";
 import { getStudentCombinedReport, StudentCombinedReport } from "@/actions/report";
 import { processStudentPayment } from "@/actions/invoice";
 import { CurrencyInput } from "@/components/ui/CurrencyInput";
@@ -23,6 +23,10 @@ export default function CourseReportModal({
   const [loading, setLoading] = useState(false);
   const [discountPercent, setDiscountPercent] = useState<number>(0);
   const [exporting, setExporting] = useState(false);
+
+  // Zalo Sending States
+  const [confirmSendOpen, setConfirmSendOpen] = useState(false);
+  const [sendingZalo, setSendingZalo] = useState(false);
 
   const [isProcessing, setIsProcessing] = useState(false);
   const [cashAmount, setCashAmount] = useState<string>("");
@@ -109,6 +113,56 @@ export default function CourseReportModal({
       toast.error("Lỗi khi xuất ảnh PNG");
     } finally {
       setExporting(false);
+    }
+  };
+
+  const handleSendZalo = async () => {
+    const element = document.getElementById("report-export-area");
+    if (!element || !report) return;
+
+    if (!report.phoneParent) {
+      toast.error("Học sinh này chưa có số điện thoại phụ huynh!");
+      setConfirmSendOpen(false);
+      return;
+    }
+
+    setSendingZalo(true);
+    try {
+      const dataUrl = await toPng(element, {
+        cacheBust: true,
+        pixelRatio: 2,
+        backgroundColor: "#ffffff",
+        style: {
+          transform: "scale(1)",
+          transformOrigin: "top left"
+        }
+      });
+
+      const res = await fetch(dataUrl);
+      const blob = await res.blob();
+      const file = new File([blob], `BaoCao_${studentName.replace(/\s+/g, "_")}.png`, { type: "image/png" });
+
+      const formData = new FormData();
+      formData.append("target", report.phoneParent);
+      formData.append("image", file);
+      formData.append("message", `Trung tâm gửi phụ huynh báo cáo học tập và thanh toán tổng hợp của bé ${studentName}`);
+
+      const response = await fetch("http://localhost:8080/send-image", {
+        method: "POST",
+        body: formData
+      });
+
+      if (response.ok) {
+        toast.success("Đã gửi báo cáo qua Zalo thành công!");
+        setConfirmSendOpen(false);
+      } else {
+        toast.error("Lỗi khi gửi báo cáo qua Zalo (Server lỗi)!");
+      }
+    } catch (error) {
+      console.error(error);
+      toast.error("Không thể kết nối với Zalo Bot (http://localhost:8080)");
+    } finally {
+      setSendingZalo(false);
     }
   };
 
@@ -233,6 +287,14 @@ export default function CourseReportModal({
 
           <div className="mt-6 pt-4 border-t border-slate-200">
             <button
+              onClick={() => setConfirmSendOpen(true)}
+              disabled={loading || !report}
+              className="w-full h-12 mb-3 bg-green-600 hover:bg-green-700 text-white rounded-xl font-bold text-sm transition-all shadow-sm flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Send size={18} />
+              Gửi báo cáo qua Zalo
+            </button>
+            <button
               onClick={handleExportPng}
               disabled={loading || exporting || !report}
               className="w-full h-12 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-sm transition-all shadow-sm flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
@@ -240,7 +302,7 @@ export default function CourseReportModal({
               {exporting ? <Loader2 size={18} className="animate-spin" /> : <Download size={18} />}
               {exporting ? "Đang xuất ảnh..." : "Tải báo cáo ảnh (PNG)"}
             </button>
-            <button onClick={onClose} disabled={loading} className="w-full mt-2 h-10 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-xl font-bold text-sm transition-all hidden md:block disabled:opacity-50 disabled:cursor-not-allowed">
+            <button onClick={onClose} disabled={loading} className="w-full mt-3 h-10 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-xl font-bold text-sm transition-all hidden md:block disabled:opacity-50 disabled:cursor-not-allowed">
               Đóng
             </button>
           </div>
@@ -340,6 +402,8 @@ export default function CourseReportModal({
                           <th className="py-3 px-4 font-bold text-slate-600 border-b border-slate-200">Lớp</th>
                           <th className="py-3 px-4 font-bold text-slate-600 border-b border-slate-200 w-24">Ngày</th>
                           <th className="py-3 px-4 font-bold text-slate-600 border-b border-slate-200 text-center">Điểm danh</th>
+                          <th className="py-3 px-4 font-bold text-slate-600 border-b border-slate-200 text-center">Bài tập</th>
+                          <th className="py-3 px-4 font-bold text-slate-600 border-b border-slate-200">Đánh giá</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
@@ -357,6 +421,21 @@ export default function CourseReportModal({
                                 }`}>
                                 {log.attendanceStatus === "PRESENT" ? "Có mặt" : log.attendanceStatus === "ABSENT" ? "Vắng" : "Có phép"}
                               </span>
+                            </td>
+                            <td className="py-2 px-4 text-center">
+                              {log.homeworkStatus ? (
+                                <span className={`text-[10px] font-bold px-2 py-1 rounded-md uppercase ${
+                                  log.homeworkStatus === "GOOD" ? "bg-blue-100 text-blue-700" :
+                                  log.homeworkStatus === "DONE" ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700"
+                                }`}>
+                                  {log.homeworkStatus === "GOOD" ? "Tốt" : log.homeworkStatus === "DONE" ? "Đã làm" : "Chưa làm"}
+                                </span>
+                              ) : (
+                                <span className="text-slate-400 text-xs">-</span>
+                              )}
+                            </td>
+                            <td className="py-2 px-4 text-slate-600 text-xs max-w-[200px] break-words">
+                              {log.note || <span className="text-slate-400 italic">Không có</span>}
                             </td>
                           </tr>
                         ))}
@@ -378,6 +457,51 @@ export default function CourseReportModal({
           )}
         </div>
       </div>
+
+      {/* MODAL XÁC NHẬN GỬI ZALO */}
+      {confirmSendOpen && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col animate-in zoom-in-95 duration-200">
+            <div className="p-5 flex items-center gap-4 border-b border-slate-100 bg-amber-50/50">
+              <div className="w-10 h-10 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center shrink-0">
+                <AlertTriangle size={20} />
+              </div>
+              <div>
+                <h3 className="text-lg font-extrabold text-slate-900">Xác nhận gửi Zalo</h3>
+                <p className="text-sm text-slate-500 font-medium mt-0.5">Học sinh: {studentName}</p>
+              </div>
+            </div>
+            <div className="p-6">
+              <p className="text-slate-700 font-medium mb-2 text-center text-base leading-relaxed">
+                Bạn đã kiểm tra kĩ nội dung báo cáo và số tiền thanh toán bên phải chưa?
+              </p>
+              {!report?.phoneParent && (
+                <div className="mt-4 p-3 bg-red-50 text-red-700 rounded-lg border border-red-200 text-sm font-bold flex items-center gap-2">
+                  <X size={16} /> Học sinh này chưa có số điện thoại phụ huynh!
+                </div>
+              )}
+            </div>
+            <div className="p-4 border-t border-slate-100 flex justify-end gap-3 bg-slate-50">
+              <button 
+                onClick={() => setConfirmSendOpen(false)} 
+                disabled={sendingZalo} 
+                className="px-5 py-2.5 rounded-xl font-bold text-sm text-slate-600 hover:bg-slate-200 border border-slate-300 transition-colors"
+              >
+                Hủy lại, để tôi xem
+              </button>
+              <button 
+                onClick={handleSendZalo} 
+                disabled={sendingZalo || !report?.phoneParent} 
+                className="px-5 py-2.5 rounded-xl font-bold text-sm bg-green-600 text-white hover:bg-green-700 transition-colors shadow-sm flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {sendingZalo ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
+                {sendingZalo ? "Đang gửi..." : "Đã xem kĩ, Gửi ngay!"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+

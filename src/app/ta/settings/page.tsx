@@ -23,6 +23,7 @@ export default async function SettingsPage() {
     <TeacherSettingsPage 
       teacherInfo={data.teacherInfo} 
       teachingHistory={data.teachingHistory} 
+      isAdmin={session.user?.role === "SUPER_ADMIN" || session.user?.role === "ADMIN"}
     />
   );
 }

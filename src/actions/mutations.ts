@@ -1077,6 +1077,11 @@ export async function submitAttendanceAndCalculateFinance(
       // ==========================================
       // BƯỚC 2: GHI NHẬN ĐIỂM DANH & CHỐT CA
       // ==========================================
+      // Xóa các log cũ (nếu có do giáo viên đã bấm lưu lẻ từng bạn trước đó) để tránh trùng lặp
+      await tx.attendanceLog.deleteMany({
+        where: { classSessionId }
+      });
+
       await tx.attendanceLog.createMany({
         data: attendanceData.map((row) => ({
           classSessionId,
@@ -1578,5 +1583,31 @@ export async function transferStudentClass(studentId: string, oldClassId: string
   } catch (error: any) {
     console.error("Lỗi khi chuyển lớp:", error);
     return { success: false, error: error.message || "Lỗi hệ thống khi chuyển lớp" };
+  }
+}
+
+export async function markReportAsSent(attendanceLogId: string) {
+  try {
+    await prisma.attendanceLog.update({
+      where: { id: attendanceLogId },
+      data: { isReportSent: true }
+    });
+    return { success: true };
+  } catch (error) {
+    console.error("markReportAsSent error:", error);
+    return { success: false, error: "Lỗi cập nhật trạng thái đã gửi báo cáo" };
+  }
+}
+
+export async function markMultipleReportsAsSent(attendanceLogIds: string[]) {
+  try {
+    await prisma.attendanceLog.updateMany({
+      where: { id: { in: attendanceLogIds } },
+      data: { isReportSent: true }
+    });
+    return { success: true };
+  } catch (error) {
+    console.error("markMultipleReportsAsSent error:", error);
+    return { success: false, error: "Lỗi cập nhật trạng thái đã gửi báo cáo" };
   }
 }

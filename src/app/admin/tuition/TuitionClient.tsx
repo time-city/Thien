@@ -5,9 +5,11 @@ import { useAuth } from "@/lib/AuthContext";
 import { QRCodeSVG } from "qrcode.react";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
-import { Loader2, TrendingUp, CreditCard, Wallet, CheckCircle2 } from "lucide-react";
+import { Loader2, TrendingUp, CreditCard, Wallet, CheckCircle2, Send, MessageCircle } from "lucide-react";
 import type { TuitionStudentData } from "@/actions/queries";
-import { payTeacherSalary, processStudentTuitionPayment } from "@/actions/mutations";
+import { payTeacherSalary, processStudentTuitionPayment, markMultipleReportsAsSent } from "@/actions/mutations";
+import { getStudentCombinedReport, StudentCombinedReport } from "@/actions/report";
+import { toPng } from "html-to-image";
 import CourseReportModal from "../students/CourseReportModal";
 
 export type TeacherFinanceViewData = {
@@ -62,6 +64,97 @@ export default function TuitionClient({
   const [reportModalOpen, setReportModalOpen] = useState(false);
   const [reportData, setReportData] = useState<{ studentId: string; studentName: string; classId: string; className: string } | null>(null);
 
+  // Checkbox selection
+  const [selectedStudentIds, setSelectedStudentIds] = useState<string[]>([]);
+  const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.checked) {
+      setSelectedStudentIds(studentsWithLowSessions.map((s) => s.id));
+    } else {
+      setSelectedStudentIds([]);
+    }
+  };
+  const handleSelectStudent = (id: string) => {
+    setSelectedStudentIds((prev) =>
+      prev.includes(id) ? prev.filter((sId) => sId !== id) : [...prev, id]
+    );
+  };
+
+  // Bulk send logic
+  const [isBulkSending, setIsBulkSending] = useState(false);
+  const [bulkSendProgress, setBulkSendProgress] = useState({ current: 0, total: 0, currentName: "" });
+  const [hiddenReportData, setHiddenReportData] = useState<any>(null); // To render hidden report for capturing
+  const [showConfirmBulkSend, setShowConfirmBulkSend] = useState(false);
+
+  const handleBulkSendClick = () => {
+    if (selectedStudentIds.length === 0) return toast.error("Vui lòng chọn ít nhất 1 học sinh!");
+    setShowConfirmBulkSend(true);
+  };
+
+  const startBulkSend = async () => {
+    setIsBulkSending(true);
+    let count = 0;
+    
+    for (const studentId of selectedStudentIds) {
+      setBulkSendProgress({ current: count, total: selectedStudentIds.length, currentName: "Đang tải dữ liệu..." });
+      
+      try {
+        const data = await getStudentCombinedReport(studentId);
+        if (!data || !data.phoneParent) {
+          console.warn("Bỏ qua học sinh vì không có dữ liệu hoặc số điện thoại:", studentId);
+          count++;
+          continue; 
+        }
+        
+        setBulkSendProgress({ current: count, total: selectedStudentIds.length, currentName: data.studentName });
+        
+        // Set data and wait for DOM to render it
+        setHiddenReportData(data);
+        await new Promise(r => setTimeout(r, 3000)); // Cần 3 giây để load QR Code VietQR và render Font chữ
+        
+        const element = document.getElementById("hidden-report-export-area");
+        if (element) {
+          const dataUrl = await toPng(element, { 
+            cacheBust: true, 
+            pixelRatio: 2, 
+            backgroundColor: "#ffffff",
+            style: { transform: "scale(1)", transformOrigin: "top left" }
+          });
+          
+          const res = await fetch(dataUrl);
+          const blob = await res.blob();
+          const file = new File([blob], `BaoCao_${data.studentName.replace(/\s+/g, "_")}.png`, { type: "image/png" });
+          
+          const formData = new FormData();
+          formData.append("target", data.phoneParent);
+          formData.append("image", file);
+          formData.append("message", `Trung tâm gửi phụ huynh báo cáo học tập và thanh toán tổng hợp của bé ${data.studentName}`);
+
+          const response = await fetch("http://localhost:8080/send-image", { method: "POST", body: formData });
+          if (!response.ok) {
+             console.error("Lỗi gửi cho", data.studentName);
+          } else {
+             const logIds = data.logs.map((l: any) => l.id).filter(Boolean);
+             if (logIds.length > 0) {
+               await markMultipleReportsAsSent(logIds);
+             }
+          }
+        }
+      } catch (err) {
+        console.error("Lỗi khi gửi cho học sinh", studentId, err);
+      }
+      
+      count++;
+      setBulkSendProgress({ current: count, total: selectedStudentIds.length, currentName: "Chờ..." });
+      // Nghỉ 3 giây để tránh bị spam / rate limit của Zalo API
+      await new Promise(r => setTimeout(r, 3000));
+    }
+    
+    setIsBulkSending(false);
+    setHiddenReportData(null);
+    setSelectedStudentIds([]);
+    toast.success("Đã hoàn tất quá trình gửi báo cáo Zalo hàng loạt!");
+  };
+
   // --- LOGIC THANH TOÁN LƯƠNG ---
   const handlePaySalary = async () => {
     if (!selectedTeacher || selectedTeacher.salaryBalance <= 0) return;
@@ -113,10 +206,34 @@ export default function TuitionClient({
 
       {/* TAB 1: THU HỌC PHÍ */}
       {activeTab === "STUDENT" && (
+        <div className="space-y-4">
+          <div className="flex justify-between items-center bg-blue-50 p-3 rounded-lg border border-blue-100">
+            <div className="text-sm font-medium text-blue-800">
+              Đã chọn <span className="font-bold">{selectedStudentIds.length}</span> học sinh
+            </div>
+            <button
+              onClick={handleBulkSendClick}
+              disabled={selectedStudentIds.length === 0 || isBulkSending}
+              className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 transition-colors shadow-sm"
+            >
+              {isBulkSending ? <Loader2 size={16} className="animate-spin" /> : <MessageCircle size={16} />}
+              {isBulkSending ? `Đang gửi (${bulkSendProgress.current}/${bulkSendProgress.total})` : "Gửi Báo Cáo Zalo Hàng Loạt"}
+            </button>
+          </div>
+
         <div className="bg-white border text-center border-slate-200 rounded-xl overflow-hidden shadow-sm">
           <table className="w-full text-left text-sm text-slate-700">
             <thead className="bg-slate-50 border-b border-slate-200 text-slate-900">
               <tr>
+                <th className="py-3 px-4 w-10 text-center">
+                  <input
+                    type="checkbox"
+                    className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                    checked={selectedStudentIds.length === studentsWithLowSessions.length && studentsWithLowSessions.length > 0}
+                    disabled={isBulkSending}
+                    onChange={handleSelectAll}
+                  />
+                </th>
                 <th className="py-3 px-4 font-bold">Học sinh</th>
                 <th className="py-3 px-4 font-bold hidden sm:table-cell">Lớp</th>
                 <th className="py-3 px-4 font-bold">Môn cảnh báo</th>
@@ -125,7 +242,16 @@ export default function TuitionClient({
             </thead>
             <tbody className="divide-y divide-slate-100">
               {studentsWithLowSessions.map((student) => (
-                <tr key={student.id} className="hover:bg-slate-50/50 transition-colors">
+                <tr key={student.id} className={`hover:bg-slate-50/50 transition-colors ${selectedStudentIds.includes(student.id) ? "bg-blue-50/30" : ""}`}>
+                  <td className="py-3 px-4 text-center">
+                    <input
+                      type="checkbox"
+                      className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                      checked={selectedStudentIds.includes(student.id)}
+                      disabled={isBulkSending}
+                      onChange={() => handleSelectStudent(student.id)}
+                    />
+                  </td>
                   <td className="py-3 px-4">
                     <div className="font-semibold text-slate-900">{student.fullName}</div>
                     <div className="text-xs text-slate-500">ID: {student.id.substring(0, 8)}</div>
@@ -170,7 +296,8 @@ export default function TuitionClient({
                         setReportData({ studentId: student.id, studentName: student.fullName, classId: "", className: "" });
                         setReportModalOpen(true);
                       }}
-                      className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-1.5 px-4 rounded shadow-sm transition-colors text-xs whitespace-nowrap"
+                      disabled={isBulkSending}
+                      className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold py-1.5 px-4 rounded shadow-sm transition-colors text-xs whitespace-nowrap"
                     >
                       Xử lý Thu Phí
                     </button>
@@ -179,13 +306,14 @@ export default function TuitionClient({
               ))}
               {studentsWithLowSessions.length === 0 && (
                 <tr>
-                  <td colSpan={4} className="py-10 text-center text-slate-500 font-medium">
+                  <td colSpan={5} className="py-10 text-center text-slate-500 font-medium">
                     Không có học sinh nào cạn buổi học cần thu học phí lúc này.
                   </td>
                 </tr>
               )}
             </tbody>
           </table>
+        </div>
         </div>
       )}
 
@@ -250,8 +378,8 @@ export default function TuitionClient({
 
                   <button
                     onClick={() => setSelectedTeacher(teacher)}
-                    disabled={!hasBalance}
-                    className={`w-full md:w-auto px-4 py-2 rounded-lg font-bold shadow-sm transition-all text-xs flex items-center justify-center gap-1.5 whitespace-nowrap ${hasBalance ? "bg-slate-900 hover:bg-slate-800 text-white" : "bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200"
+                    disabled={!hasBalance || isPayingSalary}
+                    className={`w-full md:w-auto px-4 py-2 rounded-lg font-bold shadow-sm transition-all text-xs flex items-center justify-center gap-1.5 whitespace-nowrap ${hasBalance && !isPayingSalary ? "bg-slate-900 hover:bg-slate-800 text-white" : "bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200"
                       }`}
                   >
                     Thanh Toán
@@ -304,6 +432,42 @@ export default function TuitionClient({
         </div>
       )}
 
+      {/* MODAL XÁC NHẬN GỬI HÀNG LOẠT */}
+      {showConfirmBulkSend && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden flex flex-col animate-in zoom-in-95 duration-200">
+            <div className="p-4 md:p-5 border-b border-slate-100 bg-slate-50">
+              <h3 className="text-lg font-extrabold text-slate-900">Xác nhận gửi báo cáo</h3>
+            </div>
+            <div className="p-6 text-center text-slate-600 text-sm">
+              Bạn đã kiểm tra kỹ tình hình học tập và đánh giá của <span className="font-bold text-blue-600">{selectedStudentIds.length} học sinh</span> đã chọn chưa?
+              <br /><br />
+              Nếu đã chắc chắn, hệ thống sẽ tự động tổng hợp dữ liệu, tạo ảnh QR code và gửi qua Zalo tới phụ huynh. <br/> <strong className="text-rose-500">Vui lòng không tắt trang trong lúc đang gửi.</strong>
+            </div>
+            <div className="p-4 border-t border-slate-100 flex justify-end gap-3 bg-white">
+              <button 
+                onClick={() => setShowConfirmBulkSend(false)} 
+                disabled={isBulkSending} 
+                className="px-5 py-2.5 rounded-xl font-bold text-sm text-slate-600 hover:bg-slate-100 border border-slate-200 transition-colors w-full sm:w-auto disabled:opacity-50"
+              >
+                Hủy
+              </button>
+              <button 
+                onClick={() => {
+                  setShowConfirmBulkSend(false);
+                  toast.info("Bắt đầu gửi báo cáo hàng loạt, vui lòng không đóng trang...");
+                  startBulkSend();
+                }} 
+                disabled={isBulkSending} 
+                className="px-5 py-2.5 rounded-xl font-bold text-sm bg-blue-600 text-white hover:bg-blue-700 transition-colors shadow-sm w-full sm:w-auto flex justify-center items-center gap-2 disabled:opacity-50"
+              >
+                Gửi Báo Cáo
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* MODAL XUẤT BÁO CÁO */}
       {reportData && (
         <CourseReportModal
@@ -312,6 +476,142 @@ export default function TuitionClient({
           studentId={reportData.studentId}
           studentName={reportData.studentName}
         />
+      )}
+
+      {/* INVISIBLE REPORT RENDERER FOR BULK SENDING */}
+      {hiddenReportData && (
+        <div className="fixed -left-[9999px] -top-[9999px] opacity-0 pointer-events-none">
+          <div id="hidden-report-export-area" className="bg-white w-[800px] overflow-hidden border border-slate-200" style={{ fontFamily: "sans-serif" }}>
+            {/* Header Bill */}
+            <div className="bg-blue-600 p-6 text-white text-center">
+              <h1 className="text-2xl font-black uppercase tracking-wider mb-1">TRUNG TÂM GIÁO DỤC</h1>
+              <p className="text-blue-100 text-sm font-medium">BÁO CÁO HỌC TẬP & THANH TOÁN TỔNG HỢP</p>
+            </div>
+
+            {/* Info Section */}
+            <div className="p-6 border-b border-slate-100">
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                  <p className="text-slate-500 mb-1 text-xs uppercase font-bold tracking-wider">Học sinh</p>
+                  <p className="font-extrabold text-slate-800 text-lg">{hiddenReportData.studentName}</p>
+                </div>
+                <div>
+                  <p className="text-slate-500 mb-1 text-xs uppercase font-bold tracking-wider">Mã Tra Cứu</p>
+                  <p className="font-extrabold text-slate-800 text-lg">{hiddenReportData.studentId.substring(0, 8)}</p>
+                </div>
+              </div>
+            </div>
+            
+            {/* QR Section */}
+            <div className="bg-slate-50 p-6 flex items-center justify-between border-t border-slate-100">
+              <div className="flex items-center gap-4">
+                <div className="p-1 bg-white rounded-xl shadow-sm border border-slate-200">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img 
+                    src={`https://qr.sepay.vn/img?bank=MBBank&acc=0700107189999&amount=${hiddenReportData.totalExpectedAmount}&des=${encodeURIComponent(`HT${hiddenReportData.studentId}`)}&template=`} 
+                    alt="QR Code" 
+                    crossOrigin="anonymous" 
+                    className="w-24 h-24 object-contain" 
+                  />
+                </div>
+                <div>
+                  <p className="font-bold text-slate-800 flex items-center gap-2">
+                    Quét mã thanh toán
+                    <span className="bg-emerald-100 text-emerald-700 text-[10px] uppercase font-black px-2 py-0.5 rounded-full">
+                      VietQR
+                    </span>
+                  </p>
+                  <p className="text-sm text-slate-500 mt-1 mb-2">Học sinh: <span className="font-mono">{hiddenReportData.studentName}</span></p>
+                </div>
+              </div>
+            </div>
+
+            {/* Items Section */}
+            <div className="p-6">
+              <h3 className="text-sm font-bold text-slate-800 mb-4 uppercase tracking-wider border-l-4 border-blue-500 pl-3">Chi tiết các khoản thu</h3>
+              <div className="space-y-3">
+                {hiddenReportData.items.map((item: any, idx: number) => (
+                  <div key={idx} className="flex justify-between items-center p-3 border border-slate-100 rounded-lg bg-slate-50/50">
+                    <div>
+                      <p className="font-bold text-slate-800 text-sm">
+                        {item.type === "TUITION" ? `Học phí lớp: ${item.className}` : "Thanh toán nợ cũ (Kỳ trước)"}
+                      </p>
+                      {item.type === "TUITION" && (
+                        <p className="text-xs text-slate-500 mt-0.5">Gia hạn thêm {item.sessionsPerPackage} buổi học</p>
+                      )}
+                    </div>
+                    <div className="font-extrabold text-blue-700">
+                      {item.amount.toLocaleString('vi-VN')} đ
+                    </div>
+                  </div>
+                ))}
+                <div className="flex justify-between items-center pt-3 border-t border-slate-200 mt-3 px-3">
+                  <span className="font-bold text-slate-800 uppercase text-sm">Tổng thanh toán (chưa giảm giá):</span>
+                  <span className="text-lg font-black text-blue-600">{hiddenReportData.totalExpectedAmount.toLocaleString('vi-VN')} đ</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Logs Section (chỉ hiện nếu có log) */}
+            {hiddenReportData.logs.length > 0 && (
+              <div className="p-6 pt-0">
+                <h3 className="text-sm font-bold text-slate-800 mb-4 uppercase tracking-wider border-l-4 border-emerald-500 pl-3">Tình hình học tập (Các lớp đang học)</h3>
+                <div className="overflow-hidden border border-slate-200 rounded-xl">
+                  <table className="w-full text-left text-sm">
+                    <thead className="bg-slate-50">
+                      <tr>
+                        <th className="py-3 px-4 font-bold text-slate-600 border-b border-slate-200">Lớp</th>
+                        <th className="py-3 px-4 font-bold text-slate-600 border-b border-slate-200 w-24">Ngày</th>
+                        <th className="py-3 px-4 font-bold text-slate-600 border-b border-slate-200 text-center">Điểm danh</th>
+                        <th className="py-3 px-4 font-bold text-slate-600 border-b border-slate-200 text-center">Bài tập</th>
+                        <th className="py-3 px-4 font-bold text-slate-600 border-b border-slate-200">Đánh giá</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {hiddenReportData.logs.slice(-5).map((log: any, i: number) => (
+                        <tr key={i} className="hover:bg-slate-50/50">
+                          <td className="py-2 px-4 text-slate-700 font-medium text-xs line-clamp-1">
+                            {log.className}
+                          </td>
+                          <td className="py-2 px-4 text-slate-500 text-xs whitespace-nowrap">
+                            {new Date(log.date).toLocaleDateString("vi-VN")}
+                          </td>
+                          <td className="py-2 px-4 text-center">
+                            <span className={`text-[10px] font-bold px-2 py-1 rounded-md uppercase ${log.attendanceStatus === "PRESENT" ? "bg-emerald-100 text-emerald-700" :
+                                log.attendanceStatus === "ABSENT" ? "bg-rose-100 text-rose-700" : "bg-amber-100 text-amber-700"
+                              }`}>
+                              {log.attendanceStatus === "PRESENT" ? "Có mặt" : log.attendanceStatus === "ABSENT" ? "Vắng" : "Có phép"}
+                            </span>
+                          </td>
+                          <td className="py-2 px-4 text-center">
+                            {log.homeworkStatus ? (
+                              <span className={`text-[10px] font-bold px-2 py-1 rounded-md uppercase ${
+                                log.homeworkStatus === "GOOD" ? "bg-blue-100 text-blue-700" :
+                                log.homeworkStatus === "DONE" ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700"
+                              }`}>
+                                {log.homeworkStatus === "GOOD" ? "Tốt" : log.homeworkStatus === "DONE" ? "Đã làm" : "Chưa làm"}
+                              </span>
+                            ) : (
+                              <span className="text-slate-400 text-xs">-</span>
+                            )}
+                          </td>
+                          <td className="py-2 px-4 text-slate-600 text-xs max-w-[200px] break-words">
+                            {log.note || <span className="text-slate-400 italic">Không có</span>}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* Footer text */}
+            <div className="bg-slate-800 text-slate-300 text-xs py-3 px-6 text-center">
+              Cảm ơn Quý phụ huynh đã đồng hành cùng Trung tâm!
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

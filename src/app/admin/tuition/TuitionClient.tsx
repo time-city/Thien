@@ -508,7 +508,7 @@ export default function TuitionClient({
                 <div className="p-1 bg-white rounded-xl shadow-sm border border-slate-200">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img 
-                    src={`https://qr.sepay.vn/img?bank=MBBank&acc=0700107189999&amount=${hiddenReportData.totalExpectedAmount}&des=${encodeURIComponent(`HT${hiddenReportData.studentId}`)}&template=`} 
+                    src={`https://qr.sepay.vn/img?bank=MBBank&acc=0700107189999&amount=${hiddenReportData.totalExpectedAmount}&des=${encodeURIComponent(`HT${hiddenReportData.phoneParent}`)}&template=`} 
                     alt="QR Code" 
                     crossOrigin="anonymous" 
                     className="w-24 h-24 object-contain" 

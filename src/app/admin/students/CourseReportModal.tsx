@@ -169,8 +169,8 @@ export default function CourseReportModal({
   const originalPrice = report ? report.totalExpectedAmount : 0;
   const finalPrice = Math.max(0, originalPrice - (originalPrice * discountPercent) / 100);
 
-  // Generate VietQR URL sử dụng studentId thay vì invoiceId
-  const descString = `HT${studentId}`;
+  // Generate VietQR URL sử dụng phoneParent thay vì studentId/invoiceId
+  const descString = report?.phoneParent ? `HT${report.phoneParent}` : `HT${studentId}`;
   const qrUrl = `https://qr.sepay.vn/img?bank=MBBank&acc=0700107189999&amount=${finalPrice}&des=${encodeURIComponent(descString)}&template=`;
   
   // Log ra console để tiện việc test Webhook

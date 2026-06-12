@@ -2,10 +2,10 @@ const crypto = require('crypto');
 
 // --- CẤU HÌNH ---
 // URL của webhook (thay bằng URL vercel nếu muốn test trên mạng)
-const WEBHOOK_URL = 'http://192.168.100.44:3000/api/sepay/webhook';
+const WEBHOOK_URL = 'https://thien-three.vercel.app/api/sepay/webhook';
 // Thay bằng ID của HÓA ĐƠN (Invoice ID) đang ở trạng thái PENDING để test (36 ký tự)
 // Hoặc điền Mã Enrollment / SĐT cũ vào đây để test chức năng dự phòng (Fallback)
-const IDENTIFIER = 'HT5ad70303-2c55-43b5-93e5-11b0c226823e';
+const IDENTIFIER = 'HT488d755d-ac14-472d-bb95-837013256b11';
 // Secret key của bạn (COPY TỪ FILE .env VÀO ĐÂY)
 const SECRET_KEY = 'whsec_isxY69ps1U0M7m0mlMWDR7srSLZsg1kk';
 

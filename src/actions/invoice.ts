@@ -170,6 +170,34 @@ export async function processStudentPayment(
 
     revalidatePath("/admin/tuition");
     revalidatePath("/admin/history/tuition");
+
+    // Gửi thông báo Zalo sau khi thanh toán hoàn tất
+    try {
+      const student = await prisma.student.findUnique({ where: { id: studentId } });
+      if (student && student.phoneParent) {
+        // Tính lại tổng nợ sau khi đã thanh toán
+        const debt = await getTotalDebt(studentId);
+        
+        const formatMoney = (m: number) => new Intl.NumberFormat('vi-VN').format(m) + 'đ';
+        const methodVi = paymentMethod === "CASH" ? "Tiền mặt" : "Chuyển khoản (Mã QR/SePay)";
+        
+        let msg = `Trung tâm đã nhận được số tiền ${formatMoney(amountPaid)} thông qua ${methodVi} cho học sinh ${student.fullName}. Cảm ơn Quý phụ huynh!`;
+        if (debt > 0) {
+          msg += `\nLưu ý: Học phí của bé vẫn còn nợ ${formatMoney(debt)}. Quý phụ huynh vui lòng thanh toán nốt nhé!`;
+        } else {
+          msg += `\nHọc phí của bé hiện tại đã được thanh toán đầy đủ.`;
+        }
+
+        await fetch("http://localhost:8080/send", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ target: student.phoneParent, message: msg })
+        });
+      }
+    } catch (zaloErr) {
+      console.error("Không thể gửi thông báo Zalo xác nhận thanh toán:", zaloErr);
+    }
+
     return { success: true };
   } catch (error) {
     console.error("Lỗi xác nhận thanh toán:", error);

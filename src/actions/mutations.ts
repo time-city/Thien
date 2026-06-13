@@ -792,7 +792,8 @@ export async function createClass(data: {
   category: string; 
   pricePerSession: number;
   sessionsPerPackage: number;
-  teacherId?: string 
+  teacherId?: string;
+  salaryPerSession?: number;
 }) {
   try {
     const session = await auth();
@@ -822,6 +823,7 @@ export async function createClass(data: {
           ? {
               create: {
                 teacherId: assignedTeacherId,
+                salaryPerSession: data.salaryPerSession || 0,
               },
             }
           : undefined,
@@ -862,7 +864,8 @@ export async function updateClass(
     category?: string; 
     pricePerSession?: number;
     sessionsPerPackage?: number;
-    teacherId?: string 
+    teacherId?: string;
+    salaryPerSession?: number;
   }
 ) {
   await checkSuperAdmin();
@@ -885,6 +888,7 @@ export async function updateClass(
           data: {
             classId: id,
             teacherId: data.teacherId,
+            salaryPerSession: data.salaryPerSession || 0,
           },
         });
       }

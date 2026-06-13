@@ -432,19 +432,13 @@ export default function TuitionClient({
               <p className="text-sm text-slate-500 mt-0.5 font-medium">Người nhận: <span className="font-bold text-slate-700">{selectedTeacher.fullName}</span></p>
             </div>
             <div className="p-6 flex flex-col items-center">
-              <div className="mb-6 text-center w-full">
-                <p className="text-sm font-semibold text-slate-500 mb-1">Số tiền cần chuyển khoản</p>
+              <div className="mb-2 text-center w-full">
+                <p className="text-sm font-semibold text-slate-500 mb-1">Số tiền cần thanh toán</p>
                 <div className="p-4 bg-blue-50 rounded-xl border border-blue-100 mt-2">
                   <p className="text-3xl font-extrabold text-blue-600 tracking-tight">{formatCurrency(selectedTeacher.salaryBalance)}</p>
                 </div>
               </div>
-              <div className="w-full flex flex-col items-center p-5 bg-slate-50 rounded-2xl border border-slate-100">
-                <p className="text-[11px] font-bold text-slate-500 mb-3 uppercase tracking-widest text-center">Bạn có thể quét QR để CK nhanh <br /> (Nếu GV cung cấp STK)</p>
-                <div className="bg-white p-3 rounded-xl shadow-sm border border-slate-200">
-                  <QRCodeSVG value={`THANH TOAN LUONG ${selectedTeacher.fullName.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase()}`} size={160} level="H" />
-                </div>
-              </div>
-              <p className="text-xs text-slate-400 mt-4 text-center italic">* Bấm xác nhận bên dưới sau khi bạn đã chuyển khoản thành công để đưa số dư ví giáo viên về 0đ.</p>
+              <p className="text-xs text-slate-400 mt-4 text-center italic">* Bấm xác nhận bên dưới sau khi bạn đã chi trả thành công để đưa số dư ví giáo viên về 0đ.</p>
             </div>
             <div className="p-4 border-t border-slate-100 flex justify-end gap-3 bg-white">
               <button onClick={() => setSelectedTeacher(null)} disabled={isPayingSalary} className="px-5 py-2.5 rounded-xl font-bold text-sm text-slate-600 hover:bg-slate-100 border border-slate-200 transition-colors w-full sm:w-auto">Hủy</button>

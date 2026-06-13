@@ -220,11 +220,17 @@ export default function CourseReportModal({
   };
 
   return (
-    <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="bg-white w-full max-w-4xl rounded-2xl shadow-xl flex flex-col md:flex-row overflow-hidden animate-in zoom-in-95 duration-200 max-h-[90vh]">
+    <div 
+      className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-sm animate-in fade-in duration-200"
+      onClick={onClose}
+    >
+      <div 
+        className="bg-white w-full max-w-4xl rounded-2xl shadow-xl flex flex-col md:flex-row overflow-hidden animate-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto md:overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+      >
 
         {/* Phần Control Panel */}
-        <div className="w-full md:w-1/3 bg-slate-50 border-b md:border-b-0 md:border-r border-slate-200 p-5 flex flex-col h-full overflow-y-auto">
+        <div className="w-full md:w-1/3 bg-slate-50 border-b md:border-b-0 md:border-r border-slate-200 p-5 flex flex-col md:h-full shrink-0 md:overflow-y-auto">
           <div className="flex justify-between items-center mb-6">
             <h2 className="text-lg font-extrabold text-slate-800 flex items-center gap-2">
               <FileText size={20} className="text-blue-600" /> Thanh Toán
@@ -310,7 +316,7 @@ export default function CourseReportModal({
         </div>
 
         {/* Phần Preview Export */}
-        <div className="w-full md:w-2/3 bg-slate-200 p-4 overflow-y-auto flex justify-center items-start">
+        <div className="w-full md:w-2/3 bg-slate-200 p-4 md:h-full shrink-0 flex justify-center items-start md:overflow-y-auto">
           {loading ? (
             <div className="flex flex-col items-center justify-center h-64 text-slate-500">
               <Loader2 size={32} className="animate-spin mb-4 text-blue-500" />

@@ -273,13 +273,14 @@ export default function WeeklyCalendar({ userRole, sessions }: WeeklyCalendarPro
       </div>
 
       {/* CALENDAR GRID CONTAINER 
-        - Sử dụng overflow-x-auto để có thể cuộn ngang trên màn hình nhỏ.
-        - Đặt max-width hoặc để full width tùy layout tổng thể.
+        - Desktop: Bảng ngang (hidden trên mobile)
+        - Mobile: Dạng danh sách dọc (hidden trên desktop)
       */}
-      <div className={`w-full overflow-x-auto border rounded-xl bg-white shadow-sm transition-colors scrollbar-thin scrollbar-thumb-slate-300 scrollbar-track-slate-100 ${isSelectMode ? "border-blue-400 ring-2 ring-blue-100" : "border-slate-200"}`}>
+      <div className={`w-full border rounded-xl bg-white shadow-sm transition-colors ${isSelectMode ? "border-blue-400 ring-2 ring-blue-100" : "border-slate-200"}`}>
         
-        {/* Đặt min-width để ép cái bảng không bị co dúm lại, đảm bảo các ô luôn có kích thước dễ đọc */}
-        <div className="min-w-[900px]">
+        {/* === DESKTOP VIEW === */}
+        <div className="hidden lg:block w-full overflow-x-auto scrollbar-thin scrollbar-thumb-slate-300 scrollbar-track-slate-100">
+          <div className="min-w-[900px]">
           
           {/* HEADER ROW (Các ngày trong tuần) */}
           <div className="grid grid-cols-[80px_repeat(7,1fr)] sm:grid-cols-[100px_repeat(7,1fr)] bg-slate-50 border-b border-slate-200">
@@ -428,7 +429,146 @@ export default function WeeklyCalendar({ userRole, sessions }: WeeklyCalendarPro
               </div>
             ))}
           </div>
+        </div>
+        </div>
 
+        {/* === MOBILE VIEW === */}
+        <div className="block lg:hidden flex flex-col divide-y divide-slate-200">
+          {DAYS.map((day) => {
+            const dateForCell = addDays(startOfThisWeek, day.id - 1);
+            const dateISO = toISODate(dateForCell);
+            const isToday = isSameDay(dateForCell, new Date());
+
+            return (
+              <div key={day.id} className={`flex flex-col ${isToday ? "bg-blue-50/20" : ""}`}>
+                {/* Header Ngày */}
+                <div className="p-3 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
+                  <span className={`font-extrabold text-sm ${isToday ? "text-blue-700" : "text-slate-900"}`}>
+                    {day.id <= 6 ? `Thứ ${day.id + 1}` : "Chủ Nhật"}
+                  </span>
+                  <span className={`text-xs font-semibold ${isToday ? "text-blue-500" : "text-slate-500"}`}>
+                    {format(dateForCell, "dd/MM/yyyy")}
+                  </span>
+                </div>
+
+                {/* Các Ca Học */}
+                <div className="flex flex-col divide-y divide-slate-100">
+                  {SHIFTS.map((shift) => {
+                    const cellSessions: CellSession[] = sessions
+                      .filter((s) => {
+                        const dISO = toISODate(s.date);
+                        const sDayId = dayOfWeekMon1Sun7(s.date);
+                        return dISO === dateISO && sDayId === day.id && s.slot === shift.id;
+                      })
+                      .map((s) => {
+                        const room = s.roomName || "Chưa xếp phòng";
+                        const key = `${dateISO}|${s.slot}|${room}`;
+                        const attendanceConflict = (conflictCounts.get(key) ?? 0) > 1;
+                        return {
+                          id: s.id,
+                          classId: s.classId,
+                          className: s.className,
+                          teacherFullName: s.teacherFullName,
+                          room,
+                          dateISO,
+                          slot: s.slot,
+                          attendanceConflict,
+                          isCompleted: Boolean((s as any).isAttendanceSubmitted) || s.status === "COMPLETED",
+                          isPending: s.status === "PENDING",
+                          teacherId: s.teacherId,
+                        };
+                      })
+                      .sort((a, b) => a.className.localeCompare(b.className));
+
+                    if (cellSessions.length === 0) {
+                      return null; // Có thể ẩn ca trống trên mobile cho gọn, hoặc hiện "Trống"
+                    }
+
+                    return (
+                      <div key={shift.id} className="p-3 flex gap-3">
+                        {/* Thông tin Ca */}
+                        <div className="w-16 shrink-0 flex flex-col pt-1">
+                          <span className="font-bold text-slate-800 text-xs">{shift.label}</span>
+                          <span className="text-[10px] text-slate-500 font-medium">{shift.time}</span>
+                        </div>
+
+                        {/* Danh sách lớp */}
+                        <div className="flex-1 flex flex-col gap-2">
+                          {cellSessions.map((ev) => {
+                            const isSelected = selectedIds.has(ev.id);
+                            const cardStyle = `p-2.5 rounded-lg border text-xs shadow-sm flex flex-col gap-1 relative transition-all duration-200 ${
+                              isSelectMode ? "cursor-pointer active:scale-[0.98]" : "active:scale-[0.98]"
+                            } ${
+                              isSelected
+                                ? "bg-blue-600 border-blue-600 text-white z-10 shadow-blue-500/30"
+                                : ev.isPending
+                                ? "bg-amber-100 border-amber-300 text-amber-900"
+                                : ev.isCompleted
+                                ? "border-slate-100 bg-slate-50 text-slate-400"
+                                : ev.attendanceConflict
+                                ? "border-rose-300 bg-rose-50 text-rose-900"
+                                : "border-slate-200 bg-white text-slate-700"
+                            }`;
+
+                            const content = (
+                              <>
+                                <div className="flex items-start justify-between gap-1">
+                                  <span className={`font-extrabold line-clamp-2 ${isSelected ? "text-white" : ev.isCompleted ? "text-slate-400" : "text-slate-900"}`}>
+                                    {ev.className}
+                                  </span>
+                                </div>
+                                <span className={`font-semibold flex items-center gap-1 mt-0.5 ${isSelected ? "text-blue-100" : ev.isCompleted ? "text-slate-400" : ev.attendanceConflict ? "text-rose-600" : "text-blue-600"}`}>
+                                  <MapPin size={12} strokeWidth={2.5} className="shrink-0" /> {ev.room}
+                                </span>
+                                <span className={`border-t pt-1.5 mt-1 line-clamp-1 font-medium ${isSelected ? "border-blue-400/50 text-blue-100" : ev.isCompleted ? "border-transparent text-slate-400" : "border-slate-100 text-slate-500"}`}>
+                                  {ev.teacherFullName}
+                                </span>
+                              </>
+                            );
+
+                            if (isSelectMode) {
+                              return (
+                                <div key={ev.id} onClick={() => toggleSelection(ev.id)} className={cardStyle}>
+                                  {content}
+                                </div>
+                              );
+                            }
+
+                            if (isAdmin && ev.isPending) {
+                              return (
+                                <button key={ev.id} onClick={() => setSelectedPendingSession(ev)} className={`${cardStyle} text-left`}>
+                                  {content}
+                                </button>
+                              );
+                            }
+
+                            const href = `/ta/?classId=${encodeURIComponent(ev.classId)}&sessionId=${encodeURIComponent(ev.id)}&date=${encodeURIComponent(ev.dateISO)}`;
+                            return (
+                              <Link key={ev.id} href={href} className={cardStyle}>
+                                {content}
+                              </Link>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {/* Nếu không có ca học nào trong ngày thì báo trống */}
+                  {SHIFTS.every(shift => {
+                    return sessions.filter((s) => {
+                      const dISO = toISODate(s.date);
+                      const sDayId = dayOfWeekMon1Sun7(s.date);
+                      return dISO === dateISO && sDayId === day.id && s.slot === shift.id;
+                    }).length === 0;
+                  }) && (
+                    <div className="p-4 text-center text-sm text-slate-400 font-medium">
+                      Không có lịch dạy
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
 

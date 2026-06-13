@@ -194,158 +194,261 @@ export default function TeacherBookingCalendar({
           )}
         </div>
       ) : (
-        <div className="w-full overflow-x-auto border border-slate-200 rounded-xl bg-white shadow-sm scrollbar-thin scrollbar-thumb-slate-300 scrollbar-track-slate-100">
-          <div className="min-w-[900px]">
-            {/* Toolbar */}
-            <div className="p-3 border-b border-slate-200 flex justify-between items-center bg-slate-50/50">
-              <div className="font-bold text-slate-700">
-                Tuần: {format(startOfThisWeek, "dd/MM")} - {format(addDays(startOfThisWeek, 6), "dd/MM/yyyy")}
-              </div>
-              <div className="flex items-center gap-1 bg-white border border-slate-200 rounded-lg p-1 shadow-sm">
-                <button
-                  onClick={() => setCurrentDate((d) => addWeeks(d, -1))}
-                  className="p-1.5 rounded hover:bg-slate-100 text-slate-600 transition-colors"
-                >
-                  <ChevronLeft size={18} />
-                </button>
-                <button
-                  onClick={() => setCurrentDate(new Date())}
-                  className="px-3 py-1 text-[13px] font-bold text-slate-700 hover:bg-slate-50 transition-colors"
-                >
-                  Hôm nay
-                </button>
-                <button
-                  onClick={() => setCurrentDate((d) => addWeeks(d, 1))}
-                  className="p-1.5 rounded hover:bg-slate-100 text-slate-600 transition-colors"
-                >
-                  <ChevronRight size={18} />
-                </button>
-              </div>
+        <div className="w-full border border-slate-200 rounded-xl bg-white shadow-sm">
+          {/* Toolbar - Dùng chung cho cả Desktop & Mobile */}
+          <div className="p-3 border-b border-slate-200 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-slate-50/50">
+            <div className="font-bold text-slate-700">
+              Tuần: {format(startOfThisWeek, "dd/MM")} - {format(addDays(startOfThisWeek, 6), "dd/MM/yyyy")}
             </div>
-
-            {/* Header Days */}
-            <div className="grid grid-cols-[80px_repeat(7,1fr)] bg-slate-50 border-b border-slate-200">
-              <div className="p-2 border-r border-slate-200 flex items-center justify-center font-bold text-slate-500 text-[12px] uppercase tracking-wider">
-                Ca học
-              </div>
-              {DAYS.map((d) => {
-                const dateForCol = addDays(startOfThisWeek, d.id - 1);
-                const isToday = isSameDay(dateForCol, new Date());
-                return (
-                  <div
-                    key={d.id}
-                    className={`p-2 border-r border-slate-200 last:border-r-0 text-center flex flex-col justify-center items-center ${
-                      isToday ? "bg-blue-50/50" : ""
-                    }`}
-                  >
-                    <div className={`font-extrabold text-[13px] ${isToday ? "text-blue-700" : "text-slate-900"}`}>
-                      {d.label}
-                    </div>
-                    <div className={`text-[11px] font-semibold ${isToday ? "text-blue-500" : "text-slate-500"}`}>
-                      {format(dateForCol, "dd/MM")}
-                    </div>
-                  </div>
-                );
-              })}
+            <div className="flex items-center gap-1 bg-white border border-slate-200 rounded-lg p-1 shadow-sm w-full sm:w-auto justify-between sm:justify-start">
+              <button
+                onClick={() => setCurrentDate((d) => addWeeks(d, -1))}
+                className="p-1.5 rounded hover:bg-slate-100 text-slate-600 transition-colors"
+              >
+                <ChevronLeft size={18} />
+              </button>
+              <button
+                onClick={() => setCurrentDate(new Date())}
+                className="px-3 py-1 text-[13px] font-bold text-slate-700 hover:bg-slate-50 transition-colors"
+              >
+                Hôm nay
+              </button>
+              <button
+                onClick={() => setCurrentDate((d) => addWeeks(d, 1))}
+                className="p-1.5 rounded hover:bg-slate-100 text-slate-600 transition-colors"
+              >
+                <ChevronRight size={18} />
+              </button>
             </div>
+          </div>
 
-            {/* Slots */}
-            <div>
-              {SHIFTS.map((shift) => (
-                <div key={shift.id} className="grid grid-cols-[80px_repeat(7,1fr)] border-b border-slate-200 last:border-b-0">
-                  <div className="p-2 border-r border-slate-200 bg-slate-50/30 flex flex-col justify-center items-center gap-0.5">
-                    <span className="font-bold text-slate-800 text-[13px]">{shift.label}</span>
-                    <span className="text-[11px] text-slate-500 font-medium">{shift.time}</span>
-                  </div>
+          {/* === DESKTOP VIEW === */}
+          <div className="hidden lg:block w-full overflow-x-auto scrollbar-thin scrollbar-thumb-slate-300 scrollbar-track-slate-100">
+            <div className="min-w-[900px]">
+              {/* Header Days */}
+              <div className="grid grid-cols-[80px_repeat(7,1fr)] bg-slate-50 border-b border-slate-200">
+                <div className="p-2 border-r border-slate-200 flex items-center justify-center font-bold text-slate-500 text-[12px] uppercase tracking-wider">
+                  Ca học
+                </div>
+                {DAYS.map((d) => {
+                  const dateForCol = addDays(startOfThisWeek, d.id - 1);
+                  const isToday = isSameDay(dateForCol, new Date());
+                  return (
+                    <div
+                      key={d.id}
+                      className={`p-2 border-r border-slate-200 last:border-r-0 text-center flex flex-col justify-center items-center ${
+                        isToday ? "bg-blue-50/50" : ""
+                      }`}
+                    >
+                      <div className={`font-extrabold text-[13px] ${isToday ? "text-blue-700" : "text-slate-900"}`}>
+                        {d.label}
+                      </div>
+                      <div className={`text-[11px] font-semibold ${isToday ? "text-blue-500" : "text-slate-500"}`}>
+                        {format(dateForCol, "dd/MM")}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
 
-                  {DAYS.map((day) => {
-                    const dateForCell = addDays(startOfThisWeek, day.id - 1);
-                    const dateISO = toISODate(dateForCell);
-                    const isToday = isSameDay(dateForCell, new Date());
+              {/* Slots */}
+              <div>
+                {SHIFTS.map((shift) => (
+                  <div key={shift.id} className="grid grid-cols-[80px_repeat(7,1fr)] border-b border-slate-200 last:border-b-0">
+                    <div className="p-2 border-r border-slate-200 bg-slate-50/30 flex flex-col justify-center items-center gap-0.5">
+                      <span className="font-bold text-slate-800 text-[13px]">{shift.label}</span>
+                      <span className="text-[11px] text-slate-500 font-medium">{shift.time}</span>
+                    </div>
 
-                    const cellSessions = schedule.filter((s) => {
-                      return toISODate(s.date) === dateISO && dayOfWeekMon1Sun7(s.date) === day.id && s.slot === shift.id;
-                    });
+                    {DAYS.map((day) => {
+                      const dateForCell = addDays(startOfThisWeek, day.id - 1);
+                      const dateISO = toISODate(dateForCell);
+                      const isToday = isSameDay(dateForCell, new Date());
 
-                    const teacherBusySessions = teacherSchedule.filter((s) => {
-                      return toISODate(s.date) === dateISO && dayOfWeekMon1Sun7(s.date) === day.id && s.slot === shift.id;
-                    });
+                      const cellSessions = schedule.filter((s) => {
+                        return toISODate(s.date) === dateISO && dayOfWeekMon1Sun7(s.date) === day.id && s.slot === shift.id;
+                      });
 
-                    // Check if there is any session in this cell
-                    const session = cellSessions.length > 0 ? cellSessions[0] : null;
-                    const teacherBusy = teacherBusySessions.length > 0 && (!session || session.id !== teacherBusySessions[0].id) ? teacherBusySessions[0] : null;
+                      const teacherBusySessions = teacherSchedule.filter((s) => {
+                        return toISODate(s.date) === dateISO && dayOfWeekMon1Sun7(s.date) === day.id && s.slot === shift.id;
+                      });
 
-                    return (
-                      <div
-                        key={day.id}
-                        className={`p-1.5 border-r border-slate-100 last:border-r-0 min-h-[80px] ${
-                          isToday && !session ? "bg-blue-50/20" : ""
-                        }`}
-                      >
-                        {!session ? (
-                          !teacherBusy ? (
-                            // CA TRỐNG VÀ GIÁO VIÊN RẢNH
-                            <button
-                              onClick={() => setBookingSlot({ date: dateForCell, slot: shift.id })}
-                              className="w-full h-full min-h-[60px] rounded border-2 border-dashed border-slate-200 hover:border-blue-400 hover:bg-blue-50/50 flex flex-col items-center justify-center gap-1 transition-colors text-slate-400 hover:text-blue-500 group"
-                            >
-                              <CalendarPlus size={16} className="opacity-0 group-hover:opacity-100 transition-opacity" />
-                              <span className="text-[10px] font-semibold opacity-0 group-hover:opacity-100 transition-opacity">Đặt phòng</span>
-                            </button>
-                          ) : (
-                            // GIÁO VIÊN BẬN Ở PHÒNG KHÁC
-                            <div className="w-full h-full min-h-[60px] p-2 rounded-lg border border-rose-200 bg-rose-50 text-rose-500 flex flex-col justify-center items-center cursor-not-allowed">
-                              <span className="text-[11px] font-bold text-center">Bạn bị trùng lịch ở {teacherBusy.roomName || "phòng khác"}</span>
-                            </div>
-                          )
-                        ) : (
-                          // ĐÃ CÓ CA TRONG PHÒNG NÀY
-                          <div className="w-full h-full">
-                            {session.teacherId !== teacherId ? (
-                              // CA CỦA GIÁO VIÊN KHÁC
-                              <div className="w-full h-full min-h-[60px] p-2 rounded-lg border border-slate-200 bg-slate-100 text-slate-400 flex flex-col justify-center items-center cursor-not-allowed">
-                                <span className="text-[11px] font-bold">Đã có người đặt</span>
-                              </div>
-                            ) : (
-                              // CA CỦA CHÍNH MÌNH
+                      const session = cellSessions.length > 0 ? cellSessions[0] : null;
+                      const teacherBusy = teacherBusySessions.length > 0 && (!session || session.id !== teacherBusySessions[0].id) ? teacherBusySessions[0] : null;
+
+                      return (
+                        <div
+                          key={day.id}
+                          className={`p-1.5 border-r border-slate-100 last:border-r-0 min-h-[80px] ${
+                            isToday && !session ? "bg-blue-50/20" : ""
+                          }`}
+                        >
+                          {!session ? (
+                            !teacherBusy ? (
                               <button
-                                onClick={() => {
-                                  if (session.status === "PENDING" || (session.status === "SCHEDULED" && !session.isCancelRequested)) {
-                                    setCancelSession(session);
-                                    setCancelReason("");
-                                  }
-                                }}
-                                className={`w-full h-full min-h-[60px] p-2 text-left rounded-lg border text-[11px] leading-snug shadow-sm flex flex-col gap-1 transition-all ${
-                                  session.status === "PENDING"
-                                    ? "bg-amber-100 border-amber-300 text-amber-900 hover:scale-[1.02] cursor-pointer"
-                                    : session.isCancelRequested
-                                    ? "bg-rose-50 border-rose-200 text-rose-800 cursor-default opacity-80"
-                                    : "bg-blue-50 border-blue-200 text-blue-900 hover:scale-[1.02] cursor-pointer"
-                                }`}
+                                onClick={() => setBookingSlot({ date: dateForCell, slot: shift.id })}
+                                className="w-full h-full min-h-[60px] rounded border-2 border-dashed border-slate-200 hover:border-blue-400 hover:bg-blue-50/50 flex flex-col items-center justify-center gap-1 transition-colors text-slate-400 hover:text-blue-500 group"
                               >
-                                <div className="font-extrabold line-clamp-1">{session.className}</div>
-                                <div className="text-[10px] font-bold mt-auto">
-                                  {session.status === "PENDING" ? (
-                                    <span className="text-amber-600">Chờ duyệt (Nhấn hủy)</span>
-                                  ) : session.isCancelRequested ? (
-                                    <span className="text-rose-600 font-bold">Đang chờ duyệt huỷ ca</span>
-                                  ) : (
-                                    <span className="text-blue-600 font-bold flex flex-col">
-                                      <span>Đã duyệt</span>
-                                      <span className="text-[9px] text-blue-500 opacity-80">(Nhấn để xin huỷ)</span>
-                                    </span>
-                                  )}
-                                </div>
+                                <CalendarPlus size={16} className="opacity-0 group-hover:opacity-100 transition-opacity" />
+                                <span className="text-[10px] font-semibold opacity-0 group-hover:opacity-100 transition-opacity">Đặt phòng</span>
                               </button>
+                            ) : (
+                              <div className="w-full h-full min-h-[60px] p-2 rounded-lg border border-rose-200 bg-rose-50 text-rose-500 flex flex-col justify-center items-center cursor-not-allowed">
+                                <span className="text-[11px] font-bold text-center">Bạn bị trùng lịch ở {teacherBusy.roomName || "phòng khác"}</span>
+                              </div>
+                            )
+                          ) : (
+                            <div className="w-full h-full">
+                              {session.teacherId !== teacherId ? (
+                                <div className="w-full h-full min-h-[60px] p-2 rounded-lg border border-slate-200 bg-slate-100 text-slate-400 flex flex-col justify-center items-center cursor-not-allowed">
+                                  <span className="text-[11px] font-bold">Đã có người đặt</span>
+                                </div>
+                              ) : (
+                                <button
+                                  onClick={() => {
+                                    if (session.status === "PENDING" || (session.status === "SCHEDULED" && !session.isCancelRequested)) {
+                                      setCancelSession(session);
+                                      setCancelReason("");
+                                    }
+                                  }}
+                                  className={`w-full h-full min-h-[60px] p-2 text-left rounded-lg border text-[11px] leading-snug shadow-sm flex flex-col gap-1 transition-all ${
+                                    session.status === "PENDING"
+                                      ? "bg-amber-100 border-amber-300 text-amber-900 hover:scale-[1.02] cursor-pointer"
+                                      : session.isCancelRequested
+                                      ? "bg-rose-50 border-rose-200 text-rose-800 cursor-default opacity-80"
+                                      : "bg-blue-50 border-blue-200 text-blue-900 hover:scale-[1.02] cursor-pointer"
+                                  }`}
+                                >
+                                  <div className="font-extrabold line-clamp-1">{session.className}</div>
+                                  <div className="text-[10px] font-bold mt-auto">
+                                    {session.status === "PENDING" ? (
+                                      <span className="text-amber-600">Chờ duyệt (Nhấn hủy)</span>
+                                    ) : session.isCancelRequested ? (
+                                      <span className="text-rose-600 font-bold">Đang chờ duyệt huỷ ca</span>
+                                    ) : (
+                                      <span className="text-blue-600 font-bold flex flex-col">
+                                        <span>Đã duyệt</span>
+                                        <span className="text-[9px] text-blue-500 opacity-80">(Nhấn để xin huỷ)</span>
+                                      </span>
+                                    )}
+                                  </div>
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* === MOBILE VIEW === */}
+          <div className="block lg:hidden flex flex-col divide-y divide-slate-200">
+            {DAYS.map((day) => {
+              const dateForCell = addDays(startOfThisWeek, day.id - 1);
+              const dateISO = toISODate(dateForCell);
+              const isToday = isSameDay(dateForCell, new Date());
+
+              return (
+                <div key={day.id} className={`flex flex-col ${isToday ? "bg-blue-50/20" : ""}`}>
+                  {/* Header Ngày */}
+                  <div className="p-3 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
+                    <span className={`font-extrabold text-sm ${isToday ? "text-blue-700" : "text-slate-900"}`}>
+                      {day.id <= 6 ? `Thứ ${day.id + 1}` : "Chủ Nhật"}
+                    </span>
+                    <span className={`text-xs font-semibold ${isToday ? "text-blue-500" : "text-slate-500"}`}>
+                      {format(dateForCell, "dd/MM/yyyy")}
+                    </span>
+                  </div>
+
+                  {/* Các Ca Học */}
+                  <div className="flex flex-col divide-y divide-slate-100">
+                    {SHIFTS.map((shift) => {
+                      const cellSessions = schedule.filter((s) => {
+                        return toISODate(s.date) === dateISO && dayOfWeekMon1Sun7(s.date) === day.id && s.slot === shift.id;
+                      });
+
+                      const teacherBusySessions = teacherSchedule.filter((s) => {
+                        return toISODate(s.date) === dateISO && dayOfWeekMon1Sun7(s.date) === day.id && s.slot === shift.id;
+                      });
+
+                      const session = cellSessions.length > 0 ? cellSessions[0] : null;
+                      const teacherBusy = teacherBusySessions.length > 0 && (!session || session.id !== teacherBusySessions[0].id) ? teacherBusySessions[0] : null;
+
+                      return (
+                        <div key={shift.id} className="p-3 flex gap-3 items-center">
+                          {/* Thông tin Ca */}
+                          <div className="w-16 shrink-0 flex flex-col pt-1">
+                            <span className="font-bold text-slate-800 text-xs">{shift.label}</span>
+                            <span className="text-[10px] text-slate-500 font-medium">{shift.time}</span>
+                          </div>
+
+                          {/* Lớp / Trạng thái */}
+                          <div className="flex-1">
+                            {!session ? (
+                              !teacherBusy ? (
+                                <button
+                                  onClick={() => setBookingSlot({ date: dateForCell, slot: shift.id })}
+                                  className="w-full h-[40px] rounded border border-dashed border-slate-300 hover:border-blue-400 hover:bg-blue-50/50 flex items-center justify-center gap-2 transition-colors text-slate-400 hover:text-blue-500"
+                                >
+                                  <CalendarPlus size={14} />
+                                  <span className="text-xs font-semibold">Đặt phòng</span>
+                                </button>
+                              ) : (
+                                <div className="w-full p-2 rounded-lg border border-rose-200 bg-rose-50 text-rose-500 flex flex-col justify-center items-center cursor-not-allowed text-xs font-bold text-center">
+                                  Bạn bị trùng lịch ở {teacherBusy.roomName || "phòng khác"}
+                                </div>
+                              )
+                            ) : (
+                              <div className="w-full">
+                                {session.teacherId !== teacherId ? (
+                                  <div className="w-full p-2 rounded-lg border border-slate-200 bg-slate-100 text-slate-400 flex flex-col justify-center items-center cursor-not-allowed text-xs font-bold">
+                                    Đã có người đặt
+                                  </div>
+                                ) : (
+                                  <button
+                                    onClick={() => {
+                                      if (session.status === "PENDING" || (session.status === "SCHEDULED" && !session.isCancelRequested)) {
+                                        setCancelSession(session);
+                                        setCancelReason("");
+                                      }
+                                    }}
+                                    className={`w-full text-left p-2.5 rounded-lg border text-xs shadow-sm flex flex-col gap-1 transition-all ${
+                                      session.status === "PENDING"
+                                        ? "bg-amber-100 border-amber-300 text-amber-900 active:scale-[0.98]"
+                                        : session.isCancelRequested
+                                        ? "bg-rose-50 border-rose-200 text-rose-800 cursor-default"
+                                        : "bg-blue-50 border-blue-200 text-blue-900 active:scale-[0.98]"
+                                    }`}
+                                  >
+                                    <div className="font-extrabold line-clamp-1">{session.className}</div>
+                                    <div className="text-[10px] font-bold mt-1">
+                                      {session.status === "PENDING" ? (
+                                        <span className="text-amber-600">Chờ duyệt (Nhấn hủy)</span>
+                                      ) : session.isCancelRequested ? (
+                                        <span className="text-rose-600">Đang chờ duyệt huỷ ca</span>
+                                      ) : (
+                                        <span className="text-blue-600 flex items-center justify-between">
+                                          <span>Đã duyệt</span>
+                                          <span className="text-[9px] opacity-70">Nhấn để huỷ</span>
+                                        </span>
+                                      )}
+                                    </div>
+                                  </button>
+                                )}
+                              </div>
                             )}
                           </div>
-                        )}
-                      </div>
-                    );
-                  })}
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
-              ))}
-            </div>
+              );
+            })}
           </div>
         </div>
       )}

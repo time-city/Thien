@@ -247,9 +247,9 @@ export default function BulkScheduleModal({ classes, rooms = [], teachers = [] }
 
                 <div className={`border border-slate-200 rounded-xl overflow-hidden bg-slate-50 transition-opacity ${isScanning ? "opacity-50 pointer-events-none" : ""}`}>
                   <div className="grid grid-cols-8 border-b border-slate-200 bg-slate-100/50">
-                    <div className="p-2 text-center text-xs font-bold text-slate-400 border-r border-slate-200">Ca</div>
+                    <div className="p-1 sm:p-2 text-center text-[10px] sm:text-xs font-bold text-slate-400 border-r border-slate-200">Ca</div>
                     {daysHeader.map(day => (
-                      <div key={day.val} className="p-2 text-center text-xs font-bold text-slate-600 border-r border-slate-200 last:border-r-0">
+                      <div key={day.val} className="p-1 sm:p-2 text-center text-[10px] sm:text-xs font-bold text-slate-600 border-r border-slate-200 last:border-r-0">
                         {day.label}
                       </div>
                     ))}
@@ -257,7 +257,7 @@ export default function BulkScheduleModal({ classes, rooms = [], teachers = [] }
                   
                   {slots.map(slot => (
                     <div key={slot} className="grid grid-cols-8 border-b border-slate-200 last:border-b-0">
-                      <div className="p-2 flex items-center justify-center text-xs font-bold text-slate-500 border-r border-slate-200 bg-slate-50">
+                      <div className="p-1 sm:p-2 flex items-center justify-center text-[10px] sm:text-xs font-bold text-slate-500 border-r border-slate-200 bg-slate-50">
                         Ca {slot}
                       </div>
                       {daysHeader.map(day => {

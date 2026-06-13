@@ -48,7 +48,9 @@ export default function ZaloBulkReportSender({ selectedStudents }: Props) {
 
   const checkStatus = async () => {
     try {
-      const response = await fetch('http://localhost:8080/status');
+      const response = await fetch('/api/zalobot/status', {
+        headers: { "x-api-key": process.env.NEXT_PUBLIC_ZALO_BOT_API_KEY || "" }
+      });
       const data = await response.json().catch(() => null);
       
       // Adapt to possible API response structures
@@ -56,16 +58,18 @@ export default function ZaloBulkReportSender({ selectedStudents }: Props) {
       
       if (isConnected) {
         setIsLoggedIn(true);
-        setStatusMessage('✅ Đã kết nối thành công với Zalo Bot!');
+        setStatusMessage('✅ Bot đang trực chiến!');
         setActiveTab('send');
-        setQrUrl(null);
+        if (!isLoggedIn) {
+          setQrUrl(null);
+        }
       } else {
         setIsLoggedIn(false);
         setStatusMessage(data?.message || 'Chưa kết nối. Vui lòng lấy mã QR để đăng nhập.');
       }
     } catch (error) {
       setIsLoggedIn(false);
-      setStatusMessage('❌ Không thể kết nối tới server Zalo Bot (http://localhost:8080)');
+      setStatusMessage('❌ Không thể kết nối tới server Zalo Bot');
     }
   };
 
@@ -92,9 +96,16 @@ export default function ZaloBulkReportSender({ selectedStudents }: Props) {
     };
   }, [qrUrl, isLoggedIn]);
 
-  const handleGetQR = () => {
-    // Setting the URL directly to an img src will trigger the GET request
-    setQrUrl(`http://localhost:8080/login?t=${Date.now()}`);
+  const handleGetQR = async () => {
+    if (isLoggedIn) {
+      setStatusMessage('Đang đăng xuất tài khoản cũ...');
+      await fetch('/api/zalobot/logout', { 
+        method: 'POST',
+        headers: { "x-api-key": process.env.NEXT_PUBLIC_ZALO_BOT_API_KEY || "" }
+      }).catch(() => {});
+      setIsLoggedIn(false);
+    }
+    setQrUrl(`/api/zalobot/login?t=${Date.now()}&api_key=${process.env.NEXT_PUBLIC_ZALO_BOT_API_KEY || ""}`);
     setStatusMessage('Vui lòng quét mã QR trên bằng ứng dụng Zalo (hoặc Zalo Zavi) để đăng nhập.');
   };
 
@@ -137,8 +148,9 @@ export default function ZaloBulkReportSender({ selectedStudents }: Props) {
       formData.append('message', `${messageText} ${student.name}`);
 
       try {
-        const res = await fetch('http://localhost:8080/send-image', {
+        const res = await fetch('/api/zalobot/send-image', {
           method: 'POST',
+          headers: { "x-api-key": process.env.NEXT_PUBLIC_ZALO_BOT_API_KEY || "" },
           body: formData,
         });
         

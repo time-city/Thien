@@ -129,9 +129,15 @@ export default function TuitionClient({
           formData.append("image", file);
           formData.append("message", `Trung tâm gửi phụ huynh báo cáo học tập và thanh toán tổng hợp của bé ${data.studentName}`);
 
-          const response = await fetch("http://localhost:8080/send-image", { method: "POST", body: formData });
+          const response = await fetch("/api/zalobot/send-image", { 
+            method: "POST", 
+            headers: {
+              "x-api-key": process.env.NEXT_PUBLIC_ZALO_BOT_API_KEY || ""
+            },
+            body: formData 
+          });
           if (!response.ok) {
-             console.error("Lỗi gửi cho", data.studentName);
+             toast.error(`Lỗi gửi báo cáo cho ${data.studentName}`);
           } else {
              const logIds = data.logs.map((l: any) => l.id).filter(Boolean);
              if (logIds.length > 0) {
@@ -140,7 +146,7 @@ export default function TuitionClient({
           }
         }
       } catch (err) {
-        console.error("Lỗi khi gửi cho học sinh", studentId, err);
+        toast.error(`Lỗi khi tạo ảnh hoặc gửi cho học sinh (ID: ${studentId})`);
       }
       
       count++;
@@ -181,23 +187,23 @@ export default function TuitionClient({
   }
 
   return (
-    <div className="p-4 md:p-8 max-w-6xl mx-auto font-sans">
-      <div className="mb-8">
-        <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900 tracking-tight">Quản Lý Tài Chính</h1>
-        <p className="text-slate-500 mt-1 text-sm font-medium">Thu học phí học sinh và Thanh toán lương giáo viên.</p>
+    <div className="p-2 md:p-8 max-w-6xl mx-auto font-sans">
+      <div className="mb-4 md:mb-8 px-2 md:px-0">
+        <h1 className="text-xl md:text-3xl font-extrabold text-slate-900 tracking-tight">Quản Lý Tài Chính</h1>
+        <p className="text-slate-500 mt-1 text-xs md:text-sm font-medium">Thu học phí học sinh và Thanh toán lương giáo viên.</p>
       </div>
 
-      <div className="flex border-b border-slate-200 mb-6 font-bold text-sm overflow-x-auto hide-scrollbar">
+      <div className="flex border-b border-slate-200 mb-4 md:mb-6 font-bold text-xs md:text-sm overflow-x-auto hide-scrollbar px-2 md:px-0">
         <button
           onClick={() => setActiveTab("STUDENT")}
-          className={`px-6 py-3 border-b-2 transition-colors whitespace-nowrap ${activeTab === "STUDENT" ? "border-blue-600 text-blue-700" : "border-transparent text-slate-500 hover:text-slate-800"
+          className={`px-3 md:px-6 py-2 md:py-3 border-b-2 transition-colors whitespace-nowrap ${activeTab === "STUDENT" ? "border-blue-600 text-blue-700" : "border-transparent text-slate-500 hover:text-slate-800"
             }`}
         >
           Thu Học Phí Học Sinh
         </button>
         <button
           onClick={() => setActiveTab("TEACHER_SALARY")}
-          className={`px-6 py-3 border-b-2 transition-colors whitespace-nowrap ${activeTab === "TEACHER_SALARY" ? "border-blue-600 text-blue-700" : "border-transparent text-slate-500 hover:text-slate-800"
+          className={`px-3 md:px-6 py-2 md:py-3 border-b-2 transition-colors whitespace-nowrap ${activeTab === "TEACHER_SALARY" ? "border-blue-600 text-blue-700" : "border-transparent text-slate-500 hover:text-slate-800"
             }`}
         >
           Thanh Toán Lương
@@ -225,56 +231,74 @@ export default function TuitionClient({
           <table className="w-full text-left text-sm text-slate-700">
             <thead className="bg-slate-50 border-b border-slate-200 text-slate-900">
               <tr>
-                <th className="py-3 px-4 w-10 text-center">
+                <th className="py-2 px-2 md:py-3 md:px-4 w-8 md:w-10 text-center">
                   <input
                     type="checkbox"
-                    className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="w-3.5 h-3.5 md:w-4 md:h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
                     checked={selectedStudentIds.length === studentsWithLowSessions.length && studentsWithLowSessions.length > 0}
                     disabled={isBulkSending}
-                    onChange={handleSelectAll}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setSelectedStudentIds(studentsWithLowSessions.map(s => s.id));
+                      } else {
+                        setSelectedStudentIds([]);
+                      }
+                    }}
                   />
                 </th>
-                <th className="py-3 px-4 font-bold">Học sinh</th>
-                <th className="py-3 px-4 font-bold hidden sm:table-cell">Lớp</th>
-                <th className="py-3 px-4 font-bold">Môn cảnh báo</th>
-                <th className="py-3 px-4 font-bold text-right">Hành động</th>
+                <th className="py-2 px-2 md:py-3 md:px-4 font-bold text-xs md:text-sm">Học sinh</th>
+                <th className="py-2 px-2 md:py-3 md:px-4 font-bold hidden sm:table-cell text-xs md:text-sm">Lớp</th>
+                <th className="py-2 px-2 md:py-3 md:px-4 font-bold text-xs md:text-sm">Môn cảnh báo</th>
+                <th className="py-2 px-2 md:py-3 md:px-4 font-bold text-right text-xs md:text-sm">Hành động</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {studentsWithLowSessions.map((student) => (
                 <tr key={student.id} className={`hover:bg-slate-50/50 transition-colors ${selectedStudentIds.includes(student.id) ? "bg-blue-50/30" : ""}`}>
-                  <td className="py-3 px-4 text-center">
+                  <td className="py-2 px-2 md:py-3 md:px-4 text-center">
                     <input
                       type="checkbox"
-                      className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="w-3.5 h-3.5 md:w-4 md:h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
                       checked={selectedStudentIds.includes(student.id)}
                       disabled={isBulkSending}
                       onChange={() => handleSelectStudent(student.id)}
                     />
                   </td>
-                  <td className="py-3 px-4">
-                    <div className="font-semibold text-slate-900">{student.fullName}</div>
-                    <div className="text-xs text-slate-500">ID: {student.id.substring(0, 8)}</div>
+                  <td className="py-2 px-2 md:py-3 md:px-4">
+                    <div className="font-semibold text-slate-900 flex flex-wrap items-center gap-1.5 md:gap-2 text-[13px] md:text-sm">
+                      {student.fullName}
+                      {student.hasLogs && student.hasUnsentReports === false && (
+                         <span className="bg-emerald-100 text-emerald-700 text-[9px] md:text-[10px] px-1.5 py-0.5 rounded-full font-bold flex items-center gap-1">
+                           <CheckCircle2 size={10} /> Đã gửi
+                         </span>
+                      )}
+                      {!student.hasLogs && (
+                         <span className="bg-blue-100 text-blue-700 text-[9px] md:text-[10px] px-1.5 py-0.5 rounded-full font-bold">
+                           Chỉ nhắc nợ
+                         </span>
+                      )}
+                    </div>
+                    <div className="text-[10px] md:text-xs text-slate-500 mt-0.5">SĐT: {student.phoneParent || <span className="italic text-rose-400">Trống</span>}</div>
                   </td>
-                  <td className="py-3 px-4 hidden sm:table-cell">
+                  <td className="py-2 px-2 md:py-3 md:px-4 hidden sm:table-cell text-[13px] md:text-sm">
                     {student.enrolledCourses[0]?.className ?? (student.allPendingInvoices?.length ? (student.allPendingInvoices[0].isDebt ? "Nợ Cũ" : "Hóa đơn") : "-")}
                   </td>
-                  <td className="py-3 px-4">
-                    <div className="flex flex-wrap gap-1.5 flex-col">
+                  <td className="py-2 px-2 md:py-3 md:px-4">
+                    <div className="flex flex-wrap gap-1 md:gap-1.5 flex-col">
                       {student.enrolledCourses
                         .filter((c) => c.remainingSessions <= 2 || c.pendingInvoices.length > 0)
                         .map((c) => (
                           <div key={c.enrollmentId} className="flex gap-1 flex-wrap">
                             {c.remainingSessions <= 2 && (
                               <span
-                                className="bg-rose-50 text-rose-700 font-bold px-2 py-0.5 rounded text-[11px] border border-rose-100 whitespace-nowrap"
+                                className="bg-rose-50 text-rose-700 font-bold px-1.5 md:px-2 py-0.5 rounded text-[10px] md:text-[11px] border border-rose-100 whitespace-nowrap"
                               >
                                 {c.className} ({c.remainingSessions} buổi)
                               </span>
                             )}
                             {c.pendingInvoices.length > 0 && c.pendingInvoices.map(inv => (
-                              <span key={inv.id} className={`${inv.status === "UNDERPAID" ? "bg-rose-100 text-rose-700 border-rose-200" : "bg-amber-100 text-amber-700 border-amber-200"} font-bold px-2 py-0.5 rounded text-[11px] border whitespace-nowrap`}>
-                                Hóa đơn: {inv.status === "UNDERPAID" ? "THIẾU TIỀN" : "CHỜ T.TOÁN"}
+                              <span key={inv.id} className={`${inv.status === "UNDERPAID" ? "bg-rose-100 text-rose-700 border-rose-200" : "bg-amber-100 text-amber-700 border-amber-200"} font-bold px-1.5 md:px-2 py-0.5 rounded text-[10px] md:text-[11px] border whitespace-nowrap`}>
+                                {inv.status === "UNDERPAID" ? "THIẾU TIỀN" : "CHỜ T.TOÁN"}
                               </span>
                             ))}
                           </div>
@@ -283,23 +307,23 @@ export default function TuitionClient({
                       {/* Hiển thị các hóa đơn nợ/tổng hợp (không dính trực tiếp với 1 enrollment) */}
                       {student.allPendingInvoices?.map(inv => (
                         <div key={inv.id} className="flex gap-1 flex-wrap">
-                          <span className="bg-orange-100 text-orange-700 border-orange-200 font-bold px-2 py-0.5 rounded text-[11px] border whitespace-nowrap">
+                          <span className="bg-orange-100 text-orange-700 border-orange-200 font-bold px-1.5 md:px-2 py-0.5 rounded text-[10px] md:text-[11px] border whitespace-nowrap">
                             {inv.isDebt ? "Nợ cũ" : "Hóa đơn"}: {new Intl.NumberFormat("vi-VN").format(inv.expectedAmount - inv.amountPaid)}đ
                           </span>
                         </div>
                       ))}
                     </div>
                   </td>
-                  <td className="py-3 px-4 text-right">
+                  <td className="py-2 px-2 md:py-3 md:px-4 text-right">
                     <button
                       onClick={() => {
                         setReportData({ studentId: student.id, studentName: student.fullName, classId: "", className: "" });
                         setReportModalOpen(true);
                       }}
                       disabled={isBulkSending}
-                      className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold py-1.5 px-4 rounded shadow-sm transition-colors text-xs whitespace-nowrap"
+                      className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold py-1.5 px-2.5 md:px-4 rounded shadow-sm transition-colors text-[11px] md:text-xs whitespace-nowrap"
                     >
-                      Xử lý Thu Phí
+                      Xử lý
                     </button>
                   </td>
                 </tr>
@@ -325,11 +349,11 @@ export default function TuitionClient({
             const initial = teacher.fullName.charAt(0).toUpperCase();
 
             return (
-              <div key={teacher.id} className="bg-white border border-slate-200 rounded-2xl p-4 md:p-5 shadow-sm hover:shadow-md transition-all flex flex-col md:flex-row md:items-center gap-4 md:gap-6">
+              <div key={teacher.id} className="bg-white border border-slate-200 rounded-2xl p-3 md:p-5 shadow-sm hover:shadow-md transition-all flex flex-col md:flex-row md:items-center gap-3 md:gap-6">
 
                 {/* 1. Thông tin Giáo viên */}
-                <div className="flex items-center gap-3 md:w-1/4 shrink-0">
-                  <div className="w-10 h-10 rounded-full bg-slate-800 text-white flex items-center justify-center font-bold text-sm shrink-0">
+                <div className="flex items-center gap-2.5 md:gap-3 md:w-1/4 shrink-0">
+                  <div className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-slate-800 text-white flex items-center justify-center font-bold text-xs md:text-sm shrink-0">
                     {initial}
                   </div>
                   <div className="min-w-0">
@@ -439,9 +463,31 @@ export default function TuitionClient({
             <div className="p-4 md:p-5 border-b border-slate-100 bg-slate-50">
               <h3 className="text-lg font-extrabold text-slate-900">Xác nhận gửi báo cáo</h3>
             </div>
-            <div className="p-6 text-center text-slate-600 text-sm">
+            <div className="p-6 text-center text-slate-600 text-sm max-h-[70vh] overflow-y-auto">
               Bạn đã kiểm tra kỹ tình hình học tập và đánh giá của <span className="font-bold text-blue-600">{selectedStudentIds.length} học sinh</span> đã chọn chưa?
               <br /><br />
+              
+              <div className="text-left bg-slate-50 p-3 rounded-lg border border-slate-200 text-xs mb-4">
+                <div className="font-bold mb-2">Danh sách gửi ({selectedStudentIds.length}):</div>
+                <ul className="space-y-1 max-h-40 overflow-y-auto pr-2 custom-scrollbar">
+                  {students.filter(s => selectedStudentIds.includes(s.id)).map(s => {
+                    const alreadySent = s.hasLogs && s.hasUnsentReports === false;
+                    const noLogsOnlyDebt = !s.hasLogs;
+                    return (
+                    <li key={s.id} className="flex justify-between border-b border-slate-100 pb-1 last:border-0 items-center">
+                       <span className="font-medium text-left flex gap-1 items-center flex-wrap">
+                         {s.fullName}
+                         {alreadySent && <span className="text-amber-600 bg-amber-50 px-1 rounded text-[9px] font-bold border border-amber-200">Gửi lại</span>}
+                         {noLogsOnlyDebt && <span className="text-blue-600 bg-blue-50 px-1 rounded text-[9px] font-bold border border-blue-200">Nhắc nợ</span>}
+                       </span>
+                       <span className={`font-mono text-right whitespace-nowrap ${s.phoneParent ? 'text-slate-600' : 'text-rose-500 font-bold'}`}>
+                         {s.phoneParent || "Không có SĐT"}
+                       </span>
+                    </li>
+                  )})}
+                </ul>
+              </div>
+
               Nếu đã chắc chắn, hệ thống sẽ tự động tổng hợp dữ liệu, tạo ảnh QR code và gửi qua Zalo tới phụ huynh. <br/> <strong className="text-rose-500">Vui lòng không tắt trang trong lúc đang gửi.</strong>
             </div>
             <div className="p-4 border-t border-slate-100 flex justify-end gap-3 bg-white">

@@ -2,54 +2,68 @@ const crypto = require('crypto');
 
 // --- CẤU HÌNH ---
 // URL của webhook (thay bằng URL vercel nếu muốn test trên mạng)
-const WEBHOOK_URL = 'http://192.168.100.44:3000/api/sepay/webhook';
-// Thay bằng ID của HÓA ĐƠN (Invoice ID) đang ở trạng thái PENDING để test (36 ký tự)
-// Hoặc điền Mã Enrollment / SĐT cũ vào đây để test chức năng dự phòng (Fallback)
-const IDENTIFIER = 'HT0905420058';
+const WEBHOOK_URL = 'http://192.168.110.88:3000/api/sepay/webhook';
 // Secret key của bạn (COPY TỪ FILE .env VÀO ĐÂY)
 const SECRET_KEY = 'whsec_isxY69ps1U0M7m0mlMWDR7srSLZsg1kk';
 
-// --- DỮ LIỆU GIẢ LẬP ---
-const payload = {
-  gateway: "MBBank",
-  transactionDate: "2026-06-05 13:04:00",
-  accountNumber: "0700107189999",
-  subAccount: null,
-  code: `${IDENTIFIER}`,
-  content: `${IDENTIFIER}`, // Cú pháp mà Server đang quét
-  transferType: "in",
-  description: `BankAPINotify ${IDENTIFIER}`,
-  transferAmount: 10000,
-  referenceCode: `FT${Date.now()}`, // Tạo mã ngẫu nhiên để không bị báo trùng
-  accumulated: 0,
-  id: Math.floor(Math.random() * 10000000)
-};
+// Danh sách mã thanh toán (cú pháp HT + SĐT) của 4 học sinh test
+const IDENTIFIERS = [
+  'HT0398240051', // test
+  'HT0905420058', // test2
+  'HT0348002795', // test3
+  'HT0788621767'  // test4
+];
 
-const rawBody = JSON.stringify(payload);
-const timestamp = Math.floor(Date.now() / 1000).toString();
+async function sendWebhook(identifier) {
+  // --- DỮ LIỆU GIẢ LẬP ---
+  const payload = {
+    gateway: "MBBank",
+    transactionDate: new Date().toISOString().replace('T', ' ').substring(0, 19),
+    accountNumber: "0700107189999",
+    subAccount: null,
+    code: `${identifier}`,
+    content: `${identifier}`, // Cú pháp mà Server đang quét
+    transferType: "in",
+    description: `BankAPINotify ${identifier}`,
+    transferAmount: 10000,
+    referenceCode: `FT${Date.now()}${Math.floor(Math.random() * 1000)}`, // Tạo mã ngẫu nhiên để không bị báo trùng
+    accumulated: 0,
+    id: Math.floor(Math.random() * 10000000)
+  };
 
-// --- TẠO CHỮ KÝ ---
-const expectedSignature = "sha256=" + crypto.createHmac("sha256", SECRET_KEY)
-  .update(`${timestamp}.${rawBody}`)
-  .digest("hex");
+  const rawBody = JSON.stringify(payload);
+  const timestamp = Math.floor(Date.now() / 1000).toString();
 
-console.log("🚀 Đang gửi Webhook giả lập tới:", WEBHOOK_URL);
-console.log("📦 Dữ liệu:", payload);
+  // --- TẠO CHỮ KÝ ---
+  const expectedSignature = "sha256=" + crypto.createHmac("sha256", SECRET_KEY)
+    .update(`${timestamp}.${rawBody}`)
+    .digest("hex");
 
-// --- GỬI REQUEST ---
-fetch(WEBHOOK_URL, {
-  method: 'POST',
-  headers: {
-    'Content-Type': 'application/json',
-    'x-sepay-signature': expectedSignature,
-    'x-sepay-timestamp': timestamp
-  },
-  body: rawBody
-})
-  .then(async res => {
+  console.log(`🚀 Đang gửi Webhook giả lập tới: ${WEBHOOK_URL} cho mã ${identifier}`);
+
+  // --- GỬI REQUEST ---
+  try {
+    const res = await fetch(WEBHOOK_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-sepay-signature': expectedSignature,
+        'x-sepay-timestamp': timestamp
+      },
+      body: rawBody
+    });
     const data = await res.json();
-    console.log("✅ Phản hồi từ Server:", res.status, data);
-  })
-  .catch(err => {
-    console.error("❌ Lỗi:", err);
-  });
+    console.log(`✅ Phản hồi từ Server cho ${identifier}:`, res.status, data);
+  } catch (err) {
+    console.error(`❌ Lỗi khi gửi ${identifier}:`, err);
+  }
+}
+
+async function run() {
+  console.log("Bắt đầu gửi đồng loạt 4 giao dịch...");
+  // Dùng Promise.all để gửi CÙNG LÚC (Concurrent)
+  await Promise.all(IDENTIFIERS.map(id => sendWebhook(id)));
+  console.log("Hoàn tất gửi lệnh test!");
+}
+
+run();

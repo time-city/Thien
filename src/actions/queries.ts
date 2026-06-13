@@ -101,6 +101,8 @@ export type TuitionStudentData = {
     pendingInvoices: { id: string; status: string; expectedAmount: number; amountPaid: number }[];
   }[];
   allPendingInvoices?: { id: string; status: string; expectedAmount: number; amountPaid: number; isDebt: boolean }[];
+  hasUnsentReports?: boolean;
+  hasLogs?: boolean;
 };
 
 export async function getTuitionData(): Promise<TuitionStudentData[]> {
@@ -125,6 +127,9 @@ export async function getTuitionData(): Promise<TuitionStudentData[]> {
         where: {
           status: { in: ["PENDING", "UNDERPAID"] }
         }
+      },
+      attendanceLogs: {
+        select: { id: true, isReportSent: true }
       }
     }
   });
@@ -141,6 +146,8 @@ export async function getTuitionData(): Promise<TuitionStudentData[]> {
       amountPaid: inv.amountPaid,
       isDebt: inv.isDebt
     })),
+    hasLogs: s.attendanceLogs && s.attendanceLogs.length > 0,
+    hasUnsentReports: s.attendanceLogs && s.attendanceLogs.some(log => !log.isReportSent),
     enrolledCourses: s.enrollments.map(e => ({
       enrollmentId: e.id,
       classId: e.classId,

@@ -2,7 +2,7 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   output: "standalone",
-  allowedDevOrigins: ['192.168.1.121', '192.168.1.146', '192.168.100.44', '192.168.1.222', '192.168.100.38'],
+  allowedDevOrigins: ['192.168.1.121', '192.168.1.248', '192.168.1.146', '192.168.110.88', '192.168.100.44', '192.168.1.222', '192.168.100.38'],
   turbopack: {
     root: "/Users/admin/Documents/Thien",
   },
@@ -18,6 +18,14 @@ const nextConfig: NextConfig = {
           { key: "Access-Control-Allow-Headers", value: "X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, Authorization" },
         ],
       },
+    ];
+  },
+  async rewrites() {
+    return [
+      {
+        source: "/api/zalobot/:path*",
+        destination: `${process.env.NEXT_PUBLIC_ZALO_BOT_URL || 'http://116.118.9.61:8080'}/:path*`
+      }
     ];
   },
 };

@@ -188,9 +188,12 @@ export async function processStudentPayment(
           msg += `\nHọc phí của bé hiện tại đã được thanh toán đầy đủ.`;
         }
 
-        await fetch("http://localhost:8080/send", {
+        await fetch(`${process.env.NEXT_PUBLIC_ZALO_BOT_URL || 'http://116.118.9.61:8080'}/send`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            "x-api-key": process.env.NEXT_PUBLIC_ZALO_BOT_API_KEY || ""
+          },
           body: JSON.stringify({ target: student.phoneParent, message: msg })
         });
       }

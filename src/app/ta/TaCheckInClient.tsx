@@ -59,8 +59,7 @@ export default function TaCheckInClient({
         toast.error(res.error || "Lỗi khi lưu đánh giá");
       }
     } catch (err) {
-      console.error(err);
-      toast.error("Đã xảy ra lỗi hệ thống.");
+      toast.error("Đã xảy ra lỗi hệ thống khi lưu đánh giá.");
     }
   };
 

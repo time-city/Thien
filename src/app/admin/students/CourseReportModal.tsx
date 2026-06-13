@@ -109,8 +109,7 @@ export default function CourseReportModal({
       link.click();
       toast.success("Đã tải ảnh báo cáo thành công!");
     } catch (err) {
-      console.error(err);
-      toast.error("Lỗi khi xuất ảnh PNG");
+      toast.error("Lỗi khi xuất ảnh PNG. Vui lòng thử lại!");
     } finally {
       setExporting(false);
     }
@@ -147,9 +146,12 @@ export default function CourseReportModal({
       formData.append("image", file);
       formData.append("message", `Trung tâm gửi phụ huynh báo cáo học tập và thanh toán tổng hợp của bé ${studentName}`);
 
-      const response = await fetch("http://localhost:8080/send-image", {
+      const response = await fetch("/api/zalobot/send-image", {
         method: "POST",
-        body: formData
+        headers: {
+          "x-api-key": process.env.NEXT_PUBLIC_ZALO_BOT_API_KEY || ""
+        },
+        body: formData,
       });
 
       if (response.ok) {
@@ -159,8 +161,7 @@ export default function CourseReportModal({
         toast.error("Lỗi khi gửi báo cáo qua Zalo (Server lỗi)!");
       }
     } catch (error) {
-      console.error(error);
-      toast.error("Không thể kết nối với Zalo Bot (http://localhost:8080)");
+      toast.error("Lỗi kết nối tới Zalo Bot server! Vui lòng kiểm tra lại Zalo Bot.");
     } finally {
       setSendingZalo(false);
     }
@@ -469,6 +470,11 @@ export default function CourseReportModal({
               <div>
                 <h3 className="text-lg font-extrabold text-slate-900">Xác nhận gửi Zalo</h3>
                 <p className="text-sm text-slate-500 font-medium mt-0.5">Học sinh: {studentName}</p>
+                {report?.phoneParent && (
+                  <p className="text-sm text-slate-500 font-medium mt-0.5">
+                    SĐT Phụ huynh: <span className="font-bold text-slate-800 font-mono">{report.phoneParent}</span>
+                  </p>
+                )}
               </div>
             </div>
             <div className="p-6">

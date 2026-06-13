@@ -3,6 +3,7 @@
 import React, { useRef } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import html2canvas from "html2canvas";
+import { toast } from "sonner";
 import type { StudentData } from "@/lib/queries";
 
 type LogAttendance = StudentData["logs"][number]["attendanceStatus"];
@@ -28,8 +29,7 @@ export default function ReportTemplate({ student }: { student: StudentData }) {
       link.href = dataUrl;
       link.click();
     } catch (error) {
-      console.error("Lỗi xuất ảnh:", error);
-      alert("Xuất PNG thất bại.");
+      toast.error("Xuất ảnh PNG thất bại.");
     }
   };
 

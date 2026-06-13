@@ -109,46 +109,46 @@ export default function TeacherSettingsPage({
 
   return (
     <div className="w-full max-w-4xl mx-auto pb-10 font-sans">
-      <div className="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="mb-4 md:mb-6 flex flex-col md:flex-row md:items-center justify-between gap-3 md:gap-4">
         <div>
-          <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">Tài khoản</h1>
-          <p className="text-sm text-slate-500 font-medium mt-1">Quản lý hồ sơ và theo dõi thu nhập của bạn.</p>
+          <h1 className="text-xl md:text-2xl font-extrabold text-slate-900 tracking-tight">Tài khoản</h1>
+          <p className="text-xs md:text-sm text-slate-500 font-medium mt-1">Quản lý hồ sơ và theo dõi thu nhập của bạn.</p>
         </div>
         
         {/* Sleek Segmented Control cho Tabs */}
         <div className="flex p-1 bg-slate-100/80 backdrop-blur-sm rounded-xl border border-slate-200/60 w-full md:w-auto self-start">
           <button
             onClick={() => setActiveTab("profile")}
-            className={`flex-1 md:w-32 flex justify-center items-center gap-2 py-2 text-sm font-semibold rounded-lg transition-all ${
+            className={`flex-1 md:w-32 flex justify-center items-center gap-1.5 md:gap-2 py-1.5 md:py-2 text-xs md:text-sm font-semibold rounded-lg transition-all ${
               activeTab === "profile"
                 ? "bg-white text-slate-900 shadow-sm ring-1 ring-slate-200/50"
                 : "text-slate-500 hover:text-slate-700"
             }`}
           >
-            <User size={16} strokeWidth={2.5} />
+            <User size={14} className="md:w-4 md:h-4" strokeWidth={2.5} />
             <span>Hồ sơ</span>
           </button>
           <button
             onClick={() => setActiveTab("wallet")}
-            className={`flex-1 md:w-32 flex justify-center items-center gap-2 py-2 text-sm font-semibold rounded-lg transition-all ${
+            className={`flex-1 md:w-32 flex justify-center items-center gap-1.5 md:gap-2 py-1.5 md:py-2 text-xs md:text-sm font-semibold rounded-lg transition-all ${
               activeTab === "wallet"
                 ? "bg-white text-slate-900 shadow-sm ring-1 ring-slate-200/50"
                 : "text-slate-500 hover:text-slate-700"
             }`}
           >
-            <Wallet size={16} strokeWidth={2.5} />
+            <Wallet size={14} className="md:w-4 md:h-4" strokeWidth={2.5} />
             <span>Thu nhập</span>
           </button>
           {isAdmin && (
             <button
               onClick={() => setActiveTab("zalo")}
-              className={`flex-1 md:w-32 flex justify-center items-center gap-2 py-2 text-sm font-semibold rounded-lg transition-all ${
+              className={`flex-1 md:w-32 flex justify-center items-center gap-1.5 md:gap-2 py-1.5 md:py-2 text-xs md:text-sm font-semibold rounded-lg transition-all ${
                 activeTab === "zalo"
                   ? "bg-white text-slate-900 shadow-sm ring-1 ring-slate-200/50"
                   : "text-slate-500 hover:text-slate-700"
               }`}
             >
-              <MessageCircle size={16} strokeWidth={2.5} />
+              <MessageCircle size={14} className="md:w-4 md:h-4" strokeWidth={2.5} />
               <span>Zalo Bot</span>
             </button>
           )}
@@ -248,21 +248,21 @@ export default function TeacherSettingsPage({
       {activeTab === "wallet" && (
         <div className="space-y-6">
           {/* Summary Cards - Đã thu nhỏ font và padding */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 md:gap-3">
             {/* Card 1: Wallet balance - Dark/Premium aesthetic */}
-            <div className="bg-slate-900 rounded-xl p-4 shadow-md flex flex-col justify-between relative overflow-hidden sm:col-span-3 lg:col-span-1">
+            <div className="bg-slate-900 rounded-xl p-3 md:p-4 shadow-md flex flex-col justify-between relative overflow-hidden col-span-2 sm:col-span-3 lg:col-span-1">
               <div className="absolute -right-4 -top-4 w-24 h-24 bg-white/5 rounded-full blur-2xl"></div>
-              <div className="flex items-center gap-2 mb-3 relative z-10">
-                <Wallet className="text-slate-400" size={16} />
-                <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Số dư khả dụng</p>
+              <div className="flex items-center gap-1.5 md:gap-2 mb-2 md:mb-3 relative z-10">
+                <Wallet className="text-slate-400" size={14} />
+                <p className="text-[10px] md:text-[11px] font-bold text-slate-400 uppercase tracking-wider">Số dư khả dụng</p>
               </div>
-              <div className="text-2xl font-extrabold text-white tracking-tight relative z-10">
+              <div className="text-xl md:text-2xl font-extrabold text-white tracking-tight relative z-10">
                 {formatVnd(teacherInfo?.salaryBalance || 0)}
               </div>
             </div>
 
             {/* Card 2: Total earned */}
-            <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm flex flex-col justify-between lg:col-span-1">
+            <div className="bg-white border border-slate-200 rounded-xl p-3 md:p-4 shadow-sm flex flex-col justify-between lg:col-span-1">
               <div className="flex items-center gap-2 mb-3">
                 <TrendingUp className="text-emerald-500" size={16} />
                 <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Lương đã nhận</p>
@@ -273,12 +273,12 @@ export default function TeacherSettingsPage({
             </div>
 
             {/* Card 3: Total room fee deducted */}
-            <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm flex flex-col justify-between lg:col-span-1">
-              <div className="flex items-center gap-2 mb-3">
-                <CreditCard className="text-rose-500" size={16} />
-                <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Phí phòng đã trừ</p>
+            <div className="bg-white border border-slate-200 rounded-xl p-3 md:p-4 shadow-sm flex flex-col justify-between lg:col-span-1">
+              <div className="flex items-center gap-1.5 md:gap-2 mb-2 md:mb-3">
+                <CreditCard className="text-rose-500" size={14} />
+                <p className="text-[10px] md:text-[11px] font-bold text-slate-500 uppercase tracking-wider">Phí phòng</p>
               </div>
-              <div className="text-xl font-extrabold text-slate-800 tracking-tight">
+              <div className="text-base md:text-xl font-extrabold text-slate-800 tracking-tight">
                 {formatVnd(teacherInfo?.totalRoomFee || 0)}
               </div>
             </div>
@@ -351,20 +351,24 @@ function ZaloConnectionWidget() {
     let pollInterval: NodeJS.Timeout | null = null;
     const checkStatus = async () => {
       try {
-        const response = await fetch('http://localhost:8080/status');
+        const response = await fetch('/api/zalobot/status', {
+          headers: { "x-api-key": process.env.NEXT_PUBLIC_ZALO_BOT_API_KEY || "" }
+        });
         const data = await response.json().catch(() => null);
-        const isConnected = data?.isLoggedIn || data?.status === 'ready' || data?.status === 'logged_in';
+        const isConnected = data?.loggedIn || data?.isLoggedIn || data?.status === 'ready' || data?.status === 'logged_in';
         if (isConnected) {
           setIsLoggedIn(true);
-          setStatusMessage('✅ Đã kết nối thành công với Zalo Bot!');
-          setQrUrl(null);
+          setStatusMessage('✅ Bot đang trực chiến!');
+          if (!isLoggedIn) {
+            setQrUrl(null);
+          }
         } else {
           setIsLoggedIn(false);
-          setStatusMessage(data?.message || 'Chưa kết nối. Vui lòng lấy mã QR để đăng nhập.');
+          setStatusMessage(data?.message || 'Chưa kết nối. Vui lòng đăng nhập.');
         }
       } catch (error) {
         setIsLoggedIn(false);
-        setStatusMessage('❌ Không thể kết nối tới server Zalo Bot (http://localhost:8080)');
+        setStatusMessage('❌ Không thể kết nối tới server Zalo Bot');
       }
     };
 
@@ -379,15 +383,23 @@ function ZaloConnectionWidget() {
     };
   }, [qrUrl, isLoggedIn]);
 
-  const handleGetQR = () => {
-    setQrUrl(`http://localhost:8080/login?t=${Date.now()}`);
+  const handleGetQR = async () => {
+    if (isLoggedIn) {
+      setStatusMessage('Đang đăng xuất tài khoản cũ...');
+      await fetch('/api/zalobot/logout', { 
+        method: 'POST',
+        headers: { "x-api-key": process.env.NEXT_PUBLIC_ZALO_BOT_API_KEY || "" }
+      }).catch(() => {});
+      setIsLoggedIn(false);
+    }
+    setQrUrl(`/api/zalobot/login?t=${Date.now()}&api_key=${process.env.NEXT_PUBLIC_ZALO_BOT_API_KEY || ""}`);
     setStatusMessage('Vui lòng quét mã QR trên bằng ứng dụng Zalo (hoặc Zalo Zavi) để đăng nhập.');
   };
 
   return (
     <div className="bg-white border border-slate-200 rounded-2xl p-5 md:p-7 shadow-sm">
       <div className="flex flex-col items-center justify-center space-y-6 py-4 animate-in fade-in zoom-in-95 duration-500">
-        <div className={`p-4 rounded-full shadow-inner ${isLoggedIn ? 'bg-emerald-100 text-emerald-600' : 'bg-blue-100 text-blue-600'}`}>
+        <div className={`p-4 rounded-full shadow-inner ${isLoggedIn ? 'bg-emerald-100 text-emerald-600' : 'bg-rose-100 text-rose-600'}`}>
           {isLoggedIn ? (
              <CheckCircle2 size={32} />
           ) : (
@@ -397,19 +409,18 @@ function ZaloConnectionWidget() {
         
         <div className="text-center space-y-2">
           <h3 className="text-xl font-extrabold text-slate-800 tracking-tight">{isLoggedIn ? 'Zalo Bot Đã Sẵn Sàng' : 'Kết Nối Zalo Bot'}</h3>
-          <p className="text-slate-500 text-sm">{statusMessage}</p>
+          <p className={`text-sm font-bold ${isLoggedIn ? 'text-emerald-600' : 'text-rose-500'}`}>{statusMessage}</p>
         </div>
 
-        {!isLoggedIn && (
-          <div className="flex flex-col items-center gap-5 w-full max-w-sm mt-2">
-            <button 
-              type="button"
-              onClick={handleGetQR}
-              className="w-full py-2.5 px-4 bg-slate-900 hover:bg-slate-800 text-white rounded-lg font-bold text-sm shadow-md transition-all flex items-center justify-center gap-2"
-            >
-              <MessageCircle size={16} />
-              Lấy mã QR Đăng Nhập
-            </button>
+        <div className="flex flex-col items-center gap-5 w-full max-w-sm mt-2">
+          <button 
+            type="button"
+            onClick={handleGetQR}
+            className={`w-full py-2.5 px-4 rounded-lg font-bold text-sm shadow-md transition-all flex items-center justify-center gap-2 ${isLoggedIn ? 'bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-300' : 'bg-slate-900 hover:bg-slate-800 text-white'}`}
+          >
+            <MessageCircle size={16} />
+            {isLoggedIn ? 'Đổi tài khoản khác' : 'Lấy mã QR Đăng Nhập'}
+          </button>
             
             {qrUrl && (
               <div className="p-4 bg-white border-2 border-dashed border-slate-200 rounded-xl flex flex-col items-center gap-3 w-full shadow-sm">
@@ -427,7 +438,6 @@ function ZaloConnectionWidget() {
               </div>
             )}
           </div>
-        )}
       </div>
     </div>
   );

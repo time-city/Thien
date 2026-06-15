@@ -166,7 +166,7 @@ export default function WeeklyCalendar({ userRole, sessions }: WeeklyCalendarPro
     setIsProcessingApproval(false);
 
     if (result.success) {
-      if (result.deductedFee) {
+      if ("deductedFee" in result && result.deductedFee) {
         toast.success(`Đã duyệt! Đã thu phí phòng: ${result.deductedFee.toLocaleString("vi-VN")}đ`);
       } else {
         toast.success("Đã duyệt lịch học!");

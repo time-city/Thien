@@ -166,7 +166,11 @@ export default function WeeklyCalendar({ userRole, sessions }: WeeklyCalendarPro
     setIsProcessingApproval(false);
 
     if (result.success) {
-      toast.success("Đã duyệt lịch học!");
+      if (result.deductedFee) {
+        toast.success(`Đã duyệt! Đã thu phí phòng: ${result.deductedFee.toLocaleString("vi-VN")}đ`);
+      } else {
+        toast.success("Đã duyệt lịch học!");
+      }
       setSelectedPendingSession(null);
       window.dispatchEvent(new Event("schedule-updated"));
       router.refresh();
@@ -414,6 +418,14 @@ export default function WeeklyCalendar({ userRole, sessions }: WeeklyCalendarPro
                               );
                             }
 
+                            if (ev.classId === "freelance" || !ev.classId) {
+                              return (
+                                <div key={ev.id} className={`${cardStyle} cursor-default`}>
+                                  {content}
+                                </div>
+                              );
+                            }
+
                             const href = `/ta/?classId=${encodeURIComponent(ev.classId)}&sessionId=${encodeURIComponent(ev.id)}&date=${encodeURIComponent(ev.dateISO)}`;
                             return (
                               <Link key={ev.id} href={href} className={cardStyle}>
@@ -539,6 +551,14 @@ export default function WeeklyCalendar({ userRole, sessions }: WeeklyCalendarPro
                                 <button key={ev.id} onClick={() => setSelectedPendingSession(ev)} className={`${cardStyle} text-left`}>
                                   {content}
                                 </button>
+                              );
+                            }
+
+                            if (ev.classId === "freelance" || !ev.classId) {
+                              return (
+                                <div key={ev.id} className={`${cardStyle} cursor-default`}>
+                                  {content}
+                                </div>
                               );
                             }
 

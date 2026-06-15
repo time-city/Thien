@@ -1309,6 +1309,39 @@ export async function payTeacherSalary(teacherId: string, amount: number) {
   }
 }
 
+export async function collectTeacherDebtManual(teacherId: string, amount: number) {
+  try {
+    await checkSuperAdmin(); 
+    
+    if (amount <= 0) return { success: false, error: "Số tiền thu phải lớn hơn 0" };
+
+    await prisma.$transaction(async (tx) => {
+      // 1. Lưu lịch sử thu tiền (số tiền âm để thể hiện chiều thu vào)
+      await tx.salaryPayment.create({
+        data: {
+          teacherId: teacherId,
+          amount: -amount,
+          note: "Thu tiền mặt trực tiếp từ giáo viên",
+        }
+      });
+
+      // 2. Cộng tiền vào ví của Giáo viên (để số tiền âm tiến về 0)
+      await tx.user.update({
+        where: { id: teacherId },
+        data: {
+          salaryBalance: { increment: amount }
+        }
+      });
+    });
+
+    revalidatePath("/admin/tuition");
+    return { success: true };
+  } catch (error) {
+    console.error("Lỗi khi thu tiền giáo viên:", error);
+    return { success: false, error: "Đã xảy ra lỗi hệ thống" };
+  }
+}
+
 // ==========================================
 // 9. ROOM BOOKING FLOW
 // ==========================================
@@ -1355,17 +1388,42 @@ export async function requestRoomBooking(data: {
       return { success: false, error: "Bạn đã có lịch dạy trong thời gian này" };
     }
 
-    await prisma.classSession.create({
-      data: {
-        classId: data.classId === "freelance" ? null : data.classId,
-        teacherId: teacherId,
-        roomId: data.roomId,
-        date: dateObj,
-        slot: data.slot,
-        status: role === "SUPER_ADMIN" ? "SCHEDULED" : "PENDING",
-      },
+    await prisma.$transaction(async (tx) => {
+      const newSession = await tx.classSession.create({
+        data: {
+          classId: data.classId === "freelance" ? null : data.classId,
+          teacherId: teacherId,
+          roomId: data.roomId,
+          date: dateObj,
+          slot: data.slot,
+          status: role === "SUPER_ADMIN" ? "SCHEDULED" : "PENDING",
+        },
+      });
+
+      if (role === "SUPER_ADMIN" && (data.classId === "freelance" || data.classId === null)) {
+        const room = await tx.room.findUnique({ where: { id: data.roomId } });
+        const roomFee = room?.feePerSession ?? 0;
+        
+        if (roomFee > 0) {
+          await tx.user.update({
+            where: { id: teacherId },
+            data: { salaryBalance: { decrement: roomFee } }
+          });
+
+          await tx.roomRentalLog.create({
+            data: {
+              teacherId: teacherId,
+              classSessionId: newSession.id,
+              feeCalculated: roomFee,
+              status: "PAID"
+            }
+          });
+        }
+      }
     });
 
+    revalidatePath("/schedule");
+    revalidatePath("/admin/teachers");
     return { success: true };
   } catch (error) {
     console.error("requestRoomBooking error:", error);
@@ -1376,7 +1434,7 @@ export async function requestRoomBooking(data: {
 export async function approveSessionRequest(sessionId: string) {
   await checkSuperAdmin();
   try {
-    return await prisma.$transaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx) => {
       const session = await tx.classSession.findUnique({
         where: { id: sessionId },
         include: { room: true }
@@ -1385,10 +1443,12 @@ export async function approveSessionRequest(sessionId: string) {
       if (!session) throw new Error("Không tìm thấy phiên đăng ký");
 
       // Nếu là lớp tự do (Freelance), trừ tiền phòng NGAY LẬP TỨC khi duyệt
+      let deductedFee = 0;
       if (session.classId === null) {
         const roomFee = session.room?.feePerSession ?? 0;
         
         if (roomFee > 0) {
+          deductedFee = roomFee;
           await tx.user.update({
             where: { id: session.teacherId },
             data: { salaryBalance: { decrement: roomFee } }
@@ -1410,8 +1470,13 @@ export async function approveSessionRequest(sessionId: string) {
         data: { status: "SCHEDULED" },
       });
 
-      return { success: true, error: undefined };
+      return { success: true, error: undefined, deductedFee };
     });
+
+
+    revalidatePath("/schedule");
+    revalidatePath("/admin/teachers");
+    return result;
   } catch (error) {
     console.error("approveSessionRequest error:", error);
     return { success: false, error: "Lỗi duyệt phòng" };

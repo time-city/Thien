@@ -114,7 +114,30 @@ export async function POST(request: Request) {
           console.error(`❌ Lỗi khi thanh toán cho học sinh ${studentId}:`, result.message);
         }
       } else {
-        console.warn(`⚠️ Webhook nhận được tiền nhưng không tìm thấy học sinh khớp với mã: ${studentPhoneMatch}`);
+        // 4. Fallback: Nếu không tìm thấy học sinh, thử tìm Giáo viên theo username
+        // Dùng trong trường hợp giáo viên nợ tiền phòng và thanh toán lại cho trung tâm
+        const teacher = await prisma.user.findUnique({
+          where: { username: studentPhoneMatch }
+        });
+
+        if (teacher && teacher.role === "TEACHER") {
+          await prisma.$transaction(async (tx) => {
+            await tx.user.update({
+              where: { id: teacher.id },
+              data: { salaryBalance: { increment: amount } }
+            });
+            await tx.salaryPayment.create({
+              data: {
+                teacherId: teacher.id,
+                amount: -amount,
+                note: `Giáo viên đóng tiền phòng (Chuyển khoản SePay: ${sepayId})`
+              }
+            });
+          });
+          console.log(`✅ Đã thu ${amount} từ GV ${teacher.username} qua Webhook`);
+        } else {
+          console.warn(`⚠️ Webhook nhận được tiền nhưng không tìm thấy học sinh hoặc giáo viên khớp với mã: ${studentPhoneMatch}`);
+        }
       }
     }
 

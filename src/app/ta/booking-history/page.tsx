@@ -42,7 +42,52 @@ export default async function BookingHistoryPage() {
         </div>
       ) : (
         <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
-          <div className="overflow-x-auto">
+          {/* MOBILE VIEW */}
+          <div className="block md:hidden divide-y divide-slate-100">
+            {history.map((item) => {
+              const isPending = item.status === "PENDING";
+              const shiftInfo = SHIFTS.find((s) => s.id === item.slot);
+              const isFreelance = item.classId === "freelance";
+              return (
+                <div key={item.id} className="p-4 flex flex-col gap-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <span className="font-bold text-slate-900 text-sm leading-tight">{item.className}</span>
+                    <div className={`shrink-0 inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold ${
+                        isPending 
+                          ? "bg-amber-100 text-amber-700 border border-amber-200" 
+                          : "bg-green-100 text-green-700 border border-green-200"
+                      }`}>
+                        {isPending ? <Clock3 size={10} /> : <CheckCircle size={10} />}
+                        {isPending ? "Chờ duyệt" : "Đã duyệt"}
+                    </div>
+                  </div>
+                  
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div className="flex items-center gap-1.5 text-slate-600 font-medium">
+                      <Calendar size={14} className="text-slate-400 shrink-0" />
+                      {format(item.date, "dd/MM/yyyy")}
+                    </div>
+                    <div className="flex items-center gap-1.5 font-semibold text-slate-700">
+                      <MapPin size={14} className="text-slate-400 shrink-0" />
+                      <span className="truncate">{item.roomName}</span>
+                    </div>
+                    <div className="flex items-center gap-1.5 text-slate-600 font-medium col-span-2">
+                      <Clock3 size={14} className="text-slate-400 shrink-0" />
+                      <span>Ca {item.slot} <span className="text-slate-400">({shiftInfo?.time})</span></span>
+                    </div>
+                    {isFreelance && item.roomFee > 0 && (
+                      <div className="flex items-center gap-1.5 font-semibold text-rose-600 col-span-2 mt-1 border-t border-slate-100 pt-2">
+                        Phí phòng: {item.roomFee.toLocaleString("vi-VN")}đ
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* DESKTOP VIEW */}
+          <div className="hidden md:block overflow-x-auto">
             <table className="w-full text-left border-collapse min-w-[600px]">
               <thead>
                 <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 text-[13px] uppercase tracking-wider">
@@ -57,10 +102,18 @@ export default async function BookingHistoryPage() {
                 {history.map((item) => {
                   const isPending = item.status === "PENDING";
                   const shiftInfo = SHIFTS.find((s) => s.id === item.slot);
+                  const isFreelance = item.classId === "freelance";
                   return (
                     <tr key={item.id} className="hover:bg-slate-50/50 transition-colors">
                       <td className="p-4">
-                        <span className="font-bold text-slate-900">{item.className}</span>
+                        <div className="flex flex-col">
+                          <span className="font-bold text-slate-900">{item.className}</span>
+                          {isFreelance && item.roomFee > 0 && (
+                            <span className="text-[11px] font-semibold text-rose-600 mt-0.5">
+                              Phí phòng: {item.roomFee.toLocaleString("vi-VN")}đ
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="p-4">
                         <div className="flex items-center gap-1.5 text-sm font-semibold text-slate-700">

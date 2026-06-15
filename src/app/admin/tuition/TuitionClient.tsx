@@ -7,7 +7,7 @@ import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { Loader2, TrendingUp, CreditCard, Wallet, CheckCircle2, Send, MessageCircle } from "lucide-react";
 import type { TuitionStudentData } from "@/actions/queries";
-import { payTeacherSalary, processStudentTuitionPayment, markMultipleReportsAsSent } from "@/actions/mutations";
+import { payTeacherSalary, processStudentTuitionPayment, markMultipleReportsAsSent, collectTeacherDebtManual } from "@/actions/mutations";
 import { getStudentCombinedReport, StudentCombinedReport } from "@/actions/report";
 import { toPng } from "html-to-image";
 import CourseReportModal from "../students/CourseReportModal";
@@ -176,9 +176,75 @@ export default function TuitionClient({
         toast.error(res.error || "Lỗi thanh toán lương");
       }
     } catch (error) {
-      toast.error("Lỗi hệ thống");
+        toast.error("Lỗi hệ thống");
     } finally {
       setIsPayingSalary(false);
+    }
+  };
+
+  const [isCollectingDebt, setIsCollectingDebt] = useState(false);
+  const [isSendingZaloDebt, setIsSendingZaloDebt] = useState(false);
+  const [teacherZaloPhone, setTeacherZaloPhone] = useState("");
+
+  const handleCollectDebtManual = async () => {
+    if (!selectedTeacher || selectedTeacher.salaryBalance >= 0) return;
+    setIsCollectingDebt(true);
+    try {
+      const res = await collectTeacherDebtManual(selectedTeacher.id, Math.abs(selectedTeacher.salaryBalance));
+      if (res.success) {
+        toast.success(`Đã thu ${formatCurrency(Math.abs(selectedTeacher.salaryBalance))} tiền mặt từ ${selectedTeacher.fullName}`);
+        setSelectedTeacher(null);
+        router.refresh();
+      } else {
+        toast.error(res.error || "Lỗi thu tiền");
+      }
+    } catch (error) {
+      toast.error("Lỗi hệ thống");
+    } finally {
+      setIsCollectingDebt(false);
+    }
+  };
+
+  const handleSendZaloDebt = async () => {
+    if (!selectedTeacher || !teacherZaloPhone) return;
+    setIsSendingZaloDebt(true);
+    try {
+      await new Promise(r => setTimeout(r, 1000)); // Cần 1 giây để load QR Code VietQR
+      const element = document.getElementById("hidden-teacher-qr");
+      if (element) {
+        const dataUrl = await toPng(element, { 
+          cacheBust: true, 
+          pixelRatio: 2, 
+          backgroundColor: "#ffffff",
+          style: { transform: "scale(1)", transformOrigin: "top left" }
+        });
+        
+        const res = await fetch(dataUrl);
+        const blob = await res.blob();
+        const file = new File([blob], `ThuTien_${selectedTeacher.username}.png`, { type: "image/png" });
+        
+        const formData = new FormData();
+        formData.append("target", teacherZaloPhone);
+        formData.append("image", file);
+        formData.append("message", `Trung tâm gửi mã thanh toán cấn trừ tiền phòng / lương bị âm. Bạn vui lòng quét mã này để thanh toán.\nSố tiền: ${new Intl.NumberFormat("vi-VN").format(Math.abs(selectedTeacher.salaryBalance))}đ\nNội dung CK: HT ${teacherZaloPhone || selectedTeacher.username}`);
+
+        const response = await fetch("/api/zalobot/send-image", { 
+          method: "POST", 
+          headers: {
+            "x-api-key": process.env.NEXT_PUBLIC_ZALO_BOT_API_KEY || ""
+          },
+          body: formData 
+        });
+        if (!response.ok) {
+           toast.error(`Lỗi gửi Zalo cho ${selectedTeacher.fullName}`);
+        } else {
+           toast.success(`Đã gửi Zalo mã thu tiền cho: ${teacherZaloPhone}`);
+        }
+      }
+    } catch (err) {
+      toast.error(`Lỗi tạo ảnh QR hoặc gửi Zalo`);
+    } finally {
+      setIsSendingZaloDebt(false);
     }
   };
 
@@ -396,17 +462,27 @@ export default function TuitionClient({
                 <div className="flex flex-row md:flex-col items-center md:items-end justify-between md:justify-center md:w-32 shrink-0 gap-3 border-t md:border-t-0 border-slate-100 pt-3 md:pt-0 mt-1 md:mt-0">
                   {hasBalance ? (
                     <span className="bg-amber-100 text-amber-700 font-extrabold px-2 py-1 rounded text-[10px] uppercase tracking-wider whitespace-nowrap">Cần Trả Lương</span>
+                  ) : teacher.salaryBalance < 0 ? (
+                    <span className="bg-rose-100 text-rose-700 font-extrabold px-2 py-1 rounded text-[10px] uppercase tracking-wider whitespace-nowrap">Thực Nhận Âm</span>
                   ) : (
                     <span className="bg-slate-100 text-slate-500 font-extrabold px-2 py-1 rounded text-[10px] uppercase tracking-wider whitespace-nowrap">Đã Tất Toán</span>
                   )}
 
                   <button
-                    onClick={() => setSelectedTeacher(teacher)}
-                    disabled={!hasBalance || isPayingSalary}
-                    className={`w-full md:w-auto px-4 py-2 rounded-lg font-bold shadow-sm transition-all text-xs flex items-center justify-center gap-1.5 whitespace-nowrap ${hasBalance && !isPayingSalary ? "bg-slate-900 hover:bg-slate-800 text-white" : "bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200"
+                    onClick={() => {
+                      setSelectedTeacher(teacher);
+                      setTeacherZaloPhone(teacher.username);
+                    }}
+                    disabled={(teacher.salaryBalance === 0) || isPayingSalary || isCollectingDebt}
+                    className={`w-full md:w-auto px-4 py-2 rounded-lg font-bold shadow-sm transition-all text-xs flex items-center justify-center gap-1.5 whitespace-nowrap ${
+                      hasBalance && !isPayingSalary 
+                        ? "bg-slate-900 hover:bg-slate-800 text-white" 
+                        : teacher.salaryBalance < 0 
+                          ? "bg-rose-600 hover:bg-rose-700 text-white"
+                          : "bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200"
                       }`}
                   >
-                    Thanh Toán
+                    {teacher.salaryBalance < 0 ? "Thu Tiền" : "Thanh Toán"}
                   </button>
                 </div>
               </div>
@@ -423,28 +499,65 @@ export default function TuitionClient({
 
 
       {/* ======================================================== */}
-      {/* MODAL THANH TOÁN LƯƠNG GIÁO VIÊN */}
+      {/* MODAL THANH TOÁN LƯƠNG HOẶC THU TIỀN GIÁO VIÊN */}
       {selectedTeacher && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden flex flex-col animate-in zoom-in-95 duration-200">
             <div className="p-4 md:p-5 border-b border-slate-100 bg-slate-50">
-              <h3 className="text-lg font-extrabold text-slate-900">Chi Trả Lương Giáo Viên</h3>
+              <h3 className="text-lg font-extrabold text-slate-900">
+                {selectedTeacher.salaryBalance < 0 ? "Thu Phí Phòng (Giáo Viên)" : "Chi Trả Lương Giáo Viên"}
+              </h3>
               <p className="text-sm text-slate-500 mt-0.5 font-medium">Người nhận: <span className="font-bold text-slate-700">{selectedTeacher.fullName}</span></p>
             </div>
             <div className="p-6 flex flex-col items-center">
               <div className="mb-2 text-center w-full">
-                <p className="text-sm font-semibold text-slate-500 mb-1">Số tiền cần thanh toán</p>
-                <div className="p-4 bg-blue-50 rounded-xl border border-blue-100 mt-2">
-                  <p className="text-3xl font-extrabold text-blue-600 tracking-tight">{formatCurrency(selectedTeacher.salaryBalance)}</p>
+                <p className="text-sm font-semibold text-slate-500 mb-1">
+                  {selectedTeacher.salaryBalance < 0 ? "Số tiền giáo viên cần đóng" : "Số tiền cần thanh toán"}
+                </p>
+                <div className={`p-4 rounded-xl border mt-2 ${selectedTeacher.salaryBalance < 0 ? "bg-rose-50 border-rose-100" : "bg-blue-50 border-blue-100"}`}>
+                  <p className={`text-3xl font-extrabold tracking-tight ${selectedTeacher.salaryBalance < 0 ? "text-rose-600" : "text-blue-600"}`}>
+                    {formatCurrency(Math.abs(selectedTeacher.salaryBalance))}
+                  </p>
                 </div>
               </div>
-              <p className="text-xs text-slate-400 mt-4 text-center italic">* Bấm xác nhận bên dưới sau khi bạn đã chi trả thành công để đưa số dư ví giáo viên về 0đ.</p>
+
+              {selectedTeacher.salaryBalance < 0 ? (
+                <div className="w-full mt-4 text-left">
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Gửi Zalo (Tùy chọn)</label>
+                  <div className="flex gap-2">
+                    <input 
+                      type="text" 
+                      value={teacherZaloPhone} 
+                      onChange={e => setTeacherZaloPhone(e.target.value)} 
+                      placeholder="SĐT Zalo GV"
+                      className="flex-1 text-sm border border-slate-200 rounded px-2 py-1.5 focus:outline-none focus:border-blue-500" 
+                    />
+                    <button 
+                      onClick={handleSendZaloDebt}
+                      disabled={isSendingZaloDebt || !teacherZaloPhone}
+                      className="bg-[#0068FF] hover:bg-blue-700 text-white px-3 py-1.5 rounded font-bold text-xs flex items-center gap-1 disabled:opacity-50 transition-colors shrink-0"
+                    >
+                      {isSendingZaloDebt ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />} Gửi Zalo
+                    </button>
+                  </div>
+                  <p className="text-[10px] text-slate-400 mt-1 italic">* Tin nhắn Zalo sẽ chứa mã QR VietQR tự động khớp thanh toán qua Webhook.</p>
+                </div>
+              ) : (
+                <p className="text-xs text-slate-400 mt-4 text-center italic">* Bấm xác nhận bên dưới sau khi bạn đã chi trả thành công để đưa số dư ví giáo viên về 0đ.</p>
+              )}
             </div>
             <div className="p-4 border-t border-slate-100 flex justify-end gap-3 bg-white">
-              <button onClick={() => setSelectedTeacher(null)} disabled={isPayingSalary} className="px-5 py-2.5 rounded-xl font-bold text-sm text-slate-600 hover:bg-slate-100 border border-slate-200 transition-colors w-full sm:w-auto">Hủy</button>
-              <button onClick={handlePaySalary} disabled={isPayingSalary} className="px-5 py-2.5 rounded-xl font-bold text-sm bg-slate-900 text-white hover:bg-slate-800 transition-colors shadow-sm flex items-center justify-center gap-2 w-full sm:w-auto">
-                {isPayingSalary && <Loader2 size={16} className="animate-spin" />} Xác Nhận Đã Chuyển
-              </button>
+              <button onClick={() => setSelectedTeacher(null)} disabled={isPayingSalary || isCollectingDebt} className="px-5 py-2.5 rounded-xl font-bold text-sm text-slate-600 hover:bg-slate-100 border border-slate-200 transition-colors w-full sm:w-auto">Hủy</button>
+              
+              {selectedTeacher.salaryBalance < 0 ? (
+                <button onClick={handleCollectDebtManual} disabled={isCollectingDebt} className="px-5 py-2.5 rounded-xl font-bold text-sm bg-rose-600 text-white hover:bg-rose-700 transition-colors shadow-sm flex items-center justify-center gap-2 w-full sm:w-auto">
+                  {isCollectingDebt && <Loader2 size={16} className="animate-spin" />} Đã Thu Tiền Mặt
+                </button>
+              ) : (
+                <button onClick={handlePaySalary} disabled={isPayingSalary} className="px-5 py-2.5 rounded-xl font-bold text-sm bg-slate-900 text-white hover:bg-slate-800 transition-colors shadow-sm flex items-center justify-center gap-2 w-full sm:w-auto">
+                  {isPayingSalary && <Loader2 size={16} className="animate-spin" />} Xác Nhận Đã Chuyển
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -649,6 +762,59 @@ export default function TuitionClient({
             {/* Footer text */}
             <div className="bg-slate-800 text-slate-300 text-xs py-3 px-6 text-center">
               Cảm ơn Quý phụ huynh đã đồng hành cùng Trung tâm!
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* INVISIBLE REPORT RENDERER FOR TEACHER DEBT */}
+      {selectedTeacher && selectedTeacher.salaryBalance < 0 && (
+        <div className="fixed -left-[9999px] -top-[9999px] opacity-0 pointer-events-none">
+          <div id="hidden-teacher-qr" className="bg-white w-[800px] overflow-hidden border border-slate-200" style={{ fontFamily: "sans-serif" }}>
+            <div className="bg-rose-600 p-6 text-white text-center">
+              <h1 className="text-2xl font-black uppercase tracking-wider mb-1">TRUNG TÂM GIÁO DỤC</h1>
+              <p className="text-rose-100 text-sm font-medium">THANH TOÁN TIỀN PHÒNG / TRỪ LƯƠNG ÂM</p>
+            </div>
+            <div className="p-6 border-b border-slate-100">
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                  <p className="text-slate-500 mb-1 text-xs uppercase font-bold tracking-wider">Giáo viên</p>
+                  <p className="font-extrabold text-slate-800 text-lg">{selectedTeacher.fullName}</p>
+                </div>
+                <div>
+                  <p className="text-slate-500 mb-1 text-xs uppercase font-bold tracking-wider">Mã Giáo Viên (Username)</p>
+                  <p className="font-extrabold text-slate-800 text-lg">{selectedTeacher.username}</p>
+                </div>
+              </div>
+            </div>
+            
+            <div className="bg-slate-50 p-6 flex items-center justify-between border-t border-slate-100">
+              <div className="flex items-center gap-4">
+                <div className="p-1 bg-white rounded-xl shadow-sm border border-slate-200">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img 
+                    src={`https://qr.sepay.vn/img?bank=MBBank&acc=0700107189999&amount=${Math.abs(selectedTeacher.salaryBalance)}&des=${encodeURIComponent(`HT ${teacherZaloPhone || selectedTeacher.username}`)}&template=`} 
+                    alt="QR Code" 
+                    crossOrigin="anonymous" 
+                    className="w-24 h-24 object-contain" 
+                  />
+                </div>
+                <div>
+                  <p className="font-bold text-slate-800 flex items-center gap-2">
+                    Quét mã thanh toán
+                    <span className="bg-emerald-100 text-emerald-700 text-[10px] uppercase font-black px-2 py-0.5 rounded-full">
+                      VietQR
+                    </span>
+                  </p>
+                  <p className="text-sm text-slate-500 mt-1 mb-2">Số tiền cần thanh toán: <span className="font-bold text-rose-600">{Math.abs(selectedTeacher.salaryBalance).toLocaleString("vi-VN")} đ</span></p>
+                </div>
+              </div>
+            </div>
+            <div className="p-6">
+              <h3 className="text-sm font-bold text-slate-800 mb-4 uppercase tracking-wider border-l-4 border-rose-500 pl-3">Nội dung chuyển khoản</h3>
+              <div className="flex justify-between items-center p-3 border border-slate-100 rounded-lg bg-slate-50/50 text-xl font-bold text-slate-900 tracking-widest text-center w-full block">
+                HT {teacherZaloPhone || selectedTeacher.username}
+              </div>
             </div>
           </div>
         </div>

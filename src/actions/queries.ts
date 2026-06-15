@@ -523,6 +523,7 @@ export type TeacherBookingHistoryItem = {
   slot: number;
   status: string;
   createdAt?: Date; // In schema, classSession doesn't have createdAt?
+  roomFee: number;
 };
 
 export async function getTeacherBookingHistory(teacherId: string): Promise<TeacherBookingHistoryItem[]> {
@@ -541,6 +542,7 @@ export async function getTeacherBookingHistory(teacherId: string): Promise<Teach
     date: s.date,
     slot: s.slot,
     status: s.status,
+    roomFee: s.room?.feePerSession ?? 0,
   }));
 }
 

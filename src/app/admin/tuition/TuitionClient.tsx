@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, startTransition, useOptimistic } from "react";
 import { useAuth } from "@/lib/AuthContext";
 import { QRCodeSVG } from "qrcode.react";
 import { toast } from "sonner";
@@ -16,6 +16,7 @@ export type TeacherFinanceViewData = {
   id: string;
   username: string;
   fullName: string;
+  phone: string | null;
   salaryBalance: number;
   totalRoomFee: number;
   totalEarned: number;
@@ -37,6 +38,17 @@ export default function TuitionClient({
 
   const [students, setStudents] = useState<TuitionStudentData[]>(initialStudents);
   const [teachers, setTeachers] = useState<TeacherFinanceViewData[]>(initialTeachers);
+
+  const [optimisticTeachers, addOptimisticTeacherUpdate] = useOptimistic(
+    teachers,
+    (state, updatedTeacherId: string) => {
+      return state.map((t) =>
+        t.id === updatedTeacherId
+          ? { ...t, salaryBalance: 0, totalRoomFee: 0, totalEarned: 0 }
+          : t
+      );
+    }
+  );
 
   // LẮNG NGHE DATA TỪ DATABASE: Khi router.refresh() chạy, data DB mới nhất sẽ được đổ vào đây
   useEffect(() => {
@@ -162,47 +174,57 @@ export default function TuitionClient({
   };
 
   // --- LOGIC THANH TOÁN LƯƠNG ---
-  const handlePaySalary = async () => {
+  const handlePaySalary = () => {
     if (!selectedTeacher || selectedTeacher.salaryBalance <= 0) return;
-    setIsPayingSalary(true);
-    try {
-      const res = await payTeacherSalary(selectedTeacher.id, selectedTeacher.salaryBalance);
-      if (res.success) {
-        toast.success(`Đã thanh toán ${formatCurrency(selectedTeacher.salaryBalance)} cho ${selectedTeacher.fullName}`);
+    
+    const teacherId = selectedTeacher.id;
+    const amount = selectedTeacher.salaryBalance;
+    const currentName = selectedTeacher.fullName;
+    
+    setSelectedTeacher(null);
 
-        setSelectedTeacher(null);
-        router.refresh(); // Ép tải lại Database để lấy số dư ví = 0đ
-      } else {
-        toast.error(res.error || "Lỗi thanh toán lương");
-      }
-    } catch (error) {
+    startTransition(async () => {
+      addOptimisticTeacherUpdate(teacherId);
+      try {
+        const res = await payTeacherSalary(teacherId, amount);
+        if (res.success) {
+          toast.success(`Đã thanh toán ${formatCurrency(amount)} cho ${currentName}`);
+          router.refresh(); 
+        } else {
+          toast.error(res.error || "Lỗi thanh toán lương");
+        }
+      } catch (error) {
         toast.error("Lỗi hệ thống");
-    } finally {
-      setIsPayingSalary(false);
-    }
+      }
+    });
   };
 
-  const [isCollectingDebt, setIsCollectingDebt] = useState(false);
   const [isSendingZaloDebt, setIsSendingZaloDebt] = useState(false);
   const [teacherZaloPhone, setTeacherZaloPhone] = useState("");
 
-  const handleCollectDebtManual = async () => {
+  const handleCollectDebtManual = () => {
     if (!selectedTeacher || selectedTeacher.salaryBalance >= 0) return;
-    setIsCollectingDebt(true);
-    try {
-      const res = await collectTeacherDebtManual(selectedTeacher.id, Math.abs(selectedTeacher.salaryBalance));
-      if (res.success) {
-        toast.success(`Đã thu ${formatCurrency(Math.abs(selectedTeacher.salaryBalance))} tiền mặt từ ${selectedTeacher.fullName}`);
-        setSelectedTeacher(null);
-        router.refresh();
-      } else {
-        toast.error(res.error || "Lỗi thu tiền");
+    
+    const teacherId = selectedTeacher.id;
+    const amount = Math.abs(selectedTeacher.salaryBalance);
+    const currentName = selectedTeacher.fullName;
+    
+    setSelectedTeacher(null);
+
+    startTransition(async () => {
+      addOptimisticTeacherUpdate(teacherId);
+      try {
+        const res = await collectTeacherDebtManual(teacherId, amount);
+        if (res.success) {
+          toast.success(`Đã thu ${formatCurrency(amount)} tiền mặt từ ${currentName}`);
+          router.refresh();
+        } else {
+          toast.error(res.error || "Lỗi thu tiền");
+        }
+      } catch (error) {
+        toast.error("Lỗi hệ thống");
       }
-    } catch (error) {
-      toast.error("Lỗi hệ thống");
-    } finally {
-      setIsCollectingDebt(false);
-    }
+    });
   };
 
   const handleSendZaloDebt = async () => {
@@ -226,7 +248,7 @@ export default function TuitionClient({
         const formData = new FormData();
         formData.append("target", teacherZaloPhone);
         formData.append("image", file);
-        formData.append("message", `Trung tâm gửi mã thanh toán cấn trừ tiền phòng / lương bị âm. Bạn vui lòng quét mã này để thanh toán.\nSố tiền: ${new Intl.NumberFormat("vi-VN").format(Math.abs(selectedTeacher.salaryBalance))}đ\nNội dung CK: HT ${teacherZaloPhone || selectedTeacher.username}`);
+        formData.append("message", `Trung tâm gửi mã thanh toán cấn trừ tiền phòng / lương bị âm. Bạn vui lòng quét mã này để thanh toán.\nSố tiền: ${new Intl.NumberFormat("vi-VN").format(Math.abs(selectedTeacher.salaryBalance))}đ\nNội dung CK: HT ${selectedTeacher.phone || teacherZaloPhone || selectedTeacher.username}`);
 
         const response = await fetch("/api/zalobot/send-image", { 
           method: "POST", 
@@ -410,7 +432,7 @@ export default function TuitionClient({
       {/* TAB 2: THANH TOÁN LƯƠNG GIÁO VIÊN (DẠNG LIST) */}
       {activeTab === "TEACHER_SALARY" && (
         <div className="flex flex-col gap-4">
-          {teachers.map((teacher) => {
+          {optimisticTeachers.map((teacher) => {
             const hasBalance = teacher.salaryBalance > 0;
             const initial = teacher.fullName.charAt(0).toUpperCase();
 
@@ -471,11 +493,12 @@ export default function TuitionClient({
                   <button
                     onClick={() => {
                       setSelectedTeacher(teacher);
-                      setTeacherZaloPhone(teacher.username);
+                      const initialPhone = (teacher.phone || teacher.username).replace(/\D/g, '');
+                      setTeacherZaloPhone(initialPhone);
                     }}
-                    disabled={(teacher.salaryBalance === 0) || isPayingSalary || isCollectingDebt}
+                    disabled={teacher.salaryBalance === 0}
                     className={`w-full md:w-auto px-4 py-2 rounded-lg font-bold shadow-sm transition-all text-xs flex items-center justify-center gap-1.5 whitespace-nowrap ${
-                      hasBalance && !isPayingSalary 
+                      hasBalance 
                         ? "bg-slate-900 hover:bg-slate-800 text-white" 
                         : teacher.salaryBalance < 0 
                           ? "bg-rose-600 hover:bg-rose-700 text-white"
@@ -523,14 +546,19 @@ export default function TuitionClient({
 
               {selectedTeacher.salaryBalance < 0 ? (
                 <div className="w-full mt-4 text-left">
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Gửi Zalo (Tùy chọn)</label>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Gửi Zalo (Bắt buộc nhập SĐT)</label>
+                  {!selectedTeacher.phone && (
+                    <div className="text-[11px] text-amber-600 bg-amber-50 p-2 rounded-lg border border-amber-200 mb-2 font-medium">
+                      ⚠️ Giáo viên này chưa cập nhật SĐT. Vui lòng nhập SĐT bằng số để tiếp tục gửi Zalo.
+                    </div>
+                  )}
                   <div className="flex gap-2">
                     <input 
-                      type="text" 
+                      type="tel" 
                       value={teacherZaloPhone} 
-                      onChange={e => setTeacherZaloPhone(e.target.value)} 
-                      placeholder="SĐT Zalo GV"
-                      className="flex-1 text-sm border border-slate-200 rounded px-2 py-1.5 focus:outline-none focus:border-blue-500" 
+                      onChange={e => setTeacherZaloPhone(e.target.value.replace(/\D/g, ''))} 
+                      placeholder="Nhập SĐT Zalo GV..."
+                      className={`flex-1 text-sm border rounded px-2 py-1.5 focus:outline-none focus:border-blue-500 ${!selectedTeacher.phone && !teacherZaloPhone ? "border-rose-300 bg-rose-50" : "border-slate-200 bg-white"}`} 
                     />
                     <button 
                       onClick={handleSendZaloDebt}
@@ -547,15 +575,15 @@ export default function TuitionClient({
               )}
             </div>
             <div className="p-4 border-t border-slate-100 flex justify-end gap-3 bg-white">
-              <button onClick={() => setSelectedTeacher(null)} disabled={isPayingSalary || isCollectingDebt} className="px-5 py-2.5 rounded-xl font-bold text-sm text-slate-600 hover:bg-slate-100 border border-slate-200 transition-colors w-full sm:w-auto">Hủy</button>
+              <button onClick={() => setSelectedTeacher(null)} className="px-5 py-2.5 rounded-xl font-bold text-sm text-slate-600 hover:bg-slate-100 border border-slate-200 transition-colors w-full sm:w-auto">Hủy</button>
               
               {selectedTeacher.salaryBalance < 0 ? (
-                <button onClick={handleCollectDebtManual} disabled={isCollectingDebt} className="px-5 py-2.5 rounded-xl font-bold text-sm bg-rose-600 text-white hover:bg-rose-700 transition-colors shadow-sm flex items-center justify-center gap-2 w-full sm:w-auto">
-                  {isCollectingDebt && <Loader2 size={16} className="animate-spin" />} Đã Thu Tiền Mặt
+                <button onClick={handleCollectDebtManual} className="px-5 py-2.5 rounded-xl font-bold text-sm bg-rose-600 text-white hover:bg-rose-700 transition-colors shadow-sm flex items-center justify-center gap-2 w-full sm:w-auto">
+                  Đã Thu Tiền Mặt
                 </button>
               ) : (
-                <button onClick={handlePaySalary} disabled={isPayingSalary} className="px-5 py-2.5 rounded-xl font-bold text-sm bg-slate-900 text-white hover:bg-slate-800 transition-colors shadow-sm flex items-center justify-center gap-2 w-full sm:w-auto">
-                  {isPayingSalary && <Loader2 size={16} className="animate-spin" />} Xác Nhận Đã Chuyển
+                <button onClick={handlePaySalary} className="px-5 py-2.5 rounded-xl font-bold text-sm bg-slate-900 text-white hover:bg-slate-800 transition-colors shadow-sm flex items-center justify-center gap-2 w-full sm:w-auto">
+                  Xác Nhận Đã Chuyển
                 </button>
               )}
             </div>
@@ -793,7 +821,7 @@ export default function TuitionClient({
                 <div className="p-1 bg-white rounded-xl shadow-sm border border-slate-200">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img 
-                    src={`https://qr.sepay.vn/img?bank=MBBank&acc=0700107189999&amount=${Math.abs(selectedTeacher.salaryBalance)}&des=${encodeURIComponent(`HT ${teacherZaloPhone || selectedTeacher.username}`)}&template=`} 
+                    src={`https://qr.sepay.vn/img?bank=MBBank&acc=0700107189999&amount=${Math.abs(selectedTeacher.salaryBalance)}&des=${encodeURIComponent(`HT ${selectedTeacher.phone || teacherZaloPhone || selectedTeacher.username}`)}&template=`} 
                     alt="QR Code" 
                     crossOrigin="anonymous" 
                     className="w-24 h-24 object-contain" 
@@ -813,7 +841,7 @@ export default function TuitionClient({
             <div className="p-6">
               <h3 className="text-sm font-bold text-slate-800 mb-4 uppercase tracking-wider border-l-4 border-rose-500 pl-3">Nội dung chuyển khoản</h3>
               <div className="flex justify-between items-center p-3 border border-slate-100 rounded-lg bg-slate-50/50 text-xl font-bold text-slate-900 tracking-widest text-center w-full block">
-                HT {teacherZaloPhone || selectedTeacher.username}
+                HT {selectedTeacher.phone || teacherZaloPhone || selectedTeacher.username}
               </div>
             </div>
           </div>

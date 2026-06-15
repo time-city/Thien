@@ -1,7 +1,7 @@
 import { auth } from "@/auth";
 import { getTeacherBookingHistory } from "@/actions/queries";
 import { format } from "date-fns";
-import { MapPin, Calendar, CheckCircle, Clock3, History } from "lucide-react";
+import { MapPin, Calendar, CheckCircle, Clock3, History, XCircle } from "lucide-react";
 
 const SHIFTS = [
   { id: 1, label: "Ca 1", time: "07:30 - 09:00" },
@@ -131,14 +131,46 @@ export default async function BookingHistoryPage() {
                         </div>
                       </td>
                       <td className="p-4 text-right">
-                        <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold ${
-                          isPending 
-                            ? "bg-amber-100 text-amber-700 border border-amber-200" 
-                            : "bg-green-100 text-green-700 border border-green-200"
-                        }`}>
-                          {isPending ? <Clock3 size={12} /> : <CheckCircle size={12} />}
-                          {isPending ? "Chờ duyệt" : "Đã duyệt"}
-                        </div>
+                        {(() => {
+                          if (item.status === "CANCELLED") {
+                            return (
+                              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-rose-100 text-rose-700 border border-rose-200">
+                                <XCircle size={12} />
+                                Đã huỷ
+                              </div>
+                            );
+                          }
+                          if (item.isCancelRequested) {
+                            return (
+                              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-orange-100 text-orange-700 border border-orange-200">
+                                <Clock3 size={12} />
+                                Chờ duyệt huỷ
+                              </div>
+                            );
+                          }
+                          if (item.status === "PENDING") {
+                            return (
+                              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-700 border border-amber-200">
+                                <Clock3 size={12} />
+                                Chờ duyệt ĐK
+                              </div>
+                            );
+                          }
+                          if (item.status === "COMPLETED") {
+                            return (
+                              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-indigo-100 text-indigo-700 border border-indigo-200">
+                                <CheckCircle size={12} />
+                                Đã hoàn thành
+                              </div>
+                            );
+                          }
+                          return (
+                            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-700 border border-emerald-200">
+                              <CheckCircle size={12} />
+                              Đã duyệt
+                            </div>
+                          );
+                        })()}
                       </td>
                     </tr>
                   );

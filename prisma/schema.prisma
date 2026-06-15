@@ -109,6 +109,7 @@ model User {
   username        String          @unique
   passwordHash    String
   fullName        String
+  phone           String?
   role            Role            @default(TEACHER)
   isActive        Boolean         @default(true)
 
@@ -295,10 +296,9 @@ model ClassSession {
   attendanceLogs        AttendanceLog[]
   roomRentalLogs        RoomRentalLog[]
 
-  // 🟢 ĐÃ SỬA: Một giáo viên không thể dạy 2 lớp cùng giờ. Xóa bỏ chặn toàn trung tâm.
-  @@unique([teacherId, date, slot])
-  // 🟢 THÊM DÒNG NÀY: 1 Phòng không thể có 2 lớp học cùng giờ
-  @@unique([roomId, date, slot])
+  // 🟢 ĐÃ SỬA: Bỏ UNIQUE constraint để cho phép các ca CANCELLED tồn tại song song với ca mới
+  // @@unique([teacherId, date, slot])
+  // @@unique([roomId, date, slot])
   @@map("class_sessions")
   @@schema("public")
 }

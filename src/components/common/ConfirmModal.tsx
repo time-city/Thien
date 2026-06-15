@@ -21,15 +21,10 @@ export default function GlobalConfirmModal() {
   // Nếu không open thì không render gì cả
   if (!isOpen) return null;
 
-  // Hàm bọc (wrapper) để tự động bật/tắt loading khi chạy onConfirm
-  const handleConfirm = async () => {
-    setLoading(true);
-    try {
-      await onConfirm();
-    } finally {
-      setLoading(false);
-      closeConfirm(); // Chạy xong API thì tự đóng Modal
-    }
+  // Hàm xử lý confirm: Đóng modal ngay lập tức để thực hiện Optimistic UI / xử lý ngầm
+  const handleConfirm = () => {
+    closeConfirm();
+    onConfirm();
   };
 
   // Giữ nguyên 100% giao diện UI của ông

@@ -47,7 +47,9 @@ export default function SalaryHistoryAdminClient({ initialData }: { initialData:
                 <p className="font-bold text-xs">{item.teacherName}</p>
                 <p className="text-[10px] text-slate-400">{formatDateTime(item.paymentDate)}</p>
               </div>
-              <p className="font-black text-emerald-600 text-xs">{formatCurrency(item.amount)}</p>
+              <p className={`font-black text-xs ${item.amount < 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                {item.amount < 0 ? '+' : '-'}{formatCurrency(Math.abs(item.amount))}
+              </p>
             </div>
           ))}
         </div>
@@ -68,7 +70,9 @@ export default function SalaryHistoryAdminClient({ initialData }: { initialData:
                 <tr key={item.id} className="hover:bg-slate-50/50">
                   <td className="py-2 px-4 text-xs font-medium text-slate-600">{formatDateTime(item.paymentDate)}</td>
                   <td className="py-2 px-4 text-xs font-bold text-slate-900">{item.teacherName}</td>
-                  <td className="py-2 px-4 text-xs font-black text-emerald-600">{formatCurrency(item.amount)}</td>
+                  <td className={`py-2 px-4 text-xs font-black ${item.amount < 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                    {item.amount < 0 ? '+' : '-'}{formatCurrency(Math.abs(item.amount))}
+                  </td>
                   <td className="py-2 px-4 text-xs text-slate-500 max-w-xs truncate">{item.note || "-"}</td>
                 </tr>
               ))}

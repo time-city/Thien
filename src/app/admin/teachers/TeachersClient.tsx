@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useOptimistic, startTransition } from "react";
 import {
   Loader2,
   Pencil,
@@ -24,7 +24,8 @@ import {
   getTeacherBanImpact,
 } from "@/actions/mutations";
 
-import { TeacherData } from "@/actions/queries";
+import { TeacherData as BaseTeacherData } from "@/actions/queries";
+export type TeacherData = BaseTeacherData & { pending?: boolean };
 
 function formatRole(role: string) {
   if (role === "SUPER_ADMIN") return "Super Admin";
@@ -35,7 +36,7 @@ function formatRole(role: string) {
 export default function TeachersClient({
   initialTeachers,
 }: {
-  initialTeachers: TeacherData[];
+  initialTeachers: BaseTeacherData[];
 }) {
   const router = useRouter();
   const { confirm } = useConfirm();
@@ -47,28 +48,49 @@ export default function TeachersClient({
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingTeacher, setEditingTeacher] = useState<TeacherData | null>(null);
 
+  // Optimistic UI State
+  const [optimisticTeachers, addOptimisticTeacher] = useOptimistic(
+    initialTeachers as TeacherData[],
+    (state, action: { type: "ADD" | "UPDATE" | "DELETE" | "BAN"; payload: any }) => {
+      switch (action.type) {
+        case "ADD":
+          return [action.payload, ...state];
+        case "UPDATE":
+          return state.map((t) => (t.id === action.payload.id ? { ...t, ...action.payload } : t));
+        case "DELETE":
+          return state.filter((t) => t.id !== action.payload.id);
+        case "BAN":
+          return state.map((t) => (t.id === action.payload.id ? { ...t, isActive: !t.isActive } : t));
+        default:
+          return state;
+      }
+    }
+  );
+
   const [username, setUsername] = useState("");
   const [fullName, setFullName] = useState("");
+  const [phone, setPhone] = useState("");
 
   const [isActive, setIsActive] = useState(true);
   const [password, setPassword] = useState("");
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return initialTeachers; 
-    return initialTeachers.filter((t) => { 
+    if (!q) return optimisticTeachers; 
+    return optimisticTeachers.filter((t) => { 
       return (
         t.username.toLowerCase().includes(q) ||
         t.fullName.toLowerCase().includes(q) ||
         formatRole(t.role).toLowerCase().includes(q)
       );
     });
-  }, [search, initialTeachers]); 
+  }, [search, optimisticTeachers]); 
 
   const openAddModal = () => {
     setEditingTeacher(null);
     setUsername("");
     setFullName("");
+    setPhone("");
     setIsActive(true);
     setPassword("");
     setIsModalOpen(true);
@@ -78,56 +100,86 @@ export default function TeachersClient({
     setEditingTeacher(t);
     setUsername(t.username);
     setFullName(t.fullName);
+    setPhone(t.phone || "");
 
     setIsActive(t.isActive);
     setPassword("");
     setIsModalOpen(true);
   };
 
-  const submit = async (e: React.FormEvent) => {
+  const submit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!fullName.trim() || !username.trim()) {
       toast.error("Tên đăng nhập và Họ tên là bắt buộc");
       return;
     }
 
+    if (!phone.trim()) {
+      toast.error("Số điện thoại là bắt buộc");
+      return;
+    }
+
     setLoading(true);
-    try {
-      if (editingTeacher) {
+    if (editingTeacher) {
+      setIsModalOpen(false);
+      startTransition(async () => {
+        addOptimisticTeacher({ type: "UPDATE", payload: { ...editingTeacher, fullName, phone: phone.trim() || null, isActive, pending: true } });
         const res = await updateTeacher(editingTeacher.id, {
           fullName,
+          phone: phone.trim() || undefined,
           isActive,
         });
 
         if (res?.success) {
           toast.success("Cập nhật giáo viên thành công");
-          setIsModalOpen(false);
           router.refresh(); 
         } else {
           toast.error(res?.error || "Lỗi cập nhật giáo viên");
         }
-      } else {
-        if (!password.trim()) {
-          toast.error("Mật khẩu là bắt buộc khi tạo giáo viên");
-          return;
-        }
+        setLoading(false);
+      });
+    } else {
+      if (!password.trim()) {
+        toast.error("Mật khẩu là bắt buộc khi tạo giáo viên");
+        setLoading(false);
+        return;
+      }
+      if (!phone.trim()) {
+        toast.error("Số điện thoại là bắt buộc");
+        setLoading(false);
+        return;
+      }
+      setIsModalOpen(false);
+      startTransition(async () => {
+        const tempId = `temp-${Date.now()}`;
+        const tempTeacher: TeacherData = {
+          id: tempId,
+          username,
+          fullName,
+          phone: phone.trim() || null,
+          isActive,
+          role: "TEACHER",
+          salaryBalance: 0,
+          pending: true
+        };
+        addOptimisticTeacher({ type: "ADD", payload: tempTeacher });
+        
         const res = await createTeacher({
           username,
           password,
           fullName,
+          phone: phone.trim() || undefined,
           isActive,
         });
 
         if (res?.success) {
           toast.success("Tạo giáo viên thành công");
-          setIsModalOpen(false);
           router.refresh();
         } else {
           toast.error(res?.error || "Lỗi tạo giáo viên");
         }
-      }
-    } finally {
-      setLoading(false);
+        setLoading(false);
+      });
     }
   };
 
@@ -180,15 +232,18 @@ export default function TeachersClient({
         confirmText: "Vẫn Ban Tài Khoản",
         cancelText: "Hủy bỏ",
         isDestructive: true,
-        onConfirm: async () => {
-          const t = initialTeachers.find((x) => x.id === teacherId); 
-          const res2 = await banTeacher(teacherId);
-          if (res2?.success) {
-            toast.success(`Đã ban giáo viên: ${t?.fullName || "(không rõ)"}`);
-            router.refresh();
-          } else {
-            toast.error(res2?.error || "Lỗi ban giáo viên");
-          }
+        onConfirm: () => {
+          const t = optimisticTeachers.find((x) => x.id === teacherId); 
+          startTransition(async () => {
+            addOptimisticTeacher({ type: "BAN", payload: { id: teacherId } });
+            const res2 = await banTeacher(teacherId);
+            if (res2?.success) {
+              toast.success(`Đã ban giáo viên: ${t?.fullName || "(không rõ)"}`);
+              router.refresh();
+            } else {
+              toast.error(res2?.error || "Lỗi ban giáo viên");
+            }
+          });
         },
       });
     } finally {
@@ -254,15 +309,18 @@ export default function TeachersClient({
         confirmText: "Vẫn Xóa Dữ Liệu",
         cancelText: "Hủy bỏ",
         isDestructive: true,
-        onConfirm: async () => {
-          const t = initialTeachers.find((x) => x.id === teacherId); 
-          const res2 = await deleteTeacher(teacherId);
-          if (res2?.success) {
-            toast.success(`Đã xóa giáo viên: ${t?.fullName || "(không rõ)"}`);
-            router.refresh();
-          } else {
-            toast.error(res2?.error || "Lỗi xóa giáo viên");
-          }
+        onConfirm: () => {
+          const t = optimisticTeachers.find((x) => x.id === teacherId); 
+          startTransition(async () => {
+            addOptimisticTeacher({ type: "DELETE", payload: { id: teacherId } });
+            const res2 = await deleteTeacher(teacherId);
+            if (res2?.success) {
+              toast.success(`Đã xóa giáo viên: ${t?.fullName || "(không rõ)"}`);
+              router.refresh();
+            } else {
+              toast.error(res2?.error || "Lỗi xóa giáo viên");
+            }
+          });
         },
       });
     } finally {
@@ -334,14 +392,18 @@ export default function TeachersClient({
                       {idx + 1}
                     </td>
                     <td className="py-3 px-4">
-                      <div className="font-bold text-slate-800 text-sm whitespace-nowrap">{t.fullName}</div>
+                      <div className={`font-bold text-sm whitespace-nowrap flex items-center gap-2 ${t.pending ? "text-slate-400" : "text-slate-800"}`}>
+                        {t.fullName}
+                        {t.pending && <Loader2 size={12} className="animate-spin text-blue-500" />}
+                      </div>
                       {/* Trên Mobile, hiển thị luôn Username ở dưới tên cho gọn */}
-                      <div className="text-[11px] text-slate-500 md:hidden mt-0.5 font-medium tracking-wide">
+                      <div className={`text-[11px] md:hidden mt-0.5 font-medium tracking-wide ${t.pending ? "text-slate-300" : "text-slate-500"}`}>
                         @{t.username}
                       </div>
                     </td>
                     <td className="py-3 px-4 hidden md:table-cell">
-                      <span className="text-sm font-semibold text-slate-700">@{t.username}</span>
+                      <span className="text-sm font-semibold text-slate-700 block">@{t.username}</span>
+                      {t.phone && <span className="text-xs text-slate-500 block mt-0.5">{t.phone}</span>}
                     </td>
                     <td className="py-3 px-4 hidden sm:table-cell">
                       <span className="inline-flex items-center gap-2 px-2 py-1 rounded-md bg-slate-100 text-slate-700 border border-slate-200 text-[11px] font-bold">
@@ -364,16 +426,16 @@ export default function TeachersClient({
                       <div className="flex items-center justify-center gap-1 sm:gap-1.5 transition-opacity">
                         <button
                           onClick={() => openEditModal(t)}
-                          className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
+                          className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-md transition-colors disabled:opacity-50"
                           title="Sửa"
-                          disabled={loading}
+                          disabled={loading || t.pending}
                         >
                           <Pencil size={16} />
                         </button>
 
                         <button
                           onClick={() => confirmBan(t.id)}
-                          disabled={isCheckingImpact === t.id}
+                          disabled={isCheckingImpact === t.id || t.pending}
                           className="p-1.5 text-amber-600 hover:bg-amber-50 rounded-md transition-colors disabled:opacity-50"
                           title={t.isActive ? "Ban tài khoản" : "Mở ban tài khoản"}
                         >
@@ -382,7 +444,7 @@ export default function TeachersClient({
 
                         <button
                           onClick={() => confirmDelete(t.id)}
-                          disabled={isCheckingImpact === t.id}
+                          disabled={isCheckingImpact === t.id || t.pending}
                           className="p-1.5 text-rose-500 hover:bg-rose-50 rounded-md transition-colors disabled:opacity-50"
                           title="Xóa"
                         >
@@ -476,6 +538,19 @@ export default function TeachersClient({
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
                   placeholder="Nhập họ và tên"
+                  className="w-full h-10 px-3 border border-slate-200 rounded-xl bg-slate-50 text-sm font-semibold focus:ring-2 focus:ring-blue-100 outline-none transition-all"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                  Số điện thoại (Zalo) <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  required
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value.replace(/\D/g, ''))}
+                  placeholder="Nhập số điện thoại"
                   className="w-full h-10 px-3 border border-slate-200 rounded-xl bg-slate-50 text-sm font-semibold focus:ring-2 focus:ring-blue-100 outline-none transition-all"
                 />
               </div>

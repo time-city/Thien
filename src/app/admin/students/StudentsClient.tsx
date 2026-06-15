@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useOptimistic, startTransition } from "react";
 import Papa from "papaparse";
 import { Plus, Edit2, Trash2, X, Search, User as UserIcon, Phone, CheckSquare, Square, Loader2, Eye, Filter, ChevronLeft, ChevronRight, BookOpen, Upload, Calendar, School, Download, AlertCircle } from "lucide-react";
 import { createStudent, updateStudent, deleteStudent, deleteStudents, getStudentDeletionImpact, importStudentsCsv } from "@/actions/mutations";
-import { StudentData, ClassData } from "@/actions/queries";
+import { StudentData as BaseStudentData, ClassData } from "@/actions/queries";
+export type StudentData = BaseStudentData & { pending?: boolean };
 import { toast } from "sonner";
 import { useConfirm } from "@/hooks/useconfirm"; 
 import { useRouter } from "next/navigation";
@@ -26,7 +27,7 @@ export default function StudentsClient({
   initialStudents,
   classes,
 }: {
-  initialStudents: StudentData[];
+  initialStudents: BaseStudentData[];
   classes: ClassData[];
 }) {
   const router = useRouter();
@@ -34,6 +35,25 @@ export default function StudentsClient({
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingStudent, setEditingStudent] = useState<StudentData | null>(null);
+  
+  // Optimistic UI State
+  const [optimisticStudents, addOptimisticStudent] = useOptimistic(
+    initialStudents as StudentData[],
+    (state, action: { type: "ADD" | "UPDATE" | "DELETE" | "DELETE_MANY"; payload: any }) => {
+      switch (action.type) {
+        case "ADD":
+          return [action.payload, ...state];
+        case "UPDATE":
+          return state.map((s) => (s.id === action.payload.id ? { ...s, ...action.payload } : s));
+        case "DELETE":
+          return state.filter((s) => s.id !== action.payload.id);
+        case "DELETE_MANY":
+          return state.filter((s) => !action.payload.ids.includes(s.id));
+        default:
+          return state;
+      }
+    }
+  );
   
   // Lưu lại ID các lớp học sinh ĐANG học (để không cho đổi feeStatus các lớp cũ từ form này)
   const [initialClassIds, setInitialClassIds] = useState<Set<string>>(new Set());
@@ -235,7 +255,7 @@ export default function StudentsClient({
     ));
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
 
@@ -247,29 +267,62 @@ export default function StudentsClient({
       gender: gender || undefined,
       dob: dob || undefined,
       school: school || undefined,
-      classEnrollments: selectedClasses, // Gửi cấu trúc mới có chứa trạng thái phí
+      classEnrollments: selectedClasses,
     };
 
     if (editingStudent) {
-      const res = await updateStudent(editingStudent.id, payload);
-      if (res?.success) {
-        toast.success("Cập nhật học sinh thành công!");
-        setIsModalOpen(false);
-        router.refresh();
-      } else {
-        toast.error(res?.error || "Lỗi cập nhật");
-      }
+      setIsModalOpen(false); // Close immediately for optimistic UI
+      startTransition(async () => {
+        addOptimisticStudent({ type: "UPDATE", payload: { ...editingStudent, ...payload, pending: true } });
+        const res = await updateStudent(editingStudent.id, payload);
+        if (res?.success) {
+          toast.success("Cập nhật học sinh thành công!");
+          router.refresh();
+        } else {
+          toast.error(res?.error || "Lỗi cập nhật");
+        }
+        setLoading(false);
+      });
     } else {
-      const res = await createStudent(payload as any);
-      if (res?.success) {
-        toast.success("Thêm học sinh thành công!");
-        setIsModalOpen(false);
-        router.refresh();
-      } else {
-        toast.error(res?.error || "Lỗi tạo mới");
-      }
+      setIsModalOpen(false); // Close immediately
+      startTransition(async () => {
+        // Build a temporary object for UI
+        const tempId = `temp-${Date.now()}`;
+        const tempStudent: StudentData = {
+          id: tempId,
+          ...payload,
+          logs: [],
+          enrolledCourses: classes
+            .filter(c => selectedClasses.some(sc => sc.classId === c.id))
+            .map(c => ({
+              enrollmentId: `temp-enr-${Date.now()}-${c.id}`,
+              classId: c.id,
+              className: c.name,
+              status: "ACTIVE",
+              teachers: [],
+              remainingSessions: selectedClasses.find(sc => sc.classId === c.id)?.feeStatus === "PAID" ? c.sessionsPerPackage : 0,
+              feeStatus: selectedClasses.find(sc => sc.classId === c.id)?.feeStatus || "UNPAID"
+            })),
+          gender: (gender as "MALE" | "FEMALE" | "OTHER") || null,
+          phone: phoneStudent || null,
+          parentName: parentName || null,
+          parentPhone: phoneParent || null,
+          dob: dob ? new Date(dob) : null,
+          school: school || null,
+          pending: true
+        };
+        
+        addOptimisticStudent({ type: "ADD", payload: tempStudent });
+        const res = await createStudent(payload as any);
+        if (res?.success) {
+          toast.success("Thêm học sinh thành công!");
+          router.refresh();
+        } else {
+          toast.error(res?.error || "Lỗi tạo mới");
+        }
+        setLoading(false);
+      });
     }
-    setLoading(false);
   };
 
   const toggleSelectAll = () => {
@@ -323,14 +376,17 @@ export default function StudentsClient({
         confirmText: "Vẫn Xóa Dữ Liệu",
         cancelText: "Hủy bỏ",
         isDestructive: true,
-        onConfirm: async () => {
-          const deleteRes = await deleteStudent(id);
-          if (deleteRes.success) {
-            toast.success("Xóa thành công!");
-            router.refresh();
-          } else {
-            toast.error(deleteRes.error || "Lỗi xóa");
-          }
+        onConfirm: () => {
+          startTransition(async () => {
+            addOptimisticStudent({ type: "DELETE", payload: { id } });
+            const deleteRes = await deleteStudent(id);
+            if (deleteRes.success) {
+              toast.success("Xóa thành công!");
+              router.refresh();
+            } else {
+              toast.error(deleteRes.error || "Lỗi xóa");
+            }
+          });
         },
       });
     } catch {
@@ -355,40 +411,43 @@ export default function StudentsClient({
       confirmText: "Vẫn Xóa Dữ Liệu",
       cancelText: "Hủy bỏ",
       isDestructive: true,
-      onConfirm: async () => {
-        const res = await deleteStudents(Array.from(selectedIds));
-        if (res.success) {
-          toast.success(`Đã xóa ${selectedIds.size} học sinh!`);
-          setSelectedIds(new Set());
-          router.refresh();
-        } else {
-          toast.error(res.error || "Lỗi xóa nhiều");
-        }
+      onConfirm: () => {
+        startTransition(async () => {
+          addOptimisticStudent({ type: "DELETE_MANY", payload: { ids: Array.from(selectedIds) } });
+          const res = await deleteStudents(Array.from(selectedIds));
+          if (res.success) {
+            toast.success(`Đã xóa ${selectedIds.size} học sinh!`);
+            setSelectedIds(new Set());
+            router.refresh();
+          } else {
+            toast.error(res.error || "Lỗi xóa nhiều");
+          }
+        });
       },
     });
   };
 
   const allClasses = useMemo(() => {
     const classSet = new Set<string>();
-    initialStudents.forEach(s => s.enrolledCourses.forEach(c => classSet.add(c.className)));
+    optimisticStudents.forEach(s => s.enrolledCourses?.forEach((c: any) => classSet.add(c.className)));
     return Array.from(classSet);
-  }, [initialStudents]);
+  }, [optimisticStudents]);
 
   const allTeachers = useMemo(() => {
     const teachers = new Set<string>();
-    initialStudents.forEach(s => s.enrolledCourses.forEach(c => c.teachers.forEach(t => teachers.add(t))));
+    optimisticStudents.forEach(s => s.enrolledCourses?.forEach((c: any) => c.teachers?.forEach((t: any) => teachers.add(t))));
     return Array.from(teachers);
-  }, [initialStudents]);
+  }, [optimisticStudents]);
 
   const filteredStudents = useMemo(() => {
-    return initialStudents.filter(s => {
+    return optimisticStudents.filter(s => {
       const matchSearch = s.fullName.toLowerCase().includes(search.toLowerCase()) || 
                           (s.phone && s.phone.includes(search));
-      const matchClass = classFilter ? s.enrolledCourses.some(c => c.className === classFilter) : true;
-      const matchTeacher = teacherFilter ? s.enrolledCourses.some(c => c.teachers.includes(teacherFilter)) : true;
+      const matchClass = classFilter ? s.enrolledCourses?.some((c: any) => c.className === classFilter) : true;
+      const matchTeacher = teacherFilter ? s.enrolledCourses?.some((c: any) => c.teachers?.includes(teacherFilter)) : true;
       return matchSearch && matchClass && matchTeacher;
     });
-  }, [initialStudents, search, classFilter, teacherFilter]);
+  }, [optimisticStudents, search, classFilter, teacherFilter]);
 
   const totalPages = Math.max(1, Math.ceil(filteredStudents.length / ITEMS_PER_PAGE));
   const paginatedStudents = filteredStudents.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
@@ -474,15 +533,18 @@ export default function StudentsClient({
                 paginatedStudents.map((s) => (
                   <tr key={s.id} className="hover:bg-slate-50/80 transition-colors group">
                     <td className="py-3 px-4 text-center">
-                      <button onClick={() => toggleSelect(s.id)} className="text-slate-400 hover:text-slate-600">
+                      <button disabled={s.pending} onClick={() => toggleSelect(s.id)} className="text-slate-400 hover:text-slate-600 disabled:opacity-50">
                         {selectedIds.has(s.id) ? <CheckSquare size={16} className="text-blue-600" /> : <Square size={16} />}
                       </button>
                     </td>
                     <td className="py-3 px-4">
                       <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
-                        <span className="font-bold text-slate-800 text-sm whitespace-nowrap">{s.fullName}</span>
+                        <span className={`font-bold text-sm whitespace-nowrap flex items-center gap-2 ${s.pending ? "text-slate-400" : "text-slate-800"}`}>
+                          {s.fullName}
+                          {s.pending && <Loader2 size={12} className="animate-spin text-blue-500" />}
+                        </span>
                         {s.gender && (
-                          <span className={`w-fit px-2 py-0.5 rounded text-[10px] font-bold ${s.gender === "MALE" ? "bg-blue-100 text-blue-700" : s.gender === "FEMALE" ? "bg-pink-100 text-pink-700" : "bg-slate-100 text-slate-700"}`}>
+                          <span className={`w-fit px-2 py-0.5 rounded text-[10px] font-bold ${s.gender === "MALE" ? "bg-blue-100 text-blue-700" : s.gender === "FEMALE" ? "bg-pink-100 text-pink-700" : "bg-slate-100 text-slate-700"} ${s.pending ? "opacity-50" : ""}`}>
                             {s.gender === "MALE" ? "Nam" : s.gender === "FEMALE" ? "Nữ" : "Khác"}
                           </span>
                         )}
@@ -507,7 +569,7 @@ export default function StudentsClient({
                     </td>
                     <td className="py-3 px-4 hidden md:table-cell">
                       <div className="flex flex-wrap gap-1.5">
-                        {s.enrolledCourses.map((c: any, i) => {
+                        {s.enrolledCourses.map((c: any, i: number) => {
                           const isLow = (c.remainingSessions ?? 0) <= 2;
                           return (
                             <span key={i} className={`text-xs font-semibold px-2 py-1 rounded-md border flex items-center gap-1.5 whitespace-nowrap ${isLow ? "bg-rose-50 text-rose-700 border-rose-200" : "bg-blue-50 text-blue-700 border-blue-100"}`}>
@@ -522,9 +584,9 @@ export default function StudentsClient({
                     </td>
                     <td className="py-3 px-4">
                       <div className="flex items-center justify-center gap-1">
-                        <button onClick={() => openViewModal(s)} className="p-1.5 text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-md transition-colors" title="Xem chi tiết"><Eye size={16} /></button>
-                        <button onClick={() => openEditModal(s)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-md transition-colors" title="Sửa"><Edit2 size={16} /></button>
-                        <button disabled={isCheckingImpact === s.id} onClick={() => confirmDeleteSingle(s.id, s.fullName)} className="p-1.5 text-rose-500 hover:bg-rose-50 rounded-md transition-colors disabled:opacity-50" title="Xóa">
+                        <button disabled={s.pending} onClick={() => openViewModal(s)} className="p-1.5 text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-md transition-colors disabled:opacity-50" title="Xem chi tiết"><Eye size={16} /></button>
+                        <button disabled={s.pending} onClick={() => openEditModal(s)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-md transition-colors disabled:opacity-50" title="Sửa"><Edit2 size={16} /></button>
+                        <button disabled={isCheckingImpact === s.id || s.pending} onClick={() => confirmDeleteSingle(s.id, s.fullName)} className="p-1.5 text-rose-500 hover:bg-rose-50 rounded-md transition-colors disabled:opacity-50" title="Xóa">
                           {isCheckingImpact === s.id ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}
                         </button>
                       </div>

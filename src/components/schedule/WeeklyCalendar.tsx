@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useOptimistic, startTransition } from "react";
 import {
   addDays,
   addWeeks,
@@ -9,7 +9,7 @@ import {
   startOfWeek,
 } from "date-fns";
 import Link from "next/link";
-import { MapPin, Trash2, CheckSquare, XSquare, ChevronLeft, ChevronRight } from "lucide-react";
+import { MapPin, Trash2, CheckSquare, XSquare, ChevronLeft, ChevronRight, Loader2, XCircle, CheckCircle } from "lucide-react";
 import { toast } from "sonner";
 import { deleteBulkSchedules } from "@/actions/schedule";
 import { approveSessionRequest, rejectSessionRequest } from "@/actions/mutations";
@@ -48,6 +48,7 @@ type ScheduleSession = {
   slot: number;
   status: string;
   isAttendanceSubmitted?: boolean;
+  pending?: boolean;
 };
 
 type WeeklyCalendarProps = {
@@ -89,9 +90,25 @@ export default function WeeklyCalendar({ userRole, sessions }: WeeklyCalendarPro
   const [isDeleting, setIsDeleting] = useState(false); 
   const router = useRouter();
 
+  // Optimistic UI State
+  const [optimisticSessions, addOptimisticSession] = useOptimistic(
+    sessions as ScheduleSession[],
+    (state, action: { type: "DELETE_MANY" | "APPROVE" | "REJECT"; payload: string[] | string }) => {
+      switch (action.type) {
+        case "DELETE_MANY":
+          return state.filter(s => !(action.payload as string[]).includes(s.id));
+        case "APPROVE":
+          return state.map(s => s.id === action.payload ? { ...s, status: "COMPLETED", pending: true } : s);
+        case "REJECT":
+          return state.map(s => s.id === action.payload ? { ...s, status: "REJECTED", pending: true } : s);
+        default:
+          return state;
+      }
+    }
+  );
+
   // Approve Modal State
   const [selectedPendingSession, setSelectedPendingSession] = useState<CellSession | null>(null);
-  const [isProcessingApproval, setIsProcessingApproval] = useState(false);
 
   const { startOfThisWeek } = useMemo(() => {
     return { startOfThisWeek: startOfWeek(currentDate, { weekStartsOn: 1 }) };
@@ -99,14 +116,15 @@ export default function WeeklyCalendar({ userRole, sessions }: WeeklyCalendarPro
 
   const conflictCounts = useMemo(() => {
     const map = new Map<string, number>();
-    for (const s of sessions) {
+    for (const s of optimisticSessions) {
+      if (s.status === "CANCELLED" || s.status === "REJECTED") continue;
       const dateISO = toISODate(s.date);
       const room = s.roomName || "Chưa xếp phòng";
       const key = `${dateISO}|${s.slot}|${room}`;
       map.set(key, (map.get(key) ?? 0) + 1);
     }
     return map;
-  }, [sessions]);
+  }, [optimisticSessions]);
 
   const weekTitle = useMemo(() => {
     const end = addDays(startOfThisWeek, 6);
@@ -142,57 +160,69 @@ export default function WeeklyCalendar({ userRole, sessions }: WeeklyCalendarPro
       confirmText: "Xóa dữ liệu",
       cancelText: "Hủy bỏ",
       isDestructive: true,
-      onConfirm: async () => {
+      onConfirm: () => {
         setIsDeleting(true);
-        const result = await deleteBulkSchedules(Array.from(selectedIds));
-        setIsDeleting(false);
+        startTransition(async () => {
+          const idsToDelete = Array.from(selectedIds);
+          addOptimisticSession({ type: "DELETE_MANY", payload: idsToDelete });
+          const result = await deleteBulkSchedules(idsToDelete);
+          setIsDeleting(false);
 
-        if (result.success) {
-          toast.success(`Đã xóa thành công ${selectedIds.size} ca học!`);
-          setSelectedIds(new Set());
-          setIsSelectMode(false);
-          window.dispatchEvent(new Event("schedule-updated"));
-        } else {
-          toast.error(result.error || "Xóa thất bại!");
-        }
+          if (result.success) {
+            toast.success(`Đã xóa thành công ${idsToDelete.length} ca học!`);
+            setSelectedIds(new Set());
+            setIsSelectMode(false);
+            window.dispatchEvent(new Event("schedule-updated"));
+          } else {
+            toast.error(result.error || "Xóa thất bại!");
+          }
+        });
       },
     });
   };
 
-  const handleApprove = async () => {
+  const handleApprove = () => {
     if (!selectedPendingSession) return;
-    setIsProcessingApproval(true);
-    const result = await approveSessionRequest(selectedPendingSession.id);
-    setIsProcessingApproval(false);
+    const currentSelected = selectedPendingSession;
+    setSelectedPendingSession(null);
 
-    if (result.success) {
-      if ("deductedFee" in result && result.deductedFee) {
-        toast.success(`Đã duyệt! Đã thu phí phòng: ${result.deductedFee.toLocaleString("vi-VN")}đ`);
+    startTransition(async () => {
+      addOptimisticSession({ type: "APPROVE", payload: currentSelected.id });
+
+      const result = await approveSessionRequest(currentSelected.id);
+
+      if (result.success) {
+        if ("deductedFee" in result && result.deductedFee) {
+          toast.success(`Đã duyệt! Đã thu phí phòng: ${result.deductedFee.toLocaleString("vi-VN")}đ`);
+        } else {
+          toast.success("Đã duyệt lịch học!");
+        }
+        window.dispatchEvent(new Event("schedule-updated"));
+        router.refresh();
       } else {
-        toast.success("Đã duyệt lịch học!");
+        toast.error(result.error || "Có lỗi xảy ra");
       }
-      setSelectedPendingSession(null);
-      window.dispatchEvent(new Event("schedule-updated"));
-      router.refresh();
-    } else {
-      toast.error(result.error || "Có lỗi xảy ra");
-    }
+    });
   };
 
-  const handleReject = async () => {
+  const handleReject = () => {
     if (!selectedPendingSession) return;
-    setIsProcessingApproval(true);
-    const result = await rejectSessionRequest(selectedPendingSession.id);
-    setIsProcessingApproval(false);
+    const currentSelected = selectedPendingSession;
+    setSelectedPendingSession(null);
 
-    if (result.success) {
-      toast.success("Đã từ chối lịch học!");
-      setSelectedPendingSession(null);
-      window.dispatchEvent(new Event("schedule-updated"));
-      router.refresh();
-    } else {
-      toast.error(result.error || "Có lỗi xảy ra");
-    }
+    startTransition(async () => {
+      addOptimisticSession({ type: "REJECT", payload: currentSelected.id });
+
+      const result = await rejectSessionRequest(currentSelected.id);
+
+      if (result.success) {
+        toast.success("Đã từ chối lịch học!");
+        window.dispatchEvent(new Event("schedule-updated"));
+        router.refresh();
+      } else {
+        toast.error(result.error || "Có lỗi xảy ra");
+      }
+    });
   };
 
   return (
@@ -353,7 +383,7 @@ export default function WeeklyCalendar({ userRole, sessions }: WeeklyCalendarPro
                         slot: s.slot,
                         attendanceConflict,
                         isCompleted: Boolean((s as any).isAttendanceSubmitted) || s.status === "COMPLETED",
-                        isPending: s.status === "PENDING",
+                        isPending: s.pending || s.status === "PENDING",
                         teacherId: s.teacherId,
                       };
                     })
@@ -392,6 +422,7 @@ export default function WeeklyCalendar({ userRole, sessions }: WeeklyCalendarPro
                                   <span className={`font-extrabold line-clamp-2 ${isSelected ? "text-white" : ev.isCompleted ? "text-slate-400" : "text-slate-900"}`}>
                                     {ev.className}
                                   </span>
+                                  {ev.isPending && <Loader2 size={12} className="animate-spin text-slate-400 shrink-0" />}
                                 </div>
                                 <span className={`font-semibold flex items-center gap-1 mt-0.5 ${isSelected ? "text-blue-100" : ev.isCompleted ? "text-slate-400" : ev.attendanceConflict ? "text-rose-600" : "text-blue-600"}`}>
                                   <MapPin size={10} strokeWidth={2.5} className="shrink-0" /> {ev.room}
@@ -404,7 +435,7 @@ export default function WeeklyCalendar({ userRole, sessions }: WeeklyCalendarPro
 
                             if (isSelectMode) {
                               return (
-                                <div key={ev.id} onClick={() => toggleSelection(ev.id)} className={cardStyle}>
+                                <div key={ev.id} onClick={() => toggleSelection(ev.id)} className={`${cardStyle} ${ev.isPending ? "opacity-50 pointer-events-none" : ""}`}>
                                   {content}
                                 </div>
                               );
@@ -412,7 +443,7 @@ export default function WeeklyCalendar({ userRole, sessions }: WeeklyCalendarPro
 
                             if (isAdmin && ev.isPending) {
                               return (
-                                <button key={ev.id} onClick={() => setSelectedPendingSession(ev)} className={`${cardStyle} text-left`}>
+                                <button disabled={ev.isPending} key={ev.id} onClick={() => setSelectedPendingSession(ev)} className={`${cardStyle} text-left ${ev.isPending ? "opacity-50 pointer-events-none" : ""}`}>
                                   {content}
                                 </button>
                               );
@@ -540,7 +571,7 @@ export default function WeeklyCalendar({ userRole, sessions }: WeeklyCalendarPro
 
                             if (isSelectMode) {
                               return (
-                                <div key={ev.id} onClick={() => toggleSelection(ev.id)} className={cardStyle}>
+                                <div key={ev.id} onClick={() => toggleSelection(ev.id)} className={`${cardStyle} ${ev.isPending ? "opacity-50 pointer-events-none" : ""}`}>
                                   {content}
                                 </div>
                               );
@@ -548,7 +579,7 @@ export default function WeeklyCalendar({ userRole, sessions }: WeeklyCalendarPro
 
                             if (isAdmin && ev.isPending) {
                               return (
-                                <button key={ev.id} onClick={() => setSelectedPendingSession(ev)} className={`${cardStyle} text-left`}>
+                                <button disabled={ev.isPending} key={ev.id} onClick={() => setSelectedPendingSession(ev)} className={`${cardStyle} text-left ${ev.isPending ? "opacity-50 pointer-events-none" : ""}`}>
                                   {content}
                                 </button>
                               );
@@ -621,24 +652,21 @@ export default function WeeklyCalendar({ userRole, sessions }: WeeklyCalendarPro
             <div className="flex gap-3">
               <button
                 onClick={() => setSelectedPendingSession(null)}
-                disabled={isProcessingApproval}
                 className="flex-1 px-4 py-2 bg-slate-100 text-slate-700 font-bold rounded-xl hover:bg-slate-200 transition-colors"
               >
-                Hủy
+                Đóng
               </button>
               <button
                 onClick={handleReject}
-                disabled={isProcessingApproval}
-                className="flex-1 flex items-center justify-center gap-1.5 px-4 py-2 bg-rose-100 text-rose-700 font-bold rounded-xl hover:bg-rose-200 transition-colors disabled:opacity-50"
+                className="flex-1 flex items-center justify-center gap-1.5 px-4 py-2 bg-rose-100 text-rose-700 font-bold rounded-xl hover:bg-rose-200 transition-colors"
               >
-                <XSquare size={16} /> Từ chối
+                <XCircle size={16} /> Từ chối
               </button>
               <button
                 onClick={handleApprove}
-                disabled={isProcessingApproval}
-                className="flex-1 flex items-center justify-center gap-1.5 px-4 py-2 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 transition-colors disabled:opacity-50"
+                className="flex-1 flex items-center justify-center gap-1.5 px-4 py-2 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 transition-colors"
               >
-                <CheckSquare size={16} /> Đồng ý
+                <CheckCircle size={16} /> Duyệt
               </button>
             </div>
           </div>

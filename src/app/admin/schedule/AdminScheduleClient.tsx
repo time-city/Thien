@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useEffect, useMemo, useTransition } from "react";
+import { useState, useMemo, useTransition, useOptimistic } from "react";
 import { useRouter } from "next/navigation";
 import { format, addDays, startOfWeek, isSameDay, addWeeks } from "date-fns";
 import { ChevronLeft, ChevronRight, CheckCircle, XCircle, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { approveSessionRequest, rejectSessionRequest, approveCancelSession, rejectCancelSession } from "@/actions/mutations";
-import type { RoomData, ScheduleItemData } from "@/actions/queries";
+import type { RoomData, ScheduleItemData as BaseScheduleItemData } from "@/actions/queries";
+export type ScheduleItemData = BaseScheduleItemData & { pending?: boolean };
 
 const SHIFTS = [
   { id: 1, label: "Ca 1", time: "07:30 - 09:00" },
@@ -45,22 +46,32 @@ export default function AdminScheduleClient({
   selectedRoomId,
 }: {
   rooms: RoomData[];
-  initialSchedule: ScheduleItemData[];
+  initialSchedule: BaseScheduleItemData[];
   selectedRoomId: string;
 }) {
   const router = useRouter();
-  const [schedule, setSchedule] = useState(initialSchedule);
+  // Optimistic UI State
+  const [optimisticSchedule, addOptimisticSchedule] = useOptimistic(
+    initialSchedule as ScheduleItemData[],
+    (state, action: { type: "APPROVE" | "REJECT" | "APPROVE_CANCEL" | "REJECT_CANCEL"; payload: string }) => {
+      switch (action.type) {
+        case "APPROVE":
+          return state.map(s => s.id === action.payload ? { ...s, status: "COMPLETED", pending: true } : s);
+        case "REJECT":
+          return state.map(s => s.id === action.payload ? { ...s, status: "REJECTED", pending: true } : s);
+        case "APPROVE_CANCEL":
+          return state.filter(s => s.id !== action.payload);
+        case "REJECT_CANCEL":
+          return state.map(s => s.id === action.payload ? { ...s, isCancelRequested: false, pending: true } : s);
+        default:
+          return state;
+      }
+    }
+  );
+
   const [currentDate, setCurrentDate] = useState<Date>(() => new Date());
-  
-  // Modal State
   const [selectedSession, setSelectedSession] = useState<ScheduleItemData | null>(null);
-  const [isProcessing, setIsProcessing] = useState(false);
-
-  // NO MANUAL F5 RULE: Sync prop to local state
-  useEffect(() => {
-    setSchedule(initialSchedule);
-  }, [initialSchedule]);
-
+  
   const { startOfThisWeek } = useMemo(() => {
     return { startOfThisWeek: startOfWeek(currentDate, { weekStartsOn: 1 }) };
   }, [currentDate]);
@@ -78,68 +89,84 @@ export default function AdminScheduleClient({
     });
   };
 
-  const handleApprove = async () => {
+  const handleApprove = () => {
     if (!selectedSession) return;
-    setIsProcessing(true);
-    const result = await approveSessionRequest(selectedSession.id);
-    setIsProcessing(false);
+    const currentSelected = selectedSession;
+    setSelectedSession(null);
+    
+    startTransition(async () => {
+      addOptimisticSchedule({ type: "APPROVE", payload: currentSelected.id });
+      
+      const result = await approveSessionRequest(currentSelected.id);
 
-    if (result.success) {
-      toast.success("Đã duyệt lịch học!");
-      setSelectedSession(null);
-      window.dispatchEvent(new Event("schedule-updated"));
-      router.refresh();
-    } else {
-      toast.error(result.error || "Có lỗi xảy ra");
-    }
+      if (result.success) {
+        toast.success("Đã duyệt lịch học!");
+        window.dispatchEvent(new Event("schedule-updated"));
+        router.refresh();
+      } else {
+        toast.error(result.error || "Có lỗi xảy ra");
+      }
+    });
   };
 
-  const handleReject = async () => {
+  const handleReject = () => {
     if (!selectedSession) return;
-    setIsProcessing(true);
-    const result = await rejectSessionRequest(selectedSession.id);
-    setIsProcessing(false);
+    const currentSelected = selectedSession;
+    setSelectedSession(null);
 
-    if (result.success) {
-      toast.success("Đã từ chối lịch học!");
-      setSelectedSession(null);
-      window.dispatchEvent(new Event("schedule-updated"));
-      router.refresh();
-    } else {
-      toast.error(result.error || "Có lỗi xảy ra");
-    }
+    startTransition(async () => {
+      addOptimisticSchedule({ type: "REJECT", payload: currentSelected.id });
+
+      const result = await rejectSessionRequest(currentSelected.id);
+
+      if (result.success) {
+        toast.success("Đã từ chối lịch học!");
+        window.dispatchEvent(new Event("schedule-updated"));
+        router.refresh();
+      } else {
+        toast.error(result.error || "Có lỗi xảy ra");
+      }
+    });
   };
 
-  const handleApproveCancel = async () => {
+  const handleApproveCancel = () => {
     if (!selectedSession) return;
-    setIsProcessing(true);
-    const result = await approveCancelSession(selectedSession.id);
-    setIsProcessing(false);
+    const currentSelected = selectedSession;
+    setSelectedSession(null);
 
-    if (result.success) {
-      toast.success("Đã duyệt huỷ ca!");
-      setSelectedSession(null);
-      window.dispatchEvent(new Event("schedule-updated"));
-      router.refresh();
-    } else {
-      toast.error(result.error || "Có lỗi xảy ra");
-    }
+    startTransition(async () => {
+      addOptimisticSchedule({ type: "APPROVE_CANCEL", payload: currentSelected.id });
+
+      const result = await approveCancelSession(currentSelected.id);
+
+      if (result.success) {
+        toast.success("Đã duyệt huỷ ca!");
+        window.dispatchEvent(new Event("schedule-updated"));
+        router.refresh();
+      } else {
+        toast.error(result.error || "Có lỗi xảy ra");
+      }
+    });
   };
 
-  const handleRejectCancel = async () => {
+  const handleRejectCancel = () => {
     if (!selectedSession) return;
-    setIsProcessing(true);
-    const result = await rejectCancelSession(selectedSession.id);
-    setIsProcessing(false);
+    const currentSelected = selectedSession;
+    setSelectedSession(null);
 
-    if (result.success) {
-      toast.success("Đã từ chối huỷ ca!");
-      setSelectedSession(null);
-      window.dispatchEvent(new Event("schedule-updated"));
-      router.refresh();
-    } else {
-      toast.error(result.error || "Có lỗi xảy ra");
-    }
+    startTransition(async () => {
+      addOptimisticSchedule({ type: "REJECT_CANCEL", payload: currentSelected.id });
+
+      const result = await rejectCancelSession(currentSelected.id);
+
+      if (result.success) {
+        toast.success("Đã từ chối huỷ ca!");
+        window.dispatchEvent(new Event("schedule-updated"));
+        router.refresh();
+      } else {
+        toast.error(result.error || "Có lỗi xảy ra");
+      }
+    });
   };
 
   return (
@@ -171,13 +198,13 @@ export default function AdminScheduleClient({
       {!selectedRoomId ? (
         <div className="space-y-4">
           <h2 className="text-lg font-bold text-slate-800">Yêu Cầu Chờ Duyệt</h2>
-          {schedule.filter(s => s.status === "PENDING" || s.isCancelRequested).length === 0 ? (
+          {optimisticSchedule.filter(s => s.status === "PENDING" || s.isCancelRequested).length === 0 ? (
             <div className="bg-white border border-slate-200 rounded-xl p-12 text-center text-slate-500">
               Không có yêu cầu duyệt nào. Vui lòng chọn phòng học để xem lịch tuần.
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {schedule.filter(s => s.status === "PENDING" || s.isCancelRequested).map(s => {
+              {optimisticSchedule.filter(s => s.status === "PENDING" || s.isCancelRequested).map(s => {
                 const isCancel = s.isCancelRequested;
                 return (
                   <div key={s.id} className={`bg-white border rounded-xl p-5 shadow-sm flex flex-col gap-2 relative transition-all hover:shadow-md ${isCancel ? "border-rose-200" : "border-slate-200"}`}>
@@ -281,7 +308,7 @@ export default function AdminScheduleClient({
                     const dateISO = toISODate(dateForCell);
                     const isToday = isSameDay(dateForCell, new Date());
 
-                    const cellSessions = schedule.filter((s) => {
+                    const cellSessions = optimisticSchedule.filter((s) => {
                       if (s.status === "REJECTED" || s.status === "CANCELLED") return false;
                       return toISODate(s.date) === dateISO && dayOfWeekMon1Sun7(s.date) === day.id && s.slot === shift.id;
                     });
@@ -311,9 +338,13 @@ export default function AdminScheduleClient({
                                 <button
                                   key={ev.id}
                                   onClick={() => isPending && setSelectedSession(ev)}
-                                  className={`p-2 w-full text-left rounded-lg border text-[11px] leading-snug shadow-sm flex flex-col gap-1 transition-all ${bgClass}`}
+                                  className={`p-2 w-full text-left rounded-lg border text-[11px] leading-snug shadow-sm flex flex-col gap-1 transition-all ${bgClass} ${ev.pending ? "opacity-50 pointer-events-none" : ""}`}
+                                  disabled={ev.pending}
                                 >
-                                  <div className="font-extrabold line-clamp-1">{ev.className}</div>
+                                  <div className="font-extrabold line-clamp-1 flex items-center justify-between">
+                                    {ev.className}
+                                    {ev.pending && <Loader2 size={12} className="animate-spin text-slate-500" />}
+                                  </div>
                                   <div className="font-medium opacity-80 line-clamp-1">{ev.teacherName}</div>
                                   <div className="text-[10px] font-bold mt-1">
                                     {isPending ? (
@@ -381,22 +412,19 @@ export default function AdminScheduleClient({
             <div className="flex gap-3">
               <button
                 onClick={() => setSelectedSession(null)}
-                disabled={isProcessing}
                 className="flex-1 px-4 py-2 bg-slate-100 text-slate-700 font-bold rounded-xl hover:bg-slate-200 transition-colors"
               >
                 Đóng
               </button>
               <button
                 onClick={selectedSession.isCancelRequested ? handleRejectCancel : handleReject}
-                disabled={isProcessing}
-                className="flex-1 flex items-center justify-center gap-1.5 px-4 py-2 bg-rose-100 text-rose-700 font-bold rounded-xl hover:bg-rose-200 transition-colors disabled:opacity-50"
+                className="flex-1 flex items-center justify-center gap-1.5 px-4 py-2 bg-rose-100 text-rose-700 font-bold rounded-xl hover:bg-rose-200 transition-colors"
               >
                 <XCircle size={16} /> Từ chối {selectedSession.isCancelRequested && "Huỷ"}
               </button>
               <button
                 onClick={selectedSession.isCancelRequested ? handleApproveCancel : handleApprove}
-                disabled={isProcessing}
-                className="flex-1 flex items-center justify-center gap-1.5 px-4 py-2 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 transition-colors disabled:opacity-50"
+                className="flex-1 flex items-center justify-center gap-1.5 px-4 py-2 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 transition-colors"
               >
                 <CheckCircle size={16} /> Đồng ý {selectedSession.isCancelRequested && "Huỷ"}
               </button>

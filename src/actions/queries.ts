@@ -16,6 +16,7 @@ export type TeacherData = {
   id: string;
   username: string;
   fullName: string;
+  phone: string | null;
   role: Role;
   isActive: boolean;
   salaryBalance?: number;
@@ -39,6 +40,7 @@ export async function getAllUsers(): Promise<TeacherData[]> {
       id: true,
       username: true,
       fullName: true,
+      phone: true,
       role: true,
       isActive: true,
     },
@@ -490,7 +492,7 @@ export async function getSchedule(roomId?: string, teacherId?: string, status?: 
     where: {
       ...(teacherId ? { teacherId } : {}),
       ...(roomId ? { roomId } : {}),
-      ...(status ? { status: status as SessionStatus } : {}),
+      ...(status ? { status: status as SessionStatus } : { status: { not: "CANCELLED" } }),
     },
     include: { class: true, teacher: true, room: true },
     orderBy: [{ date: "asc" }, { slot: "asc" }]
@@ -522,8 +524,10 @@ export type TeacherBookingHistoryItem = {
   date: Date;
   slot: number;
   status: string;
-  createdAt?: Date; // In schema, classSession doesn't have createdAt?
+  createdAt?: Date;
   roomFee: number;
+  isCancelRequested: boolean;
+  isAttendanceSubmitted: boolean;
 };
 
 export async function getTeacherBookingHistory(teacherId: string): Promise<TeacherBookingHistoryItem[]> {
@@ -543,6 +547,8 @@ export async function getTeacherBookingHistory(teacherId: string): Promise<Teach
     slot: s.slot,
     status: s.status,
     roomFee: s.room?.feePerSession ?? 0,
+    isCancelRequested: s.isCancelRequested,
+    isAttendanceSubmitted: s.isAttendanceSubmitted,
   }));
 }
 
@@ -661,12 +667,16 @@ export async function getTeacherSettingsInfo(teacherId: string) {
     },
   });
 
-  const agg = await prisma.roomRentalLog.aggregate({
-    where: { teacherId },
+  // Phí phòng hiện tại chưa tất toán (nợ)
+  const roomFeeAgg = await prisma.roomRentalLog.aggregate({
+    where: { teacherId, status: "PENDING" },
     _sum: { feeCalculated: true },
   });
+  const totalRoomFee = roomFeeAgg._sum.feeCalculated ?? 0;
 
-  const totalRoomFee = agg._sum.feeCalculated ?? 0;
+  // Thu nhập hiện tại chưa tất toán
+  // Biết rằng: Số dư khả dụng (salaryBalance) = Thu nhập - Phí phòng
+  // Suy ra: Thu nhập = Số dư khả dụng + Phí phòng
   const totalEarned = (teacherInfo?.salaryBalance ?? 0) + totalRoomFee;
 
   const sessions = await prisma.classSession.findMany({
@@ -701,6 +711,7 @@ export type TeacherFinanceViewData = {
   id: string;
   username: string;
   fullName: string;
+  phone: string | null;
   salaryBalance: number;
   totalRoomFee: number;
   totalEarned: number;
@@ -713,6 +724,7 @@ export async function getTeachersForFinance(): Promise<TeacherFinanceViewData[]>
       id: true,
       username: true,
       fullName: true,
+      phone: true,
       salaryBalance: true,
     },
     orderBy: { fullName: "asc" }
@@ -720,14 +732,16 @@ export async function getTeachersForFinance(): Promise<TeacherFinanceViewData[]>
 
   const result = await Promise.all(
     teachers.map(async (t) => {
-      // Tính tổng phí phòng đã trừ
+      // Tính tổng phí phòng HIỆN TẠI CHƯA THANH TOÁN
       const roomFeeAggr = await prisma.roomRentalLog.aggregate({
-        where: { teacherId: t.id },
+        where: { teacherId: t.id, status: "PENDING" },
         _sum: { feeCalculated: true }
       });
       const totalRoomFee = roomFeeAggr._sum.feeCalculated || 0;
 
-      // Tổng thu nhập giảng dạy = Số dư ví hiện tại + Tổng phí phòng đã trừ
+      // Tính tổng thu nhập HIỆN TẠI CHƯA THANH TOÁN
+      // Vì salaryBalance = Thu nhập chưa thanh toán - Phí phòng chưa thanh toán
+      // Suy ra: Thu nhập chưa thanh toán = salaryBalance + Phí phòng chưa thanh toán
       const totalEarned = t.salaryBalance + totalRoomFee;
 
       return {

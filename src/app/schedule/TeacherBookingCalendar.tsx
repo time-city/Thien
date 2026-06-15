@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useMemo, useTransition, useOptimistic } from "react";
 import { useRouter } from "next/navigation";
 import { format, addDays, startOfWeek, isSameDay, addWeeks } from "date-fns";
 import { ChevronLeft, ChevronRight, XCircle, MapPin, CalendarPlus } from "lucide-react";
 import { toast } from "sonner";
 import { requestRoomBooking, rejectSessionRequest, requestCancelSession } from "@/actions/mutations";
-import type { RoomData, ScheduleItemData, ClassData } from "@/actions/queries";
+import type { RoomData, ScheduleItemData as BaseScheduleItemData, ClassData } from "@/actions/queries";
+export type ScheduleItemData = BaseScheduleItemData & { pending?: boolean };
 
 const SHIFTS = [
   { id: 1, label: "Ca 1", time: "07:30 - 09:00" },
@@ -49,13 +50,28 @@ export default function TeacherBookingCalendar({
 }: {
   rooms: RoomData[];
   classes: ClassData[];
-  initialSchedule: ScheduleItemData[];
-  teacherSchedule: ScheduleItemData[];
+  initialSchedule: BaseScheduleItemData[];
+  teacherSchedule: BaseScheduleItemData[];
   teacherId: string;
   selectedRoomId: string;
 }) {
   const router = useRouter();
-  const [schedule, setSchedule] = useState(initialSchedule);
+  // Optimistic UI State
+  const [optimisticSchedule, addOptimisticSchedule] = useOptimistic(
+    initialSchedule as ScheduleItemData[],
+    (state, action: { type: "ADD" | "CANCEL_PENDING" | "CANCEL_SCHEDULED"; payload: any }) => {
+      switch (action.type) {
+        case "ADD":
+          return [...state, action.payload];
+        case "CANCEL_PENDING":
+          return state.filter(s => s.id !== action.payload.id);
+        case "CANCEL_SCHEDULED":
+          return state.map(s => s.id === action.payload.id ? { ...s, isCancelRequested: true, cancelReason: action.payload.reason, pending: true } : s);
+        default:
+          return state;
+      }
+    }
+  );
   const [currentDate, setCurrentDate] = useState<Date>(() => new Date());
   
   // Modal states
@@ -65,10 +81,7 @@ export default function TeacherBookingCalendar({
   const [cancelReason, setCancelReason] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
 
-  // NO MANUAL F5 RULE
-  useEffect(() => {
-    setSchedule(initialSchedule);
-  }, [initialSchedule]);
+  const [isPending, startTransition] = useTransition();
 
   const { startOfThisWeek } = useMemo(() => {
     return { startOfThisWeek: startOfWeek(currentDate, { weekStartsOn: 1 }) };
@@ -83,59 +96,93 @@ export default function TeacherBookingCalendar({
     }
   };
 
-  const handleRequestBooking = async () => {
+  const handleRequestBooking = () => {
     if (!bookingSlot || !selectedClassId || !selectedRoomId) {
       toast.error("Vui lòng chọn đầy đủ thông tin");
       return;
     }
 
-    setIsProcessing(true);
-    const dateStr = toISODate(bookingSlot.date);
-    const result = await requestRoomBooking({
-      roomId: selectedRoomId,
-      classId: selectedClassId,
-      date: dateStr,
-      slot: bookingSlot.slot,
-    });
-    setIsProcessing(false);
+    const currentSlot = bookingSlot;
+    const currentClassId = selectedClassId;
+    const currentRoomId = selectedRoomId;
+    
+    // Đóng modal ngay lập tức
+    setBookingSlot(null);
+    setSelectedClassId("");
 
-    if (result.success) {
-      toast.success("Đăng ký phòng thành công! Đang chờ duyệt.");
-      setBookingSlot(null);
-      setSelectedClassId("");
-      router.refresh();
-    } else {
-      toast.error(result.error || "Có lỗi xảy ra");
-    }
+    startTransition(async () => {
+      const dateStr = toISODate(currentSlot.date);
+      const tempId = `temp-${Date.now()}`;
+      
+      const tempSession: ScheduleItemData = {
+        id: tempId,
+        roomId: currentRoomId,
+        roomName: "",
+        isAttendanceSubmitted: false,
+        classId: currentClassId === "freelance" ? "" : currentClassId,
+        className: currentClassId === "freelance" ? "Lớp Tự Do (Thuê phòng)" : classes.find(c => c.id === currentClassId)?.name || "",
+        teacherId: teacherId,
+        teacherName: "",
+        date: currentSlot.date,
+        slot: currentSlot.slot,
+        status: "PENDING",
+        isCancelRequested: false,
+        cancelReason: null,
+        pending: true
+      };
+
+      addOptimisticSchedule({ type: "ADD", payload: tempSession });
+      
+      const result = await requestRoomBooking({
+        roomId: currentRoomId,
+        classId: currentClassId,
+        date: dateStr,
+        slot: currentSlot.slot,
+      });
+
+      if (result.success) {
+        toast.success("Đăng ký phòng thành công! Đang chờ duyệt.");
+        router.refresh();
+      } else {
+        toast.error(result.error || "Có lỗi xảy ra");
+      }
+    });
   };
 
-  const handleCancelRequest = async () => {
+  const handleCancelRequest = () => {
     if (!cancelSession) return;
-    setIsProcessing(true);
     
-    let result;
-    if (cancelSession.status === "PENDING") {
-      result = await rejectSessionRequest(cancelSession.id);
-    } else if (cancelSession.status === "SCHEDULED") {
-      if (!cancelReason.trim()) {
-        toast.warning("Vui lòng nhập lý do huỷ ca.");
-        setIsProcessing(false);
-        return;
-      }
-      result = await requestCancelSession(cancelSession.id, cancelReason);
+    if (cancelSession.status === "SCHEDULED" && !cancelReason.trim()) {
+      toast.warning("Vui lòng nhập lý do huỷ ca.");
+      return;
     }
 
-    setIsProcessing(false);
+    const currentCancel = cancelSession;
+    const currentReason = cancelReason;
     
-    if (result && result.success) {
-      toast.success(cancelSession.status === "PENDING" ? "Đã hủy yêu cầu đặt phòng!" : "Đã gửi yêu cầu huỷ ca!");
-      setCancelSession(null);
-      setCancelReason("");
-      window.dispatchEvent(new Event("schedule-updated"));
-      router.refresh();
-    } else {
-      toast.error(result?.error || "Có lỗi xảy ra");
-    }
+    // Đóng modal ngay lập tức
+    setCancelSession(null);
+    setCancelReason("");
+    
+    startTransition(async () => {
+      let result;
+      
+      if (currentCancel.status === "PENDING") {
+        addOptimisticSchedule({ type: "CANCEL_PENDING", payload: { id: currentCancel.id } });
+        result = await rejectSessionRequest(currentCancel.id);
+      } else if (currentCancel.status === "SCHEDULED") {
+        addOptimisticSchedule({ type: "CANCEL_SCHEDULED", payload: { id: currentCancel.id, reason: currentReason } });
+        result = await requestCancelSession(currentCancel.id, currentReason);
+      }
+      
+      if (result && result.success) {
+        toast.success(currentCancel.status === "PENDING" ? "Đã hủy yêu cầu đặt phòng!" : "Đã gửi yêu cầu huỷ ca!");
+        window.dispatchEvent(new Event("schedule-updated"));
+        router.refresh();
+      } else {
+        toast.error(result?.error || "Có lỗi xảy ra");
+      }
+    });
   };
 
   return (
@@ -165,7 +212,7 @@ export default function TeacherBookingCalendar({
       {!selectedRoomId ? (
         <div className="space-y-4">
           <h2 className="text-lg font-bold text-slate-800">Các Lớp Đang Chờ Duyệt</h2>
-          {schedule.filter(s => s.status === "PENDING" && s.teacherId === teacherId).length === 0 ? (
+          {optimisticSchedule.filter(s => s.status === "PENDING" && s.teacherId === teacherId).length === 0 ? (
             <div className="bg-white border border-slate-200 rounded-xl p-16 text-center shadow-sm">
               <MapPin size={48} className="mx-auto text-slate-300 mb-4" />
               <h3 className="text-lg font-bold text-slate-700 mb-2">Vui lòng chọn phòng</h3>
@@ -173,7 +220,7 @@ export default function TeacherBookingCalendar({
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {schedule.filter(s => s.status === "PENDING" && s.teacherId === teacherId).map(s => (
+              {optimisticSchedule.filter(s => s.status === "PENDING" && s.teacherId === teacherId).map(s => (
                 <div key={s.id} className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm flex flex-col gap-2 relative transition-all hover:shadow-md">
                   <div className="font-extrabold text-blue-700 text-lg">{s.className}</div>
                   <div className="text-sm text-slate-600">
@@ -265,7 +312,7 @@ export default function TeacherBookingCalendar({
                       const dateISO = toISODate(dateForCell);
                       const isToday = isSameDay(dateForCell, new Date());
 
-                      const cellSessions = schedule.filter((s) => {
+                      const cellSessions = optimisticSchedule.filter((s) => {
                         return toISODate(s.date) === dateISO && dayOfWeekMon1Sun7(s.date) === day.id && s.slot === shift.id;
                       });
 
@@ -317,7 +364,8 @@ export default function TeacherBookingCalendar({
                                       : session.isCancelRequested
                                       ? "bg-rose-50 border-rose-200 text-rose-800 cursor-default opacity-80"
                                       : "bg-blue-50 border-blue-200 text-blue-900 hover:scale-[1.02] cursor-pointer"
-                                  }`}
+                                  } ${session.pending ? "opacity-50 pointer-events-none" : ""}`}
+                                  disabled={session.pending}
                                 >
                                   <div className="font-extrabold line-clamp-1">{session.className}</div>
                                   <div className="text-[10px] font-bold mt-auto">
@@ -367,7 +415,7 @@ export default function TeacherBookingCalendar({
                   {/* Các Ca Học */}
                   <div className="flex flex-col divide-y divide-slate-100">
                     {SHIFTS.map((shift) => {
-                      const cellSessions = schedule.filter((s) => {
+                      const cellSessions = optimisticSchedule.filter((s) => {
                         return toISODate(s.date) === dateISO && dayOfWeekMon1Sun7(s.date) === day.id && s.slot === shift.id;
                       });
 
@@ -422,7 +470,8 @@ export default function TeacherBookingCalendar({
                                         : session.isCancelRequested
                                         ? "bg-rose-50 border-rose-200 text-rose-800 cursor-default"
                                         : "bg-blue-50 border-blue-200 text-blue-900 active:scale-[0.98]"
-                                    }`}
+                                    } ${session.pending ? "opacity-50 pointer-events-none" : ""}`}
+                                    disabled={session.pending}
                                   >
                                     <div className="font-extrabold line-clamp-1">{session.className}</div>
                                     <div className="text-[10px] font-bold mt-1">

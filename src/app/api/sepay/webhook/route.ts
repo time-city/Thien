@@ -114,10 +114,16 @@ export async function POST(request: Request) {
           console.error(`❌ Lỗi khi thanh toán cho học sinh ${studentId}:`, result.message);
         }
       } else {
-        // 4. Fallback: Nếu không tìm thấy học sinh, thử tìm Giáo viên theo username
+        // 4. Fallback: Nếu không tìm thấy học sinh, thử tìm Giáo viên theo username hoặc số điện thoại
         // Dùng trong trường hợp giáo viên nợ tiền phòng và thanh toán lại cho trung tâm
-        const teacher = await prisma.user.findUnique({
-          where: { username: studentPhoneMatch }
+        const teacher = await prisma.user.findFirst({
+          where: {
+            role: "TEACHER",
+            OR: [
+              { username: studentPhoneMatch },
+              { phone: studentPhoneMatch }
+            ]
+          }
         });
 
         if (teacher && teacher.role === "TEACHER") {
@@ -130,8 +136,16 @@ export async function POST(request: Request) {
               data: {
                 teacherId: teacher.id,
                 amount: -amount,
-                note: `Giáo viên đóng tiền phòng (Chuyển khoản SePay: ${sepayId})`
+                note: `Giáo viên đóng tiền mặt/phòng (Chuyển khoản SePay: ${sepayId})`
               }
+            });
+            await tx.classSession.updateMany({
+              where: { teacherId: teacher.id, isPaid: false, status: "COMPLETED" },
+              data: { isPaid: true }
+            });
+            await tx.roomRentalLog.updateMany({
+              where: { teacherId: teacher.id, status: "PENDING" },
+              data: { status: "PAID" }
             });
           });
           console.log(`✅ Đã thu ${amount} từ GV ${teacher.username} qua Webhook`);

@@ -199,6 +199,11 @@ export default function Sidebar({ userRole, userName, isOpen, onClose }: Sidebar
   // Lọc menu theo role của user hiện tại
   const filteredNav = menuItems.filter((item) => item.roles.includes(userRole));
 
+  // Xác định item được chọn hiện tại bằng cách tìm item có href dài nhất khớp với pathname
+  const activeItem = [...filteredNav]
+    .sort((a, b) => b.href.length - a.href.length)
+    .find(item => pathname === item.href || (item.href !== "/" && pathname.startsWith(item.href + "/")));
+
   return (
     <>
       {/* Mobile backdrop */}
@@ -230,9 +235,7 @@ export default function Sidebar({ userRole, userName, isOpen, onClose }: Sidebar
           {filteredNav.map((item, index) => {
             const previous = filteredNav[index - 1];
             const showSection = !previous || previous.section !== item.section;
-            const isActive = 
-              pathname === item.href || 
-              (item.href !== "/" && pathname.startsWith(item.href));
+            const isActive = activeItem?.href === item.href;
 
             const Icon = item.icon;
 

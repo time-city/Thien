@@ -265,7 +265,7 @@ export default function TeacherSettingsPage({
             <div className="bg-white border border-slate-200 rounded-xl p-3 md:p-4 shadow-sm flex flex-col justify-between lg:col-span-1">
               <div className="flex items-center gap-2 mb-3">
                 <TrendingUp className="text-emerald-500" size={16} />
-                <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Lương đã nhận</p>
+                <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Thu nhập</p>
               </div>
               <div className="text-xl font-extrabold text-slate-800 tracking-tight">
                 {formatVnd(teacherInfo?.totalEarned || 0)}

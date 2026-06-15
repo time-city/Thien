@@ -650,6 +650,7 @@ export async function createTeacher(data: {
   username: string;
   password: string;
   fullName: string;
+  phone?: string;
   isActive?: boolean;
 }) {
   await checkSuperAdmin();
@@ -665,6 +666,7 @@ export async function createTeacher(data: {
         username: data.username,
         passwordHash: hashed,
         fullName: data.fullName,
+        phone: data.phone,
         role: "TEACHER",
         isActive: data.isActive ?? true,
       },
@@ -681,6 +683,7 @@ export async function updateTeacher(
   teacherId: string,
   data: {
     fullName?: string;
+    phone?: string;
     isActive?: boolean;
   }
 ) {
@@ -690,6 +693,7 @@ export async function updateTeacher(
       where: { id: teacherId },
       data: {
         fullName: data.fullName,
+        phone: data.phone,
         isActive: data.isActive,
       },
     });
@@ -1299,6 +1303,18 @@ export async function payTeacherSalary(teacherId: string, amount: number) {
           salaryBalance: { decrement: amount }
         }
       });
+
+      // 3. Đánh dấu các ca học là ĐÃ THANH TOÁN
+      await tx.classSession.updateMany({
+        where: { teacherId: teacherId, isPaid: false, status: "COMPLETED" },
+        data: { isPaid: true }
+      });
+
+      // 4. Đánh dấu các phí phòng là ĐÃ THANH TOÁN
+      await tx.roomRentalLog.updateMany({
+        where: { teacherId: teacherId, status: "PENDING" },
+        data: { status: "PAID" }
+      });
     });
 
     revalidatePath("/admin/tuition");
@@ -1331,6 +1347,18 @@ export async function collectTeacherDebtManual(teacherId: string, amount: number
         data: {
           salaryBalance: { increment: amount }
         }
+      });
+
+      // 3. Đánh dấu các ca học là ĐÃ THANH TOÁN
+      await tx.classSession.updateMany({
+        where: { teacherId: teacherId, isPaid: false, status: "COMPLETED" },
+        data: { isPaid: true }
+      });
+
+      // 4. Đánh dấu các phí phòng là ĐÃ THANH TOÁN
+      await tx.roomRentalLog.updateMany({
+        where: { teacherId: teacherId, status: "PENDING" },
+        data: { status: "PAID" }
       });
     });
 
@@ -1368,6 +1396,7 @@ export async function requestRoomBooking(data: {
         roomId: data.roomId,
         date: dateObj,
         slot: data.slot,
+        status: { not: "CANCELLED" }
       },
     });
 
@@ -1381,6 +1410,7 @@ export async function requestRoomBooking(data: {
         teacherId: teacherId,
         date: dateObj,
         slot: data.slot,
+        status: { not: "CANCELLED" }
       },
     });
 
@@ -1415,7 +1445,7 @@ export async function requestRoomBooking(data: {
               teacherId: teacherId,
               classSessionId: newSession.id,
               feeCalculated: roomFee,
-              status: "PAID"
+              status: "PENDING"
             }
           });
         }
@@ -1459,7 +1489,7 @@ export async function approveSessionRequest(sessionId: string) {
               teacherId: session.teacherId,
               classSessionId: session.id,
               feeCalculated: roomFee,
-              status: "PAID"
+              status: "PENDING"
             }
           });
         }
@@ -1528,7 +1558,7 @@ export async function approveCancelSession(sessionId: string) {
       // Nếu là lớp tự do, hoàn tiền phòng
       if (session.classId === null) {
         const log = await tx.roomRentalLog.findFirst({
-          where: { classSessionId: session.id, status: "PAID" }
+          where: { classSessionId: session.id, status: { in: ["PAID", "PENDING"] } }
         });
 
         if (log) {

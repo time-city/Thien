@@ -56,7 +56,8 @@ export async function createBulkSchedule(data: {
       where: {
         AND: [
           { OR: datesToCheck.map(dt => ({ date: dt.date, slot: dt.slot })) },
-          { OR: [{ teacherId }, { roomId }] }
+          { OR: [{ teacherId }, { roomId }] },
+          { status: { not: "CANCELLED" } }
         ]
       },
       include: { class: true, teacher: true, room: true }
@@ -93,7 +94,7 @@ export async function createBulkSchedule(data: {
               teacherId: teacherId,
               classSessionId: s.id,
               feeCalculated: roomFee,
-              status: "PAID"
+              status: "PENDING"
             }))
           });
         }

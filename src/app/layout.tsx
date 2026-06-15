@@ -6,6 +6,8 @@ import { SessionProvider } from "next-auth/react";
 import GlobalConfirmModal from "@/components/common/ConfirmModal"; // Path của Modal
 import ToastProvider from "@/components/ToastProvider"; // <--- THÊM DÒNG IMPORT NÀY
 
+import NextTopLoader from 'nextjs-toploader';
+
 export const metadata: Metadata = {
   title: "Nông Trại KHTN",
   description: "Web app quản lý lớp học tối giản, mobile-first.",
@@ -15,6 +17,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
   return (
     <html lang="vi">
       <body className="bg-slate-50 text-slate-800">
+        <NextTopLoader color="#2563eb" showSpinner={false} />
         <SessionProvider>
           <AuthProvider>
             <GlobalConfirmModal/>

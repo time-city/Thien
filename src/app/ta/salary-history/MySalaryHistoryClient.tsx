@@ -111,8 +111,8 @@ export default function MySalaryHistoryClient({ initialData }: { initialData: Sa
                       <td className="py-2 px-4 text-[12px] font-medium text-slate-600">
                         {formatDateTime(item.paymentDate)}
                       </td>
-                      <td className="py-2 px-4 text-[13px] font-extrabold text-emerald-600">
-                        +{formatCurrency(item.amount)}
+                      <td className={`py-2 px-4 text-[13px] font-extrabold ${item.amount < 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                        {item.amount > 0 ? '+' : ''}{formatCurrency(item.amount)}
                       </td>
                       <td className="py-2 px-4 text-[13px] font-medium text-slate-700">
                         {item.note || "-"}

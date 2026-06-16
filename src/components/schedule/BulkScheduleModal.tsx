@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { Plus, X, Calendar as CalendarIcon, Users, Check, Ban, BookOpen, UserCircle, Building2 } from "lucide-react";
 import { createBulkSchedule, getOccupiedPatterns } from "@/actions/schedule";
 import { toast } from "sonner";
-import { useConfirm } from "@/hooks/useconfirm"; 
+import { useConfirm } from "@/hooks/useconfirm";
 
 // Bổ sung kiểu dữ liệu cho chính xác với dữ liệu Lớp học trả về từ DB
 type ClassItem = {
@@ -36,23 +36,33 @@ export default function BulkScheduleModal({ classes, rooms = [], teachers = [] }
     d.setDate(d.getDate() + 28);
     return d.toISOString().split("T")[0];
   });
-  
+
   const [selectedPatterns, setSelectedPatterns] = useState<SchedulePattern[]>([]);
-  
+
   const [occupiedSlots, setOccupiedSlots] = useState<Set<string>>(new Set());
   const [isScanning, setIsScanning] = useState(false);
-  
+
   const { confirm } = useConfirm();
 
   // TỰ ĐỘNG TÌM GIÁO VIÊN VÀ MÔN HỌC DỰA VÀO LỚP ĐANG CHỌN
   const isFreelance = classId === "freelance";
   const selectedClassObj = classes.find(c => c.id === classId);
   const [freelanceTeacherId, setFreelanceTeacherId] = useState("");
-  
-  const assignedTeacherId = isFreelance ? freelanceTeacherId : (selectedClassObj?.teachers?.[0]?.teacherId || null);
-  const assignedTeacherName = isFreelance 
+  const [selectedClassTeacherId, setSelectedClassTeacherId] = useState("");
+
+  // Tự động gán giáo viên đầu tiên khi chọn lớp
+  useEffect(() => {
+    if (!isFreelance && selectedClassObj?.teachers?.length) {
+      setSelectedClassTeacherId(selectedClassObj.teachers[0].teacherId);
+    } else {
+      setSelectedClassTeacherId("");
+    }
+  }, [classId, selectedClassObj]);
+
+  const assignedTeacherId = isFreelance ? freelanceTeacherId : selectedClassTeacherId;
+  const assignedTeacherName = isFreelance
     ? (teachers?.find(t => t.id === freelanceTeacherId)?.fullName || "Chưa chọn giáo viên")
-    : (selectedClassObj?.teachers?.[0]?.teacherName || "Chưa phân công");
+    : (selectedClassObj?.teachers?.find(t => t.teacherId === selectedClassTeacherId)?.teacherName || "Chưa phân công");
 
   // Quét lịch trống
   useEffect(() => {
@@ -62,12 +72,12 @@ export default function BulkScheduleModal({ classes, rooms = [], teachers = [] }
     const scanSchedule = async () => {
       setIsScanning(true);
       const res = await getOccupiedPatterns(startDate, endDate, assignedTeacherId, roomId);
-      
+
       if (isMounted) {
         const newSet = new Set<string>();
         res.forEach(item => newSet.add(`${item.day}-${item.slot}`));
         setOccupiedSlots(newSet);
-        
+
         setSelectedPatterns(prev => prev.filter(p => !newSet.has(`${p.day}-${p.slot}`)));
         setIsScanning(false);
       }
@@ -115,8 +125,8 @@ export default function BulkScheduleModal({ classes, rooms = [], teachers = [] }
       title: "Xác nhận tạo lịch học",
       message: (
         <>
-          Bạn đang chuẩn bị tạo lịch {isFreelance ? "thuê phòng tự do" : <>cho lớp <strong>{selectedClassObj?.name}</strong></>} do giáo viên <strong>{assignedTeacherName}</strong> phụ trách tại phòng <strong>{rooms.find(r => r.id === roomId)?.name || "Chưa rõ"}</strong>.<br/><br/>
-          Tần suất: <strong>{selectedPatterns.length} ca/tuần</strong>, từ ngày <strong>{new Date(startDate).toLocaleDateString('vi-VN')}</strong> đến ngày <strong>{new Date(endDate).toLocaleDateString('vi-VN')}</strong>.<br/><br/>
+          Bạn đang chuẩn bị tạo lịch {isFreelance ? "thuê phòng tự do" : <>cho lớp <strong>{selectedClassObj?.name}</strong></>} do giáo viên <strong>{assignedTeacherName}</strong> phụ trách tại phòng <strong>{rooms.find(r => r.id === roomId)?.name || "Chưa rõ"}</strong>.<br /><br />
+          Tần suất: <strong>{selectedPatterns.length} ca/tuần</strong>, từ ngày <strong>{new Date(startDate).toLocaleDateString('vi-VN')}</strong> đến ngày <strong>{new Date(endDate).toLocaleDateString('vi-VN')}</strong>.<br /><br />
           Bạn có chắc chắn muốn tiếp tục?
         </>
       ),
@@ -133,13 +143,13 @@ export default function BulkScheduleModal({ classes, rooms = [], teachers = [] }
           startDate,
           endDate,
         });
-        
+
         setIsLoading(false);
-        
+
         if (result.success) {
           toast.success("Tạo lịch dạy định kỳ thành công!");
-          setIsOpen(false); 
-          setSelectedPatterns([]); 
+          setIsOpen(false);
+          setSelectedPatterns([]);
           window.location.reload(); // Ép reload để refetch data lịch mới nhất
         } else {
           toast.error(result.error || "Đã xảy ra lỗi khi tạo lịch.");
@@ -169,7 +179,7 @@ export default function BulkScheduleModal({ classes, rooms = [], teachers = [] }
           <div className="bg-white w-full max-w-2xl rounded-2xl shadow-xl flex flex-col overflow-hidden max-h-[95vh]">
             <div className="flex justify-between items-center p-5 border-b border-slate-100 bg-slate-50">
               <h2 className="text-lg font-extrabold text-slate-800">Tạo Lịch Dạy Định Kỳ</h2>
-              <button 
+              <button
                 onClick={() => setIsOpen(false)}
                 className="p-1.5 bg-slate-200 hover:bg-slate-300 rounded-full text-slate-600 transition-colors"
               >
@@ -178,13 +188,13 @@ export default function BulkScheduleModal({ classes, rooms = [], teachers = [] }
             </div>
 
             <form onSubmit={handleSubmit} className="p-6 overflow-y-auto space-y-6">
-              
+
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <label className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
-                    <BookOpen size={14}/> Chọn Lớp Học
+                    <BookOpen size={14} /> Chọn Lớp Học
                   </label>
-                  <select 
+                  <select
                     value={classId}
                     onChange={(e) => {
                       setClassId(e.target.value);
@@ -197,11 +207,11 @@ export default function BulkScheduleModal({ classes, rooms = [], teachers = [] }
                     {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                   </select>
                 </div>
-                
+
                 {/* Ô GIÁO VIÊN TRỞ THÀNH READ-ONLY */}
                 <div className="space-y-2">
                   <label className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
-                    <UserCircle size={14}/> Giáo viên phụ trách
+                    <UserCircle size={14} /> Giáo viên phụ trách
                   </label>
                   {isFreelance ? (
                     <select
@@ -213,19 +223,30 @@ export default function BulkScheduleModal({ classes, rooms = [], teachers = [] }
                       <option value="">-- Chọn Giáo Viên --</option>
                       {teachers?.map(t => <option key={t.id} value={t.id}>{t.fullName}</option>)}
                     </select>
+                  ) : (selectedClassObj?.teachers && selectedClassObj.teachers.length > 1) ? (
+                    <select
+                      value={selectedClassTeacherId}
+                      onChange={(e) => setSelectedClassTeacherId(e.target.value)}
+                      className="w-full h-11 px-3 border border-slate-200 rounded-xl bg-blue-50 text-blue-700 border-blue-200 text-sm font-semibold focus:ring-2 focus:ring-blue-100 outline-none cursor-pointer"
+                      required
+                    >
+                      {selectedClassObj.teachers.map(t => (
+                        <option key={t.teacherId} value={t.teacherId}>{t.teacherName}</option>
+                      ))}
+                    </select>
                   ) : (
                     <div className={`w-full h-11 px-3 border border-slate-200 rounded-xl flex items-center text-sm font-semibold ${assignedTeacherId ? "bg-blue-50 text-blue-700 border-blue-200" : "bg-rose-50 text-rose-600 border-rose-200"}`}>
-                       {assignedTeacherName}
+                      {assignedTeacherName}
                     </div>
                   )}
                 </div>
               </div>
-              
+
               <div className="space-y-2">
                 <label className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
-                  <Building2 size={14}/> Chọn Phòng Học <span className="text-rose-500">*</span>
+                  <Building2 size={14} /> Chọn Phòng Học <span className="text-rose-500">*</span>
                 </label>
-                <select 
+                <select
                   value={roomId}
                   onChange={(e) => setRoomId(e.target.value)}
                   className="w-full h-11 px-3 border border-slate-200 rounded-xl bg-slate-50 text-sm font-semibold focus:ring-2 focus:ring-blue-100 outline-none cursor-pointer"
@@ -254,7 +275,7 @@ export default function BulkScheduleModal({ classes, rooms = [], teachers = [] }
                       </div>
                     ))}
                   </div>
-                  
+
                   {slots.map(slot => (
                     <div key={slot} className="grid grid-cols-8 border-b border-slate-200 last:border-b-0">
                       <div className="p-1 sm:p-2 flex items-center justify-center text-[10px] sm:text-xs font-bold text-slate-500 border-r border-slate-200 bg-slate-50">
@@ -263,7 +284,7 @@ export default function BulkScheduleModal({ classes, rooms = [], teachers = [] }
                       {daysHeader.map(day => {
                         const isOccupied = occupiedSlots.has(`${day.val}-${slot}`);
                         const isSelected = selectedPatterns.some(p => p.day === day.val && p.slot === slot);
-                        
+
                         return (
                           <button
                             key={`${day.val}-${slot}`}
@@ -271,10 +292,9 @@ export default function BulkScheduleModal({ classes, rooms = [], teachers = [] }
                             disabled={isOccupied}
                             onClick={() => handleToggleCell(day.val, slot)}
                             title={isOccupied ? "Ca này đã có lớp học khác xí chỗ" : "Click để chọn"}
-                            className={`h-10 border-r border-slate-200 last:border-r-0 flex items-center justify-center transition-colors ${
-                              isOccupied ? "bg-slate-200/60 cursor-not-allowed text-slate-300" :
-                              isSelected ? "bg-blue-600 text-white shadow-inner" : "bg-white hover:bg-blue-50"
-                            }`}
+                            className={`h-10 border-r border-slate-200 last:border-r-0 flex items-center justify-center transition-colors ${isOccupied ? "bg-slate-200/60 cursor-not-allowed text-slate-300" :
+                                isSelected ? "bg-blue-600 text-white shadow-inner" : "bg-white hover:bg-blue-50"
+                              }`}
                           >
                             {isOccupied ? <Ban size={14} /> : isSelected ? <Check size={16} strokeWidth={3} /> : null}
                           </button>
@@ -289,9 +309,9 @@ export default function BulkScheduleModal({ classes, rooms = [], teachers = [] }
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <label className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
-                    <CalendarIcon size={14}/> Bắt đầu từ ngày
+                    <CalendarIcon size={14} /> Bắt đầu từ ngày
                   </label>
-                  <input 
+                  <input
                     type="date"
                     value={startDate}
                     onChange={(e) => setStartDate(e.target.value)}
@@ -301,9 +321,9 @@ export default function BulkScheduleModal({ classes, rooms = [], teachers = [] }
                 </div>
                 <div className="space-y-2">
                   <label className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
-                    <CalendarIcon size={14}/> Đến ngày (Kết thúc)
+                    <CalendarIcon size={14} /> Đến ngày (Kết thúc)
                   </label>
-                  <input 
+                  <input
                     type="date"
                     value={endDate}
                     min={startDate}
@@ -314,8 +334,8 @@ export default function BulkScheduleModal({ classes, rooms = [], teachers = [] }
                 </div>
               </div>
 
-              <button 
-                type="submit" 
+              <button
+                type="submit"
                 disabled={isLoading || isScanning}
                 className="w-full h-12 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white rounded-xl font-bold text-base transition-all shadow-sm flex items-center justify-center gap-2"
               >

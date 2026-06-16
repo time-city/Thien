@@ -1,0 +1,18 @@
+
+> thien-classroom-ui@0.1.0 dev
+> next dev --turbopack
+
+▲ Next.js 16.2.6 (Turbopack)
+- Local:         http://localhost:3001
+- Network:       http://172.25.67.101:3001
+- Environments: .env
+✓ Ready in 183ms
+⨯ Another next dev server is already running.
+
+- Local:        http://localhost:3000
+- PID:          2451
+- Dir:          /Users/admin/Documents/Thien
+- Log:          .next/dev/logs/next-development.log
+
+Run kill 2451 to stop it.
+[?25h

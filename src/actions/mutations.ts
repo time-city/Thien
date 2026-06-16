@@ -796,8 +796,7 @@ export async function createClass(data: {
   category: string; 
   pricePerSession: number;
   sessionsPerPackage: number;
-  teacherId?: string;
-  salaryPerSession?: number;
+  teachers?: { teacherId: string; salaryPerSession: number }[];
 }) {
   try {
     const session = await auth();
@@ -813,7 +812,15 @@ export async function createClass(data: {
 
     const status = role === "TEACHER" ? ClassStatus.PENDING : ClassStatus.APPROVED;
 
-    const assignedTeacherId = role === "TEACHER" ? session.user.id : data.teacherId;
+    let teachersToCreate: { teacherId: string; salaryPerSession: number }[] = [];
+    if (role === "TEACHER") {
+      teachersToCreate = [{
+        teacherId: session.user.id,
+        salaryPerSession: data.teachers?.[0]?.salaryPerSession || 0,
+      }];
+    } else if (data.teachers && data.teachers.length > 0) {
+      teachersToCreate = data.teachers;
+    }
 
     await prisma.class.create({
       data: {
@@ -823,12 +830,9 @@ export async function createClass(data: {
         sessionsPerPackage: data.sessionsPerPackage,
         status,
         createdById: session.user.id,
-        teachers: assignedTeacherId
+        teachers: teachersToCreate.length > 0
           ? {
-              create: {
-                teacherId: assignedTeacherId,
-                salaryPerSession: data.salaryPerSession || 0,
-              },
+              create: teachersToCreate,
             }
           : undefined,
       },
@@ -868,8 +872,7 @@ export async function updateClass(
     category?: string; 
     pricePerSession?: number;
     sessionsPerPackage?: number;
-    teacherId?: string;
-    salaryPerSession?: number;
+    teachers?: { teacherId: string; salaryPerSession: number }[];
   }
 ) {
   await checkSuperAdmin();
@@ -887,13 +890,13 @@ export async function updateClass(
         },
       });
 
-      if (data.teacherId) {
-        await tx.classTeacher.create({
-          data: {
+      if (data.teachers && data.teachers.length > 0) {
+        await tx.classTeacher.createMany({
+          data: data.teachers.map((t) => ({
             classId: id,
-            teacherId: data.teacherId,
-            salaryPerSession: data.salaryPerSession || 0,
-          },
+            teacherId: t.teacherId,
+            salaryPerSession: t.salaryPerSession || 0,
+          })),
         });
       }
     });

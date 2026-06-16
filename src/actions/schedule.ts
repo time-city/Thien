@@ -16,6 +16,7 @@ export async function createBulkSchedule(data: {
   const { classId, teacherId, roomId, patterns, startDate, endDate } = data;
 
   if (patterns.length === 0) return { success: false, error: "Chưa chọn lịch dạy!" };
+  if (!teacherId) return { success: false, error: "Lớp học chưa được phân công giáo viên!" };
 
   const start = new Date(`${startDate}T00:00:00.000Z`);
   const end = new Date(`${endDate}T23:59:59.999Z`);
@@ -81,7 +82,7 @@ export async function createBulkSchedule(data: {
       if (classId === null) {
         const room = await tx.room.findUnique({ where: { id: roomId } });
         const roomFee = room?.feePerSession ?? 0;
-        
+
         if (roomFee > 0) {
           const totalFee = roomFee * createdSessions.length;
           await tx.user.update({
@@ -101,7 +102,7 @@ export async function createBulkSchedule(data: {
       }
     });
 
-    revalidatePath("/schedule"); 
+    revalidatePath("/schedule");
     return { success: true };
 
   } catch (error) {
@@ -224,7 +225,7 @@ export async function deleteSchedule(
 }
 
 // thêm lịch học hàng loạt (dành cho SUPER_ADMIN)
-export async function getOccupiedPatterns(startDate: string, endDate: string, teacherId: string | null, roomId: string) {
+export async function getOccupiedPatterns(startDate: string, endDate: string, teacherId: string, roomId: string) {
   const start = new Date(`${startDate}T00:00:00.000Z`);
   const end = new Date(`${endDate}T23:59:59.999Z`);
 
@@ -233,10 +234,11 @@ export async function getOccupiedPatterns(startDate: string, endDate: string, te
     where: {
       date: {
         gte: start,
-        lt: end,
+        lte: end,
       },
+      status: { not: "CANCELLED" },
       OR: [
-        ...(teacherId ? [{ teacherId }] : []),
+        { teacherId },
         { roomId }
       ]
     },

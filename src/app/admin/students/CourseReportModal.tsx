@@ -21,7 +21,7 @@ export default function CourseReportModal({
 }) {
   const [report, setReport] = useState<StudentCombinedReport | null>(null);
   const [loading, setLoading] = useState(false);
-  const [discountPercent, setDiscountPercent] = useState<number>(0);
+  const [discountAmountStr, setDiscountAmountStr] = useState<string>("");
   const [exporting, setExporting] = useState(false);
 
   // Zalo Sending States
@@ -37,7 +37,7 @@ export default function CourseReportModal({
     
     // Reset state khi mở modal cho học sinh mới
     setCashAmount("");
-    setDiscountPercent(0);
+    setDiscountAmountStr("");
     setReport(null);
 
     let isMounted = true;
@@ -168,7 +168,8 @@ export default function CourseReportModal({
   };
 
   const originalPrice = report ? report.totalExpectedAmount : 0;
-  const finalPrice = Math.max(0, originalPrice - (originalPrice * discountPercent) / 100);
+  const discountAmount = Number(discountAmountStr) || 0;
+  const finalPrice = Math.max(0, originalPrice - discountAmount);
 
   // Generate VietQR URL sử dụng phoneParent thay vì studentId/invoiceId
   const descString = report?.phoneParent ? `HT${report.phoneParent}` : `HT${studentId}`;
@@ -215,9 +216,7 @@ export default function CourseReportModal({
     }
   };
 
-  const handleDiscountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setDiscountPercent(Number(e.target.value) || 0);
-  };
+
 
   return (
     <div 
@@ -242,13 +241,11 @@ export default function CourseReportModal({
 
           <div className="space-y-4 flex-1">
             <div className="space-y-1">
-              <label className="text-xs font-bold text-slate-500 uppercase">Phần trăm Khấu hao / Giảm giá (%)</label>
-              <input
-                type="number"
-                min="0"
-                max="100"
-                value={discountPercent}
-                onChange={handleDiscountChange}
+              <label className="text-xs font-bold text-slate-500 uppercase">Khấu hao / Giảm giá (VNĐ)</label>
+              <CurrencyInput
+                placeholder="Nhập số tiền giảm giá..."
+                value={discountAmountStr}
+                onChange={(val) => setDiscountAmountStr(val.toString())}
                 className="w-full h-11 px-3 border border-slate-200 rounded-xl bg-white text-sm font-semibold focus:ring-2 focus:ring-blue-100 outline-none transition-all"
               />
             </div>
@@ -259,8 +256,8 @@ export default function CourseReportModal({
                 <span className="font-bold text-slate-700">{originalPrice.toLocaleString('vi-VN')} đ</span>
               </div>
               <div className="flex justify-between items-center text-sm text-emerald-600">
-                <span className="font-medium">Giảm trừ ({discountPercent}%):</span>
-                <span className="font-bold">-{(originalPrice * discountPercent / 100).toLocaleString('vi-VN')} đ</span>
+                <span className="font-medium">Giảm trừ:</span>
+                <span className="font-bold">-{(discountAmount).toLocaleString('vi-VN')} đ</span>
               </div>
               <div className="pt-3 border-t border-slate-100 flex justify-between items-center">
                 <span className="text-sm font-bold text-slate-800">Thực nhận:</span>

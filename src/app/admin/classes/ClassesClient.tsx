@@ -29,10 +29,9 @@ export default function ClassesClient({
   const [editingClass, setEditingClass] = useState<ClassData | null>(null);
   const [className, setClassName] = useState("");
   const [category, setCategory] = useState("");
-  const [teacherId, setTeacherId] = useState<string>("");
   const [pricePerSession, setPricePerSession] = useState<number>(0);
   const [sessionsPerPackage, setSessionsPerPackage] = useState<number>(12);
-  const [salaryPerSession, setSalaryPerSession] = useState<number>(0);
+  const [classTeachers, setClassTeachers] = useState<{ teacherId: string; salaryPerSession: number }[]>([]);
 
   // ====== STATE CHUNG & HOOK ======
   const [loading, setLoading] = useState(false);
@@ -54,10 +53,9 @@ export default function ClassesClient({
     setEditingClass(null);
     setClassName("");
     setCategory("");
-    setTeacherId("");
+    setClassTeachers([]);
     setPricePerSession(0);
     setSessionsPerPackage(12);
-    setSalaryPerSession(0);
     setIsClassModalOpen(true);
   };
 
@@ -65,10 +63,9 @@ export default function ClassesClient({
     setEditingClass(c);
     setClassName(c.name);
     setCategory(c.category);
-    setTeacherId(c.teachers?.[0]?.teacherId || "");
+    setClassTeachers(c.teachers?.map(t => ({ teacherId: t.teacherId, salaryPerSession: t.salaryPerSession || 0 })) || []);
     setPricePerSession(c.pricePerSession ?? 0);
     setSessionsPerPackage(c.sessionsPerPackage ?? 12);
-    setSalaryPerSession(c.teachers?.[0]?.salaryPerSession ?? 0);
     setIsClassModalOpen(true);
   };
 
@@ -111,8 +108,7 @@ export default function ClassesClient({
       category,
       pricePerSession,
       sessionsPerPackage,
-      teacherId: teacherId || undefined, 
-      salaryPerSession: salaryPerSession || 0,
+      teachers: classTeachers.filter(t => t.teacherId), 
     };
 
     if (editingClass) {
@@ -607,47 +603,80 @@ export default function ClassesClient({
                 </div>
               </div>
 
-              <div className="space-y-1.5">
-                <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Giáo viên phụ trách</label>
-                <select
-                  value={teacherId}
-                  onChange={(e) => {
-                    const selectedId = e.target.value;
-                    setTeacherId(selectedId);
-                    const tRole = teachers.find(t => t.id === selectedId)?.role;
-                    if (tRole === "SUPER_ADMIN") {
-                      setSalaryPerSession(0);
-                    }
-                  }}
-                  className="w-full h-10 px-3 border border-slate-200 rounded-xl bg-slate-50 text-sm font-semibold focus:ring-2 focus:ring-blue-100 outline-none transition-all cursor-pointer"
-                >
-                  <option value="">--- Chưa phân công ---</option>
-                  {teachers.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.fullName}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              <div className="space-y-3">
+                <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">Giáo viên phụ trách</label>
+                
+                {classTeachers.map((t, idx) => (
+                  <div key={idx} className="flex flex-col gap-3 p-4 rounded-xl border border-slate-200 bg-slate-50/50 relative group">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const newTeachers = classTeachers.filter((_, i) => i !== idx);
+                        setClassTeachers(newTeachers);
+                      }}
+                      className="absolute top-2 right-2 p-1.5 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
+                      title="Xóa giáo viên này"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                    
+                    <div className="space-y-1.5 pr-8">
+                      <select
+                        value={t.teacherId}
+                        onChange={(e) => {
+                          const selectedId = e.target.value;
+                          const tRole = teachers.find(x => x.id === selectedId)?.role;
+                          const newTeachers = [...classTeachers];
+                          newTeachers[idx].teacherId = selectedId;
+                          if (tRole === "SUPER_ADMIN") {
+                            newTeachers[idx].salaryPerSession = 0;
+                          }
+                          setClassTeachers(newTeachers);
+                        }}
+                        className="w-full h-10 px-3 border border-slate-200 rounded-xl bg-white text-sm font-semibold focus:ring-2 focus:ring-blue-100 outline-none transition-all cursor-pointer"
+                      >
+                        <option value="">--- Chọn giáo viên ---</option>
+                        {teachers.map((teach) => (
+                          <option key={teach.id} value={teach.id} disabled={classTeachers.some((ct, cIdx) => ct.teacherId === teach.id && cIdx !== idx)}>
+                            {teach.fullName}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
 
-              {teacherId && (
-                <div className="space-y-1.5">
-                  <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                    Lương cứng / Ca dạy {teachers.find(t => t.id === teacherId)?.role === "SUPER_ADMIN" ? "(Admin miễn lương)" : ""}
-                  </label>
-                  <div className="relative">
-                    <DollarSign size={16} className="absolute left-3 top-3 text-slate-400" />
-                    <CurrencyInput
-                      required={teachers.find(t => t.id === teacherId)?.role === "TEACHER"}
-                      disabled={teachers.find(t => t.id === teacherId)?.role === "SUPER_ADMIN"}
-                      min={0}
-                      value={salaryPerSession}
-                      onChange={(val) => setSalaryPerSession(val)}
-                      className="w-full h-10 pl-9 pr-3 border border-slate-200 rounded-xl bg-slate-50 text-sm font-semibold focus:ring-2 focus:ring-blue-100 outline-none transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                    />
+                    {t.teacherId && (
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
+                          Lương cứng / Ca dạy {teachers.find(x => x.id === t.teacherId)?.role === "SUPER_ADMIN" ? "(Admin miễn lương)" : ""}
+                        </label>
+                        <div className="relative">
+                          <DollarSign size={14} className="absolute left-3 top-3 text-slate-400" />
+                          <CurrencyInput
+                            required={teachers.find(x => x.id === t.teacherId)?.role === "TEACHER"}
+                            disabled={teachers.find(x => x.id === t.teacherId)?.role === "SUPER_ADMIN"}
+                            min={0}
+                            value={t.salaryPerSession}
+                            onChange={(val) => {
+                              const newTeachers = [...classTeachers];
+                              newTeachers[idx].salaryPerSession = val;
+                              setClassTeachers(newTeachers);
+                            }}
+                            className="w-full h-10 pl-9 pr-3 border border-slate-200 rounded-xl bg-white text-sm font-semibold focus:ring-2 focus:ring-blue-100 outline-none transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                          />
+                        </div>
+                      </div>
+                    )}
                   </div>
-                </div>
-              )}
+                ))}
+                
+                <button
+                  type="button"
+                  onClick={() => setClassTeachers([...classTeachers, { teacherId: "", salaryPerSession: 0 }])}
+                  className="w-full py-2.5 border-2 border-dashed border-blue-200 text-blue-600 hover:bg-blue-50 hover:border-blue-300 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-colors"
+                >
+                  <Plus size={16} strokeWidth={3} /> Thêm Giáo Viên
+                </button>
+              </div>
 
               <div className="mt-6 pt-4 border-t border-slate-100 flex justify-end gap-3">
                 <button

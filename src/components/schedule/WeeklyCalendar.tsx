@@ -625,8 +625,8 @@ export default function WeeklyCalendar({ userRole, sessions }: WeeklyCalendarPro
 
       {/* Approve/Reject Modal */}
       {selectedPendingSession && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm px-4">
-          <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-2xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm px-4" onClick={() => setSelectedPendingSession(null)}>
+          <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-2xl" onClick={(e) => e.stopPropagation()}>
             <h3 className="text-xl font-bold text-slate-900 mb-2">Duyệt Ca Học</h3>
             <p className="text-sm text-slate-500 mb-6">Xác nhận duyệt hoặc từ chối đăng ký này.</p>
             

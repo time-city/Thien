@@ -5,13 +5,13 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { signOut } from "next-auth/react";
 import { toast } from "sonner";
-import { 
-  Shield, 
-  Users, 
-  Calendar, 
-  DollarSign, 
-  LogOut, 
-  BookOpen, 
+import {
+  Shield,
+  Users,
+  Calendar,
+  DollarSign,
+  LogOut,
+  BookOpen,
   GraduationCap,
   Layers,
   Building2,
@@ -76,7 +76,7 @@ const menuItems: MenuItem[] = [
     roles: ["TEACHER", "SUPER_ADMIN"],
     section: "Cá nhân",
   },
-  
+
   // --- MENU DÀNH RIÊNG CHO ADMIN ---
   {
     title: "Quản Lý Học Sinh",
@@ -208,7 +208,7 @@ export default function Sidebar({ userRole, userName, isOpen, onClose }: Sidebar
     <>
       {/* Mobile backdrop */}
       {isOpen && (
-        <div 
+        <div
           className="fixed inset-0 bg-slate-900/50 z-40 lg:hidden transition-opacity"
           onClick={onClose}
         />
@@ -226,7 +226,7 @@ export default function Sidebar({ userRole, userName, isOpen, onClose }: Sidebar
             <div className="bg-blue-600 p-1.5 rounded-lg">
               <BookOpen size={20} className="text-white" />
             </div>
-            <h2 className="text-sm font-bold text-slate-900 tracking-tight">Trung Tâm Giáo Dục</h2>
+            <h2 className="text-sm font-bold text-slate-900 tracking-tight">Farm Edu</h2>
           </div>
         </div>
 
@@ -246,13 +246,13 @@ export default function Sidebar({ userRole, userName, isOpen, onClose }: Sidebar
                     {item.section}
                   </div>
                 )}
-                <Link 
+                <Link
                   href={item.href}
                   onClick={onClose}
                   className={`
                     flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200
-                    ${isActive 
-                      ? "bg-blue-50 text-blue-700" 
+                    ${isActive
+                      ? "bg-blue-50 text-blue-700"
                       : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
                     }
                   `}
@@ -285,7 +285,7 @@ export default function Sidebar({ userRole, userName, isOpen, onClose }: Sidebar
               <p className="text-xs text-slate-500 truncate">{userRole === "SUPER_ADMIN" ? "Quản trị viên" : "Giáo viên"}</p>
             </div>
           </div>
-          
+
           <button
             onClick={async () => {
               // Dùng callbackUrl là chuẩn bài của NextAuth, tự động làm sạch cache và chuyển hướng

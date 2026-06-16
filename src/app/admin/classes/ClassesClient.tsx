@@ -324,8 +324,8 @@ export default function ClassesClient({
 
       {/* ================= MODAL VIEW LỚP HỌC ================= */}
       {isViewModalOpen && viewingClassData && (
-        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-white w-[95%] max-w-5xl max-h-[90vh] rounded-2xl shadow-xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-200 border border-slate-200">
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-sm animate-in fade-in duration-200" onClick={closeViewModal}>
+          <div className="bg-white w-[95%] max-w-5xl max-h-[90vh] rounded-2xl shadow-xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-200 border border-slate-200" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-start justify-between gap-4 p-5 border-b border-slate-100 bg-slate-50">
               <div className="min-w-0">
                 <h2 className="text-lg md:text-xl font-extrabold text-slate-800 truncate">
@@ -537,9 +537,9 @@ export default function ClassesClient({
 
       {/* ================= MODAL LỚP HỌC ================= */}
       {isClassModalOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-white w-full max-w-md rounded-2xl shadow-xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
-            <div className="flex justify-between items-center p-5 border-b border-slate-100 bg-slate-50">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => setIsClassModalOpen(false)}>
+          <div className="bg-white w-full max-w-md rounded-2xl shadow-xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-200 max-h-[90vh]" onClick={(e) => e.stopPropagation()}>
+            <div className="flex justify-between items-center p-5 border-b border-slate-100 bg-slate-50 shrink-0">
               <h2 className="text-lg font-extrabold text-slate-800">{editingClass ? "Sửa Lớp Học" : "Thêm Lớp Học Mới"}</h2>
               <button
                 onClick={() => setIsClassModalOpen(false)}
@@ -549,7 +549,7 @@ export default function ClassesClient({
               </button>
             </div>
 
-            <form onSubmit={handleClassSubmit} className="p-6 space-y-4">
+            <form onSubmit={handleClassSubmit} className="p-6 space-y-4 overflow-y-auto">
               <div className="space-y-1.5">
                 <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Tên lớp</label>
                 <input

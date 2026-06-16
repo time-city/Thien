@@ -2,16 +2,13 @@ const crypto = require('crypto');
 
 // --- CẤU HÌNH ---
 // URL của webhook (thay bằng URL vercel nếu muốn test trên mạng)
-const WEBHOOK_URL = 'http://192.168.110.88:3000/api/sepay/webhook';
+const WEBHOOK_URL = 'https://thien-three.vercel.app/api/sepay/webhook';
 // Secret key của bạn (COPY TỪ FILE .env VÀO ĐÂY)
 const SECRET_KEY = 'whsec_isxY69ps1U0M7m0mlMWDR7srSLZsg1kk';
 
 // Danh sách mã thanh toán (cú pháp HT + SĐT) của 4 học sinh test
 const IDENTIFIERS = [
-  'HT0398240051', // test
-  'HT0905420058', // test2
-  'HT0348002795', // test3
-  'HT0788621767'  // test4
+  'HT0905420058'
 ];
 
 async function sendWebhook(identifier) {
@@ -25,7 +22,7 @@ async function sendWebhook(identifier) {
     content: `${identifier}`, // Cú pháp mà Server đang quét
     transferType: "in",
     description: `BankAPINotify ${identifier}`,
-    transferAmount: 10000,
+    transferAmount: 20000,
     referenceCode: `FT${Date.now()}${Math.floor(Math.random() * 1000)}`, // Tạo mã ngẫu nhiên để không bị báo trùng
     accumulated: 0,
     id: Math.floor(Math.random() * 10000000)

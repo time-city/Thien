@@ -1692,7 +1692,10 @@ export async function markReportAsSent(attendanceLogId: string) {
   try {
     await prisma.attendanceLog.update({
       where: { id: attendanceLogId },
-      data: { isReportSent: true }
+      data: { 
+        isReportSent: true,
+        reportedAt: new Date()
+      }
     });
     return { success: true };
   } catch (error) {
@@ -1705,7 +1708,10 @@ export async function markMultipleReportsAsSent(attendanceLogIds: string[]) {
   try {
     await prisma.attendanceLog.updateMany({
       where: { id: { in: attendanceLogIds } },
-      data: { isReportSent: true }
+      data: { 
+        isReportSent: true,
+        reportedAt: new Date()
+      }
     });
     return { success: true };
   } catch (error) {

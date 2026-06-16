@@ -45,8 +45,8 @@ async function autoCreateInvoices(studentId: string) {
           transactionCode: `AUTO-${Date.now()}`
         }
       });
-    } else if (existingInv.status === "PENDING" && existingInv.expectedAmount !== correctAmount) {
-      // Fix already auto-generated invoices that had wrong amount
+    } else if (existingInv.status === "PENDING" && existingInv.expectedAmount !== correctAmount && !existingInv.details) {
+      // Chỉ tự động fix amount nếu hóa đơn chưa từng bị sửa tay (chưa có details)
       await prisma.invoice.update({
         where: { id: existingInv.id },
         data: { expectedAmount: correctAmount }
@@ -173,20 +173,38 @@ export async function processStudentPayment(
 
     // Gửi thông báo Zalo sau khi thanh toán hoàn tất
     try {
-      const student = await prisma.student.findUnique({ where: { id: studentId } });
+      const student = await prisma.student.findUnique({ 
+        where: { id: studentId },
+        include: {
+          enrollments: {
+            where: { status: { not: "DROPPED" } },
+            include: { class: true }
+          }
+        }
+      });
+
       if (student && student.phoneParent) {
         // Tính lại tổng nợ sau khi đã thanh toán
         const debt = await getTotalDebt(studentId);
         
         const formatMoney = (m: number) => new Intl.NumberFormat('vi-VN').format(m) + 'đ';
-        const methodVi = paymentMethod === "CASH" ? "Tiền mặt" : "Chuyển khoản (Mã QR/SePay)";
+        const methodVi = paymentMethod === "CASH" ? "Tiền mặt" : "Chuyển khoản";
         
-        let msg = `Trung tâm đã nhận được số tiền ${formatMoney(amountPaid)} thông qua ${methodVi} cho học sinh ${student.fullName}. Cảm ơn Quý phụ huynh!`;
+        const classNames = student.enrollments.map(e => e.class.name).join(" và ") || "Tổng hợp";
+        const today = new Date();
+        const monthYear = `${today.getDate().toString().padStart(2, '0')}/${(today.getMonth() + 1).toString().padStart(2, '0')}/${today.getFullYear()}`;
+
+        let msg = `XÁC NHẬN THANH TOÁN HỌC PHÍ\n`;
+        msg += `Nông trại Khoa học tự nhiên ${debt <= 0 ? 'ĐÃ NHẬN ĐỦ' : 'ĐÃ NHẬN MỘT PHẦN'} học phí học sinh: ${student.fullName}\n`;
+        msg += `Phiếu thu (${monthYear})\n`;
+        msg += `Lớp: ${classNames}\n`;
+        msg += `Phương thức: ${methodVi}\n`;
+        
         if (debt > 0) {
-          msg += `\nLưu ý: Học phí của bé vẫn còn nợ ${formatMoney(debt)}. Quý phụ huynh vui lòng thanh toán nốt nhé!`;
-        } else {
-          msg += `\nHọc phí của bé hiện tại đã được thanh toán đầy đủ.`;
+          msg += `\n* Lưu ý: Học phí của bé vẫn còn nợ ${formatMoney(debt)}.\n`;
         }
+        
+        msg += `Kính báo./.`;
 
         await fetch(`${process.env.NEXT_PUBLIC_ZALO_BOT_URL || 'http://116.118.9.61:8080'}/send`, {
           method: "POST",
@@ -209,8 +227,56 @@ export async function processStudentPayment(
 }
 
 export async function checkInvoiceStatus(studentId: string) {
-  // Thay đổi logic kiểm tra status: nếu tổng nợ = 0 thì là PAID
   const debt = await getTotalDebt(studentId);
   if (debt <= 0) return { status: "PAID", amountPaid: 0 };
   return { status: "UNDERPAID", amountPaid: 0 }; // Simplified
+}
+
+export async function applyDiscount(studentId: string, discount: number): Promise<{ success: boolean; message?: string }> {
+  try {
+    if (discount <= 0) return { success: false, message: "Khấu hao phải lớn hơn 0" };
+
+    const pendingInvoices = await prisma.invoice.findMany({
+      where: {
+        studentId,
+        status: { in: ["PENDING", "UNDERPAID"] }
+      },
+      orderBy: { createdAt: "asc" }
+    });
+
+    let remainingDiscount = discount;
+
+    for (const inv of pendingInvoices) {
+      if (remainingDiscount <= 0) break;
+
+      const debtOfThisInvoice = inv.expectedAmount - inv.amountPaid;
+      if (debtOfThisInvoice > 0) {
+        const discountToApply = Math.min(remainingDiscount, debtOfThisInvoice);
+        
+        // Retrieve existing details if any
+        let newDetails: any = { discount: discountToApply, originalExpected: inv.expectedAmount };
+        if (inv.details && typeof inv.details === "object") {
+          newDetails = { ...(inv.details as any), ...newDetails, accumulatedDiscount: ((inv.details as any).accumulatedDiscount || 0) + discountToApply };
+        } else {
+          newDetails.accumulatedDiscount = discountToApply;
+        }
+
+        await prisma.invoice.update({
+          where: { id: inv.id },
+          data: {
+            expectedAmount: inv.expectedAmount - discountToApply,
+            details: newDetails
+          }
+        });
+
+        remainingDiscount -= discountToApply;
+      }
+    }
+
+    revalidatePath("/admin/tuition");
+    return { success: true };
+  } catch (error) {
+    console.error("Lỗi áp dụng khấu hao:", error);
+    return { success: false, message: "Lỗi hệ thống khi áp dụng khấu hao" };
+  }
 }

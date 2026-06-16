@@ -614,8 +614,8 @@ export default function StudentsClient({
 
       {/* Modal Thêm/Sửa Học Sinh */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-white w-full max-w-lg rounded-2xl shadow-xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-200 max-h-[95vh]">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => setIsModalOpen(false)}>
+          <div className="bg-white w-full max-w-lg rounded-2xl shadow-xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-200 max-h-[95vh]" onClick={(e) => e.stopPropagation()}>
             <div className="flex justify-between items-center p-5 border-b border-slate-100 bg-slate-50">
               <h2 className="text-lg font-extrabold text-slate-800">
                 {editingStudent ? "Sửa Học Sinh" : "Thêm Học Sinh Mới"}
@@ -726,8 +726,8 @@ export default function StudentsClient({
 
       {/* Modal View Detail */}
       {viewStudent && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-white w-full max-w-2xl rounded-2xl shadow-xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-200 max-h-[90vh]">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => setViewStudent(null)}>
+          <div className="bg-white w-full max-w-2xl rounded-2xl shadow-xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-200 max-h-[90vh]" onClick={(e) => e.stopPropagation()}>
             <div className="flex justify-between items-center p-5 border-b border-slate-100 bg-slate-50">
               <h2 className="text-lg font-extrabold text-slate-800 flex items-center gap-2">
                 <UserIcon size={20} className="text-blue-600" /> Hồ Sơ Học Sinh

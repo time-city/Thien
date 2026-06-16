@@ -105,6 +105,7 @@ export type TuitionStudentData = {
   allPendingInvoices?: { id: string; status: string; expectedAmount: number; amountPaid: number; isDebt: boolean }[];
   hasUnsentReports?: boolean;
   hasLogs?: boolean;
+  lastReportedAt?: Date | null;
 };
 
 export async function getTuitionData(): Promise<TuitionStudentData[]> {
@@ -131,7 +132,7 @@ export async function getTuitionData(): Promise<TuitionStudentData[]> {
         }
       },
       attendanceLogs: {
-        select: { id: true, isReportSent: true }
+        select: { id: true, isReportSent: true, reportedAt: true }
       }
     }
   });
@@ -150,6 +151,9 @@ export async function getTuitionData(): Promise<TuitionStudentData[]> {
     })),
     hasLogs: s.attendanceLogs && s.attendanceLogs.length > 0,
     hasUnsentReports: s.attendanceLogs && s.attendanceLogs.some(log => !log.isReportSent),
+    lastReportedAt: (s.attendanceLogs && s.attendanceLogs.filter(l => l.isReportSent && l.reportedAt).length > 0) 
+      ? s.attendanceLogs.filter(l => l.isReportSent && l.reportedAt).sort((a, b) => b.reportedAt!.getTime() - a.reportedAt!.getTime())[0].reportedAt 
+      : null,
     enrolledCourses: s.enrollments.map(e => ({
       enrollmentId: e.id,
       classId: e.classId,

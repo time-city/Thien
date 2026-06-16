@@ -372,8 +372,8 @@ export default function AdminScheduleClient({
 
       {/* Approve/Reject Modal */}
       {selectedSession && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm px-4">
-          <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-2xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm px-4" onClick={() => setSelectedSession(null)}>
+          <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-2xl" onClick={(e) => e.stopPropagation()}>
             <h3 className="text-xl font-bold text-slate-900 mb-2">
               {selectedSession.isCancelRequested ? "Duyệt Huỷ Ca" : "Duyệt Ca Học"}
             </h3>

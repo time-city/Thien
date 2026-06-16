@@ -311,6 +311,7 @@ model AttendanceLog {
   homeworkStatus   HomeworkStatus?
   note             String?
   isReportSent     Boolean          @default(false)
+  reportedAt       DateTime?
   createdAt        DateTime         @default(now())
 
   classSession     ClassSession     @relation(fields: [classSessionId], references: [id], onDelete: Cascade)

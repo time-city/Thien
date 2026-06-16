@@ -246,8 +246,8 @@ export default function RoomsClient({ initialRooms }: { initialRooms: RoomItem[]
       </div>
 
       {isModalOpen && (
-        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-sm">
-          <div className="bg-white w-[95%] max-w-lg rounded-2xl shadow-xl border border-slate-200 overflow-hidden">
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-sm" onClick={closeModal}>
+          <div className="bg-white w-[95%] max-w-lg rounded-2xl shadow-xl border border-slate-200 overflow-hidden" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-start justify-between gap-4 p-5 border-b border-slate-100 bg-slate-50">
               <div>
                 <h2 className="text-lg font-extrabold text-slate-800">

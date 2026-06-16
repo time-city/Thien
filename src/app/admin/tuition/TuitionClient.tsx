@@ -63,11 +63,14 @@ export default function TuitionClient({
   const [selectedTeacher, setSelectedTeacher] = useState<TeacherFinanceViewData | null>(null);
   const [isPayingSalary, setIsPayingSalary] = useState(false);
   const studentsWithLowSessions = useMemo(() => {
-    return students.filter((s) => 
+    return students.filter((s) =>
       s.enrolledCourses.some((c) => c.remainingSessions <= 2 || c.pendingInvoices.length > 0) ||
       (s.allPendingInvoices && s.allPendingInvoices.length > 0)
     );
   }, [students]);
+
+  const studentsNotSent = useMemo(() => studentsWithLowSessions.filter(s => !(s.hasLogs && s.hasUnsentReports === false)), [studentsWithLowSessions]);
+  const studentsSent = useMemo(() => studentsWithLowSessions.filter(s => s.hasLogs && s.hasUnsentReports === false), [studentsWithLowSessions]);
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND" }).format(amount);
@@ -105,82 +108,158 @@ export default function TuitionClient({
   const startBulkSend = async () => {
     setIsBulkSending(true);
     let count = 0;
-    
+
     for (const studentId of selectedStudentIds) {
       setBulkSendProgress({ current: count, total: selectedStudentIds.length, currentName: "Đang tải dữ liệu..." });
-      
+
       try {
         const data = await getStudentCombinedReport(studentId);
         if (!data || !data.phoneParent) {
           console.warn("Bỏ qua học sinh vì không có dữ liệu hoặc số điện thoại:", studentId);
           count++;
-          continue; 
+          continue;
         }
-        
+
         setBulkSendProgress({ current: count, total: selectedStudentIds.length, currentName: data.studentName });
-        
+
         // Set data and wait for DOM to render it
         setHiddenReportData(data);
         await new Promise(r => setTimeout(r, 3000)); // Cần 3 giây để load QR Code VietQR và render Font chữ
-        
-        const element = document.getElementById("hidden-report-export-area");
-        if (element) {
-          const dataUrl = await toPng(element, { 
-            cacheBust: true, 
-            pixelRatio: 2, 
+
+        const element1 = document.getElementById("hidden-report-export-area-1");
+        const element2 = document.getElementById("hidden-report-export-area-2");
+        if (element1 && element2) {
+          // ẢNH 1
+          const dataUrl1 = await toPng(element1, {
+            cacheBust: true,
+            pixelRatio: 2,
             backgroundColor: "#ffffff",
             style: { transform: "scale(1)", transformOrigin: "top left" }
           });
-          
-          const res = await fetch(dataUrl);
-          const blob = await res.blob();
-          const file = new File([blob], `BaoCao_${data.studentName.replace(/\s+/g, "_")}.png`, { type: "image/png" });
-          
-          const formData = new FormData();
-          formData.append("target", data.phoneParent);
-          formData.append("image", file);
-          formData.append("message", `Trung tâm gửi phụ huynh báo cáo học tập và thanh toán tổng hợp của bé ${data.studentName}`);
+          const res1 = await fetch(dataUrl1);
+          const blob1 = await res1.blob();
+          const file1 = new File([blob1], `BaoCao_HocTap_${data.studentName.replace(/\s+/g, "_")}.png`, { type: "image/png" });
 
-          const response = await fetch("/api/zalobot/send-image", { 
-            method: "POST", 
+          const formData1 = new FormData();
+          formData1.append("target", data.phoneParent);
+          formData1.append("image", file1);
+
+          const imageRes1 = await fetch("/api/zalobot/send-image", {
+            method: "POST",
             headers: {
               "x-api-key": process.env.NEXT_PUBLIC_ZALO_BOT_API_KEY || ""
             },
-            body: formData 
+            body: formData1
           });
-          if (!response.ok) {
-             toast.error(`Lỗi gửi báo cáo cho ${data.studentName}`);
+
+          if (!imageRes1.ok) {
+            toast.error(`Lỗi gửi ảnh học tập cho ${data.studentName}`);
+            count++;
+            continue;
+          }
+
+          // ẢNH 2
+          await new Promise(r => setTimeout(r, 1000));
+          const dataUrl2 = await toPng(element2, {
+            cacheBust: true,
+            pixelRatio: 2,
+            backgroundColor: "#ffffff",
+            style: { transform: "scale(1)", transformOrigin: "top left" }
+          });
+          const res2 = await fetch(dataUrl2);
+          const blob2 = await res2.blob();
+          const file2 = new File([blob2], `BaoCao_HocPhi_${data.studentName.replace(/\s+/g, "_")}.png`, { type: "image/png" });
+
+          const formData2 = new FormData();
+          formData2.append("target", data.phoneParent);
+          formData2.append("image", file2);
+
+          const imageRes2 = await fetch("/api/zalobot/send-image", {
+            method: "POST",
+            headers: {
+              "x-api-key": process.env.NEXT_PUBLIC_ZALO_BOT_API_KEY || ""
+            },
+            body: formData2
+          });
+
+          if (!imageRes2.ok) {
+            toast.error(`Lỗi gửi ảnh học phí cho ${data.studentName}`);
+            count++;
+            continue;
+          }
+
+          // Generate message format
+          let dateStr = "";
+          if (data.logs && data.logs.length > 0) {
+            const dates = data.logs.map((l: any) => new Date(l.date));
+            const minDate = new Date(Math.min(...dates.map(d => d.getTime())));
+            const maxDate = new Date(Math.max(...dates.map(d => d.getTime())));
+            dateStr = ` (từ ${minDate.getDate()}/${minDate.getMonth() + 1} - ${maxDate.getDate()}/${maxDate.getMonth() + 1})`;
+          }
+          const classNamesArray = data.items.filter((i: any) => i.type === "TUITION").map((i: any) => i.className);
+          const classNames = classNamesArray.length > 0 ? classNamesArray.join("; ") : "Các lớp";
+          const formattedPrice = data.totalExpectedAmount.toLocaleString('vi-VN');
+          const descStr = data.phoneParent ? `HT${data.phoneParent}` : `HT${studentId}`;
+
+          const message = `
+Nông trại Khoa học tự nhiên kính gửi quý phụ huynh Báo cáo học tập${dateStr}.
+• Học sinh: ${data.studentName}
+• Lớp đang học: ${classNames}
+
+Phụ huynh thanh toán học phí (mã QR hoặc tiền mặt):
+• Số tiền: ${formattedPrice} vnđ
+• Nội dung chuyển khoản: ${descStr}
+
+Tin nhắn được thông báo tự động, phụ huynh có thể trao đổi thêm qua Zalo.`.trim();
+
+          await new Promise(r => setTimeout(r, 1000));
+
+          const textRes = await fetch("/api/zalobot/send", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "x-api-key": process.env.NEXT_PUBLIC_ZALO_BOT_API_KEY || ""
+            },
+            body: JSON.stringify({
+              target: data.phoneParent,
+              message: message
+            }),
+          });
+
+          if (!textRes.ok) {
+            toast.error(`Lỗi gửi tin nhắn văn bản cho ${data.studentName}`);
           } else {
-             const logIds = data.logs.map((l: any) => l.id).filter(Boolean);
-             if (logIds.length > 0) {
-               await markMultipleReportsAsSent(logIds);
-             }
+            const logIds = data.logs.map((l: any) => l.id).filter(Boolean);
+            if (logIds.length > 0) {
+              await markMultipleReportsAsSent(logIds);
+            }
           }
         }
       } catch (err) {
         toast.error(`Lỗi khi tạo ảnh hoặc gửi cho học sinh (ID: ${studentId})`);
       }
-      
+
       count++;
       setBulkSendProgress({ current: count, total: selectedStudentIds.length, currentName: "Chờ..." });
       // Nghỉ 3 giây để tránh bị spam / rate limit của Zalo API
       await new Promise(r => setTimeout(r, 3000));
     }
-    
+
     setIsBulkSending(false);
     setHiddenReportData(null);
     setSelectedStudentIds([]);
     toast.success("Đã hoàn tất quá trình gửi báo cáo Zalo hàng loạt!");
+    router.refresh();
   };
 
   // --- LOGIC THANH TOÁN LƯƠNG ---
   const handlePaySalary = () => {
     if (!selectedTeacher || selectedTeacher.salaryBalance <= 0) return;
-    
+
     const teacherId = selectedTeacher.id;
     const amount = selectedTeacher.salaryBalance;
     const currentName = selectedTeacher.fullName;
-    
+
     setSelectedTeacher(null);
 
     startTransition(async () => {
@@ -189,7 +268,7 @@ export default function TuitionClient({
         const res = await payTeacherSalary(teacherId, amount);
         if (res.success) {
           toast.success(`Đã thanh toán ${formatCurrency(amount)} cho ${currentName}`);
-          router.refresh(); 
+          router.refresh();
         } else {
           toast.error(res.error || "Lỗi thanh toán lương");
         }
@@ -204,11 +283,11 @@ export default function TuitionClient({
 
   const handleCollectDebtManual = () => {
     if (!selectedTeacher || selectedTeacher.salaryBalance >= 0) return;
-    
+
     const teacherId = selectedTeacher.id;
     const amount = Math.abs(selectedTeacher.salaryBalance);
     const currentName = selectedTeacher.fullName;
-    
+
     setSelectedTeacher(null);
 
     startTransition(async () => {
@@ -234,33 +313,33 @@ export default function TuitionClient({
       await new Promise(r => setTimeout(r, 1000)); // Cần 1 giây để load QR Code VietQR
       const element = document.getElementById("hidden-teacher-qr");
       if (element) {
-        const dataUrl = await toPng(element, { 
-          cacheBust: true, 
-          pixelRatio: 2, 
+        const dataUrl = await toPng(element, {
+          cacheBust: true,
+          pixelRatio: 2,
           backgroundColor: "#ffffff",
           style: { transform: "scale(1)", transformOrigin: "top left" }
         });
-        
+
         const res = await fetch(dataUrl);
         const blob = await res.blob();
         const file = new File([blob], `ThuTien_${selectedTeacher.username}.png`, { type: "image/png" });
-        
+
         const formData = new FormData();
         formData.append("target", teacherZaloPhone);
         formData.append("image", file);
         formData.append("message", `Trung tâm gửi mã thanh toán cấn trừ tiền phòng / lương bị âm. Bạn vui lòng quét mã này để thanh toán.\nSố tiền: ${new Intl.NumberFormat("vi-VN").format(Math.abs(selectedTeacher.salaryBalance))}đ\nNội dung CK: HT ${selectedTeacher.phone || teacherZaloPhone || selectedTeacher.username}`);
 
-        const response = await fetch("/api/zalobot/send-image", { 
-          method: "POST", 
+        const response = await fetch("/api/zalobot/send-image", {
+          method: "POST",
           headers: {
             "x-api-key": process.env.NEXT_PUBLIC_ZALO_BOT_API_KEY || ""
           },
-          body: formData 
+          body: formData
         });
         if (!response.ok) {
-           toast.error(`Lỗi gửi Zalo cho ${selectedTeacher.fullName}`);
+          toast.error(`Lỗi gửi Zalo cho ${selectedTeacher.fullName}`);
         } else {
-           toast.success(`Đã gửi Zalo mã thu tiền cho: ${teacherZaloPhone}`);
+          toast.success(`Đã gửi Zalo mã thu tiền cho: ${teacherZaloPhone}`);
         }
       }
     } catch (err) {
@@ -269,6 +348,119 @@ export default function TuitionClient({
       setIsSendingZaloDebt(false);
     }
   };
+
+  const renderStudentTable = (list: TuitionStudentData[]) => (
+    <table className="w-full text-left text-sm text-slate-700">
+      <thead className="bg-slate-50 border-b border-slate-200 text-slate-900">
+        <tr>
+          <th className="py-2 px-2 md:py-3 md:px-4 w-8 md:w-10 text-center">
+            <input
+              type="checkbox"
+              className="w-3.5 h-3.5 md:w-4 md:h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+              checked={list.length > 0 && list.every(s => selectedStudentIds.includes(s.id))}
+              disabled={isBulkSending}
+              onChange={(e) => {
+                if (e.target.checked) {
+                  const newIds = list.map(s => s.id);
+                  setSelectedStudentIds(Array.from(new Set([...selectedStudentIds, ...newIds])));
+                } else {
+                  setSelectedStudentIds(selectedStudentIds.filter(id => !list.find(s => s.id === id)));
+                }
+              }}
+            />
+          </th>
+          <th className="py-2 px-2 md:py-3 md:px-4 font-bold text-xs md:text-sm">Học sinh</th>
+          <th className="py-2 px-2 md:py-3 md:px-4 font-bold hidden sm:table-cell text-xs md:text-sm">Lớp</th>
+          <th className="py-2 px-2 md:py-3 md:px-4 font-bold text-xs md:text-sm">Môn cảnh báo</th>
+          <th className="py-2 px-2 md:py-3 md:px-4 font-bold text-right text-xs md:text-sm">Hành động</th>
+        </tr>
+      </thead>
+      <tbody className="divide-y divide-slate-100">
+        {list.map((student) => (
+          <tr key={student.id} className={`hover:bg-slate-50/50 transition-colors ${selectedStudentIds.includes(student.id) ? "bg-blue-50/30" : ""}`}>
+            <td className="py-2 px-2 md:py-3 md:px-4 text-center">
+              <input
+                type="checkbox"
+                className="w-3.5 h-3.5 md:w-4 md:h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                checked={selectedStudentIds.includes(student.id)}
+                disabled={isBulkSending}
+                onChange={() => handleSelectStudent(student.id)}
+              />
+            </td>
+            <td className="py-2 px-2 md:py-3 md:px-4">
+              <div className="font-semibold text-slate-900 flex flex-wrap items-center gap-1.5 md:gap-2 text-[13px] md:text-sm">
+                {student.fullName}
+                {student.hasLogs && student.hasUnsentReports === false && (
+                  <span className="bg-emerald-100 text-emerald-700 text-[9px] md:text-[10px] px-1.5 py-0.5 rounded-full font-bold flex items-center gap-1">
+                    <CheckCircle2 size={10} /> Đã gửi {student.lastReportedAt ? `(${new Date(student.lastReportedAt).toLocaleString("vi-VN", { hour: "2-digit", minute: "2-digit", day: "2-digit", month: "2-digit", year: "numeric" })})` : ''}
+                  </span>
+                )}
+                {!student.hasLogs && (
+                  <span className="bg-blue-100 text-blue-700 text-[9px] md:text-[10px] px-1.5 py-0.5 rounded-full font-bold">
+                    Chỉ nhắc nợ
+                  </span>
+                )}
+              </div>
+              <div className="text-[10px] md:text-xs text-slate-500 mt-0.5">SĐT: {student.phoneParent || <span className="italic text-rose-400">Trống</span>}</div>
+            </td>
+            <td className="py-2 px-2 md:py-3 md:px-4 hidden sm:table-cell text-[13px] md:text-sm">
+              {student.enrolledCourses[0]?.className ?? (student.allPendingInvoices?.length ? (student.allPendingInvoices[0].isDebt ? "Nợ Cũ" : "Hóa đơn") : "-")}
+            </td>
+            <td className="py-2 px-2 md:py-3 md:px-4">
+              <div className="flex flex-wrap gap-1 md:gap-1.5 flex-col">
+                {student.enrolledCourses
+                  .filter((c) => c.remainingSessions <= 2 || c.pendingInvoices.length > 0)
+                  .map((c) => (
+                    <div key={c.enrollmentId} className="flex gap-1 flex-wrap">
+                      {c.remainingSessions <= 2 && (
+                        <span
+                          className="bg-rose-50 text-rose-700 font-bold px-1.5 md:px-2 py-0.5 rounded text-[10px] md:text-[11px] border border-rose-100 whitespace-nowrap"
+                        >
+                          {c.className} ({c.remainingSessions} buổi)
+                        </span>
+                      )}
+                      {c.pendingInvoices.length > 0 && c.pendingInvoices.map(inv => (
+                        <span key={inv.id} className={`${inv.status === "UNDERPAID" ? "bg-rose-100 text-rose-700 border-rose-200" : "bg-amber-100 text-amber-700 border-amber-200"} font-bold px-1.5 md:px-2 py-0.5 rounded text-[10px] md:text-[11px] border whitespace-nowrap`}>
+                          {inv.status === "UNDERPAID" ? "THIẾU TIỀN" : "CHỜ T.TOÁN"}
+                        </span>
+                      ))}
+                    </div>
+                  ))}
+
+                {/* Hiển thị các hóa đơn nợ/tổng hợp (không dính trực tiếp với 1 enrollment) */}
+                {student.allPendingInvoices?.map(inv => (
+                  <div key={inv.id} className="flex gap-1 flex-wrap">
+                    <span className="bg-orange-100 text-orange-700 border-orange-200 font-bold px-1.5 md:px-2 py-0.5 rounded text-[10px] md:text-[11px] border whitespace-nowrap">
+                      {inv.isDebt ? "Nợ cũ" : "Hóa đơn"}: {new Intl.NumberFormat("vi-VN").format(inv.expectedAmount - inv.amountPaid)}đ
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </td>
+            <td className="py-2 px-2 md:py-3 md:px-4 text-right">
+              <button
+                onClick={() => {
+                  setReportData({ studentId: student.id, studentName: student.fullName, classId: "", className: "" });
+                  setReportModalOpen(true);
+                }}
+                disabled={isBulkSending}
+                className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold py-1.5 px-2.5 md:px-4 rounded shadow-sm transition-colors text-[11px] md:text-xs whitespace-nowrap"
+              >
+                Xử lý
+              </button>
+            </td>
+          </tr>
+        ))}
+        {list.length === 0 && (
+          <tr>
+            <td colSpan={5} className="py-10 text-center text-slate-500 font-medium">
+              Không có học sinh nào trong danh sách này.
+            </td>
+          </tr>
+        )}
+      </tbody>
+    </table>
+  );
 
   if (role !== "SUPER_ADMIN") {
     return <div className="p-8 text-center text-slate-500">Bạn không có quyền truy cập trang này.</div>;
@@ -315,117 +507,23 @@ export default function TuitionClient({
             </button>
           </div>
 
-        <div className="bg-white border text-center border-slate-200 rounded-xl overflow-hidden shadow-sm">
-          <table className="w-full text-left text-sm text-slate-700">
-            <thead className="bg-slate-50 border-b border-slate-200 text-slate-900">
-              <tr>
-                <th className="py-2 px-2 md:py-3 md:px-4 w-8 md:w-10 text-center">
-                  <input
-                    type="checkbox"
-                    className="w-3.5 h-3.5 md:w-4 md:h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
-                    checked={selectedStudentIds.length === studentsWithLowSessions.length && studentsWithLowSessions.length > 0}
-                    disabled={isBulkSending}
-                    onChange={(e) => {
-                      if (e.target.checked) {
-                        setSelectedStudentIds(studentsWithLowSessions.map(s => s.id));
-                      } else {
-                        setSelectedStudentIds([]);
-                      }
-                    }}
-                  />
-                </th>
-                <th className="py-2 px-2 md:py-3 md:px-4 font-bold text-xs md:text-sm">Học sinh</th>
-                <th className="py-2 px-2 md:py-3 md:px-4 font-bold hidden sm:table-cell text-xs md:text-sm">Lớp</th>
-                <th className="py-2 px-2 md:py-3 md:px-4 font-bold text-xs md:text-sm">Môn cảnh báo</th>
-                <th className="py-2 px-2 md:py-3 md:px-4 font-bold text-right text-xs md:text-sm">Hành động</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {studentsWithLowSessions.map((student) => (
-                <tr key={student.id} className={`hover:bg-slate-50/50 transition-colors ${selectedStudentIds.includes(student.id) ? "bg-blue-50/30" : ""}`}>
-                  <td className="py-2 px-2 md:py-3 md:px-4 text-center">
-                    <input
-                      type="checkbox"
-                      className="w-3.5 h-3.5 md:w-4 md:h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
-                      checked={selectedStudentIds.includes(student.id)}
-                      disabled={isBulkSending}
-                      onChange={() => handleSelectStudent(student.id)}
-                    />
-                  </td>
-                  <td className="py-2 px-2 md:py-3 md:px-4">
-                    <div className="font-semibold text-slate-900 flex flex-wrap items-center gap-1.5 md:gap-2 text-[13px] md:text-sm">
-                      {student.fullName}
-                      {student.hasLogs && student.hasUnsentReports === false && (
-                         <span className="bg-emerald-100 text-emerald-700 text-[9px] md:text-[10px] px-1.5 py-0.5 rounded-full font-bold flex items-center gap-1">
-                           <CheckCircle2 size={10} /> Đã gửi
-                         </span>
-                      )}
-                      {!student.hasLogs && (
-                         <span className="bg-blue-100 text-blue-700 text-[9px] md:text-[10px] px-1.5 py-0.5 rounded-full font-bold">
-                           Chỉ nhắc nợ
-                         </span>
-                      )}
-                    </div>
-                    <div className="text-[10px] md:text-xs text-slate-500 mt-0.5">SĐT: {student.phoneParent || <span className="italic text-rose-400">Trống</span>}</div>
-                  </td>
-                  <td className="py-2 px-2 md:py-3 md:px-4 hidden sm:table-cell text-[13px] md:text-sm">
-                    {student.enrolledCourses[0]?.className ?? (student.allPendingInvoices?.length ? (student.allPendingInvoices[0].isDebt ? "Nợ Cũ" : "Hóa đơn") : "-")}
-                  </td>
-                  <td className="py-2 px-2 md:py-3 md:px-4">
-                    <div className="flex flex-wrap gap-1 md:gap-1.5 flex-col">
-                      {student.enrolledCourses
-                        .filter((c) => c.remainingSessions <= 2 || c.pendingInvoices.length > 0)
-                        .map((c) => (
-                          <div key={c.enrollmentId} className="flex gap-1 flex-wrap">
-                            {c.remainingSessions <= 2 && (
-                              <span
-                                className="bg-rose-50 text-rose-700 font-bold px-1.5 md:px-2 py-0.5 rounded text-[10px] md:text-[11px] border border-rose-100 whitespace-nowrap"
-                              >
-                                {c.className} ({c.remainingSessions} buổi)
-                              </span>
-                            )}
-                            {c.pendingInvoices.length > 0 && c.pendingInvoices.map(inv => (
-                              <span key={inv.id} className={`${inv.status === "UNDERPAID" ? "bg-rose-100 text-rose-700 border-rose-200" : "bg-amber-100 text-amber-700 border-amber-200"} font-bold px-1.5 md:px-2 py-0.5 rounded text-[10px] md:text-[11px] border whitespace-nowrap`}>
-                                {inv.status === "UNDERPAID" ? "THIẾU TIỀN" : "CHỜ T.TOÁN"}
-                              </span>
-                            ))}
-                          </div>
-                        ))}
-                      
-                      {/* Hiển thị các hóa đơn nợ/tổng hợp (không dính trực tiếp với 1 enrollment) */}
-                      {student.allPendingInvoices?.map(inv => (
-                        <div key={inv.id} className="flex gap-1 flex-wrap">
-                          <span className="bg-orange-100 text-orange-700 border-orange-200 font-bold px-1.5 md:px-2 py-0.5 rounded text-[10px] md:text-[11px] border whitespace-nowrap">
-                            {inv.isDebt ? "Nợ cũ" : "Hóa đơn"}: {new Intl.NumberFormat("vi-VN").format(inv.expectedAmount - inv.amountPaid)}đ
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  </td>
-                  <td className="py-2 px-2 md:py-3 md:px-4 text-right">
-                    <button
-                      onClick={() => {
-                        setReportData({ studentId: student.id, studentName: student.fullName, classId: "", className: "" });
-                        setReportModalOpen(true);
-                      }}
-                      disabled={isBulkSending}
-                      className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold py-1.5 px-2.5 md:px-4 rounded shadow-sm transition-colors text-[11px] md:text-xs whitespace-nowrap"
-                    >
-                      Xử lý
-                    </button>
-                  </td>
-                </tr>
-              ))}
-              {studentsWithLowSessions.length === 0 && (
-                <tr>
-                  <td colSpan={5} className="py-10 text-center text-slate-500 font-medium">
-                    Không có học sinh nào cạn buổi học cần thu học phí lúc này.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+          {/* BẢNG CHƯA GỬI */}
+          <div className="bg-white border text-center border-slate-200 rounded-xl overflow-hidden shadow-sm mb-6">
+            <div className="bg-amber-50 border-b border-amber-100 p-3 text-left font-bold text-amber-800 text-sm flex justify-between items-center">
+              <span>Cần nhắc nhở / Gửi báo cáo ({studentsNotSent.length})</span>
+            </div>
+            {renderStudentTable(studentsNotSent)}
+          </div>
+
+          {/* BẢNG ĐÃ GỬI */}
+          {studentsSent.length > 0 && (
+            <div className="bg-white border text-center border-slate-200 rounded-xl overflow-hidden shadow-sm">
+              <div className="bg-emerald-50 border-b border-emerald-100 p-3 text-left font-bold text-emerald-800 text-sm">
+                Đã gửi báo cáo gần đây ({studentsSent.length})
+              </div>
+              {renderStudentTable(studentsSent)}
+            </div>
+          )}
         </div>
       )}
 
@@ -497,12 +595,11 @@ export default function TuitionClient({
                       setTeacherZaloPhone(initialPhone);
                     }}
                     disabled={teacher.salaryBalance === 0}
-                    className={`w-full md:w-auto px-4 py-2 rounded-lg font-bold shadow-sm transition-all text-xs flex items-center justify-center gap-1.5 whitespace-nowrap ${
-                      hasBalance 
-                        ? "bg-slate-900 hover:bg-slate-800 text-white" 
-                        : teacher.salaryBalance < 0 
-                          ? "bg-rose-600 hover:bg-rose-700 text-white"
-                          : "bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200"
+                    className={`w-full md:w-auto px-4 py-2 rounded-lg font-bold shadow-sm transition-all text-xs flex items-center justify-center gap-1.5 whitespace-nowrap ${hasBalance
+                      ? "bg-slate-900 hover:bg-slate-800 text-white"
+                      : teacher.salaryBalance < 0
+                        ? "bg-rose-600 hover:bg-rose-700 text-white"
+                        : "bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200"
                       }`}
                   >
                     {teacher.salaryBalance < 0 ? "Thu Tiền" : "Thanh Toán"}
@@ -524,8 +621,8 @@ export default function TuitionClient({
       {/* ======================================================== */}
       {/* MODAL THANH TOÁN LƯƠNG HOẶC THU TIỀN GIÁO VIÊN */}
       {selectedTeacher && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden flex flex-col animate-in zoom-in-95 duration-200">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => setSelectedTeacher(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden flex flex-col animate-in zoom-in-95 duration-200" onClick={(e) => e.stopPropagation()}>
             <div className="p-4 md:p-5 border-b border-slate-100 bg-slate-50">
               <h3 className="text-lg font-extrabold text-slate-900">
                 {selectedTeacher.salaryBalance < 0 ? "Thu Phí Phòng (Giáo Viên)" : "Chi Trả Lương Giáo Viên"}
@@ -553,14 +650,14 @@ export default function TuitionClient({
                     </div>
                   )}
                   <div className="flex gap-2">
-                    <input 
-                      type="tel" 
-                      value={teacherZaloPhone} 
-                      onChange={e => setTeacherZaloPhone(e.target.value.replace(/\D/g, ''))} 
+                    <input
+                      type="tel"
+                      value={teacherZaloPhone}
+                      onChange={e => setTeacherZaloPhone(e.target.value.replace(/\D/g, ''))}
                       placeholder="Nhập SĐT Zalo GV..."
-                      className={`flex-1 text-sm border rounded px-2 py-1.5 focus:outline-none focus:border-blue-500 ${!selectedTeacher.phone && !teacherZaloPhone ? "border-rose-300 bg-rose-50" : "border-slate-200 bg-white"}`} 
+                      className={`flex-1 text-sm border rounded px-2 py-1.5 focus:outline-none focus:border-blue-500 ${!selectedTeacher.phone && !teacherZaloPhone ? "border-rose-300 bg-rose-50" : "border-slate-200 bg-white"}`}
                     />
-                    <button 
+                    <button
                       onClick={handleSendZaloDebt}
                       disabled={isSendingZaloDebt || !teacherZaloPhone}
                       className="bg-[#0068FF] hover:bg-blue-700 text-white px-3 py-1.5 rounded font-bold text-xs flex items-center gap-1 disabled:opacity-50 transition-colors shrink-0"
@@ -576,7 +673,7 @@ export default function TuitionClient({
             </div>
             <div className="p-4 border-t border-slate-100 flex justify-end gap-3 bg-white">
               <button onClick={() => setSelectedTeacher(null)} className="px-5 py-2.5 rounded-xl font-bold text-sm text-slate-600 hover:bg-slate-100 border border-slate-200 transition-colors w-full sm:w-auto">Hủy</button>
-              
+
               {selectedTeacher.salaryBalance < 0 ? (
                 <button onClick={handleCollectDebtManual} className="px-5 py-2.5 rounded-xl font-bold text-sm bg-rose-600 text-white hover:bg-rose-700 transition-colors shadow-sm flex items-center justify-center gap-2 w-full sm:w-auto">
                   Đã Thu Tiền Mặt
@@ -593,15 +690,15 @@ export default function TuitionClient({
 
       {/* MODAL XÁC NHẬN GỬI HÀNG LOẠT */}
       {showConfirmBulkSend && (
-        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden flex flex-col animate-in zoom-in-95 duration-200">
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => setShowConfirmBulkSend(false)}>
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden flex flex-col animate-in zoom-in-95 duration-200" onClick={(e) => e.stopPropagation()}>
             <div className="p-4 md:p-5 border-b border-slate-100 bg-slate-50">
               <h3 className="text-lg font-extrabold text-slate-900">Xác nhận gửi báo cáo</h3>
             </div>
             <div className="p-6 text-center text-slate-600 text-sm max-h-[70vh] overflow-y-auto">
               Bạn đã kiểm tra kỹ tình hình học tập và đánh giá của <span className="font-bold text-blue-600">{selectedStudentIds.length} học sinh</span> đã chọn chưa?
               <br /><br />
-              
+
               <div className="text-left bg-slate-50 p-3 rounded-lg border border-slate-200 text-xs mb-4">
                 <div className="font-bold mb-2">Danh sách gửi ({selectedStudentIds.length}):</div>
                 <ul className="space-y-1 max-h-40 overflow-y-auto pr-2 custom-scrollbar">
@@ -609,37 +706,38 @@ export default function TuitionClient({
                     const alreadySent = s.hasLogs && s.hasUnsentReports === false;
                     const noLogsOnlyDebt = !s.hasLogs;
                     return (
-                    <li key={s.id} className="flex justify-between border-b border-slate-100 pb-1 last:border-0 items-center">
-                       <span className="font-medium text-left flex gap-1 items-center flex-wrap">
-                         {s.fullName}
-                         {alreadySent && <span className="text-amber-600 bg-amber-50 px-1 rounded text-[9px] font-bold border border-amber-200">Gửi lại</span>}
-                         {noLogsOnlyDebt && <span className="text-blue-600 bg-blue-50 px-1 rounded text-[9px] font-bold border border-blue-200">Nhắc nợ</span>}
-                       </span>
-                       <span className={`font-mono text-right whitespace-nowrap ${s.phoneParent ? 'text-slate-600' : 'text-rose-500 font-bold'}`}>
-                         {s.phoneParent || "Không có SĐT"}
-                       </span>
-                    </li>
-                  )})}
+                      <li key={s.id} className="flex justify-between border-b border-slate-100 pb-1 last:border-0 items-center">
+                        <span className="font-medium text-left flex gap-1 items-center flex-wrap">
+                          {s.fullName}
+                          {alreadySent && <span className="text-amber-600 bg-amber-50 px-1 rounded text-[9px] font-bold border border-amber-200">Gửi lại</span>}
+                          {noLogsOnlyDebt && <span className="text-blue-600 bg-blue-50 px-1 rounded text-[9px] font-bold border border-blue-200">Nhắc nợ</span>}
+                        </span>
+                        <span className={`font-mono text-right whitespace-nowrap ${s.phoneParent ? 'text-slate-600' : 'text-rose-500 font-bold'}`}>
+                          {s.phoneParent || "Không có SĐT"}
+                        </span>
+                      </li>
+                    )
+                  })}
                 </ul>
               </div>
 
-              Nếu đã chắc chắn, hệ thống sẽ tự động tổng hợp dữ liệu, tạo ảnh QR code và gửi qua Zalo tới phụ huynh. <br/> <strong className="text-rose-500">Vui lòng không tắt trang trong lúc đang gửi.</strong>
+              Nếu đã chắc chắn, hệ thống sẽ tự động tổng hợp dữ liệu, tạo ảnh QR code và gửi qua Zalo tới phụ huynh. <br /> <strong className="text-rose-500">Vui lòng không tắt trang trong lúc đang gửi.</strong>
             </div>
             <div className="p-4 border-t border-slate-100 flex justify-end gap-3 bg-white">
-              <button 
-                onClick={() => setShowConfirmBulkSend(false)} 
-                disabled={isBulkSending} 
+              <button
+                onClick={() => setShowConfirmBulkSend(false)}
+                disabled={isBulkSending}
                 className="px-5 py-2.5 rounded-xl font-bold text-sm text-slate-600 hover:bg-slate-100 border border-slate-200 transition-colors w-full sm:w-auto disabled:opacity-50"
               >
                 Hủy
               </button>
-              <button 
+              <button
                 onClick={() => {
                   setShowConfirmBulkSend(false);
                   toast.info("Bắt đầu gửi báo cáo hàng loạt, vui lòng không đóng trang...");
                   startBulkSend();
-                }} 
-                disabled={isBulkSending} 
+                }}
+                disabled={isBulkSending}
                 className="px-5 py-2.5 rounded-xl font-bold text-sm bg-blue-600 text-white hover:bg-blue-700 transition-colors shadow-sm w-full sm:w-auto flex justify-center items-center gap-2 disabled:opacity-50"
               >
                 Gửi Báo Cáo
@@ -655,18 +753,22 @@ export default function TuitionClient({
           isOpen={reportModalOpen}
           onClose={() => setReportModalOpen(false)}
           studentId={reportData.studentId}
+          classId={reportData.classId}
           studentName={reportData.studentName}
+          className={reportData.className}
+          onSuccess={() => router.refresh()}
         />
       )}
 
-      {/* INVISIBLE REPORT RENDERER FOR BULK SENDING */}
+      {/* INVISIBLE REPORT RENDERER FOR BULK SEND */}
       {hiddenReportData && (
-        <div className="fixed -left-[9999px] -top-[9999px] opacity-0 pointer-events-none">
-          <div id="hidden-report-export-area" className="bg-white w-[800px] overflow-hidden border border-slate-200" style={{ fontFamily: "sans-serif" }}>
+        <div className="fixed -left-[9999px] -top-[9999px] opacity-0 pointer-events-none flex flex-col gap-8">
+          {/* Ảnh 1: Thông tin và Lịch sử học tập */}
+          <div id="hidden-report-export-area-1" className="bg-white w-[800px] overflow-hidden border border-slate-200" style={{ fontFamily: "sans-serif" }}>
             {/* Header Bill */}
             <div className="bg-blue-600 p-6 text-white text-center">
-              <h1 className="text-2xl font-black uppercase tracking-wider mb-1">TRUNG TÂM GIÁO DỤC</h1>
-              <p className="text-blue-100 text-sm font-medium">BÁO CÁO HỌC TẬP & THANH TOÁN TỔNG HỢP</p>
+              <h1 className="text-2xl font-black uppercase tracking-wider mb-1">Farm Edu</h1>
+              <p className="text-blue-100 text-sm font-medium">BÁO CÁO HỌC TẬP</p>
             </div>
 
             {/* Info Section */}
@@ -682,101 +784,50 @@ export default function TuitionClient({
                 </div>
               </div>
             </div>
-            
-            {/* QR Section */}
-            <div className="bg-slate-50 p-6 flex items-center justify-between border-t border-slate-100">
-              <div className="flex items-center gap-4">
-                <div className="p-1 bg-white rounded-xl shadow-sm border border-slate-200">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img 
-                    src={`https://qr.sepay.vn/img?bank=MBBank&acc=0700107189999&amount=${hiddenReportData.totalExpectedAmount}&des=${encodeURIComponent(`HT${hiddenReportData.phoneParent}`)}&template=`} 
-                    alt="QR Code" 
-                    crossOrigin="anonymous" 
-                    className="w-24 h-24 object-contain" 
-                  />
-                </div>
-                <div>
-                  <p className="font-bold text-slate-800 flex items-center gap-2">
-                    Quét mã thanh toán
-                    <span className="bg-emerald-100 text-emerald-700 text-[10px] uppercase font-black px-2 py-0.5 rounded-full">
-                      VietQR
-                    </span>
-                  </p>
-                  <p className="text-sm text-slate-500 mt-1 mb-2">Học sinh: <span className="font-mono">{hiddenReportData.studentName}</span></p>
-                </div>
-              </div>
-            </div>
-
-            {/* Items Section */}
-            <div className="p-6">
-              <h3 className="text-sm font-bold text-slate-800 mb-4 uppercase tracking-wider border-l-4 border-blue-500 pl-3">Chi tiết các khoản thu</h3>
-              <div className="space-y-3">
-                {hiddenReportData.items.map((item: any, idx: number) => (
-                  <div key={idx} className="flex justify-between items-center p-3 border border-slate-100 rounded-lg bg-slate-50/50">
-                    <div>
-                      <p className="font-bold text-slate-800 text-sm">
-                        {item.type === "TUITION" ? `Học phí lớp: ${item.className}` : "Thanh toán nợ cũ (Kỳ trước)"}
-                      </p>
-                      {item.type === "TUITION" && (
-                        <p className="text-xs text-slate-500 mt-0.5">Gia hạn thêm {item.sessionsPerPackage} buổi học</p>
-                      )}
-                    </div>
-                    <div className="font-extrabold text-blue-700">
-                      {item.amount.toLocaleString('vi-VN')} đ
-                    </div>
-                  </div>
-                ))}
-                <div className="flex justify-between items-center pt-3 border-t border-slate-200 mt-3 px-3">
-                  <span className="font-bold text-slate-800 uppercase text-sm">Tổng thanh toán (chưa giảm giá):</span>
-                  <span className="text-lg font-black text-blue-600">{hiddenReportData.totalExpectedAmount.toLocaleString('vi-VN')} đ</span>
-                </div>
-              </div>
-            </div>
 
             {/* Logs Section (chỉ hiện nếu có log) */}
             {hiddenReportData.logs.length > 0 && (
-              <div className="p-6 pt-0">
+              <div className="p-6 border-b border-slate-100">
                 <h3 className="text-sm font-bold text-slate-800 mb-4 uppercase tracking-wider border-l-4 border-emerald-500 pl-3">Tình hình học tập (Các lớp đang học)</h3>
                 <div className="overflow-hidden border border-slate-200 rounded-xl">
                   <table className="w-full text-left text-sm">
                     <thead className="bg-slate-50">
                       <tr>
-                        <th className="py-3 px-4 font-bold text-slate-600 border-b border-slate-200">Lớp</th>
-                        <th className="py-3 px-4 font-bold text-slate-600 border-b border-slate-200 w-24">Ngày</th>
-                        <th className="py-3 px-4 font-bold text-slate-600 border-b border-slate-200 text-center">Điểm danh</th>
-                        <th className="py-3 px-4 font-bold text-slate-600 border-b border-slate-200 text-center">Bài tập</th>
-                        <th className="py-3 px-4 font-bold text-slate-600 border-b border-slate-200">Đánh giá</th>
+                        <th className="py-3 px-4 font-bold text-slate-600 border-b border-slate-200 whitespace-nowrap">Lớp</th>
+                        <th className="py-3 px-4 font-bold text-slate-600 border-b border-slate-200 whitespace-nowrap">Ngày</th>
+                        <th className="py-3 px-4 font-bold text-slate-600 border-b border-slate-200 text-center whitespace-nowrap">Điểm danh</th>
+                        <th className="py-3 px-4 font-bold text-slate-600 border-b border-slate-200 text-center whitespace-nowrap">Bài tập</th>
+                        <th className="py-3 pl-4 pr-8 font-bold text-slate-600 border-b border-slate-200 whitespace-nowrap text-left">Đánh giá</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
-                      {hiddenReportData.logs.slice(-5).map((log: any, i: number) => (
+                      {hiddenReportData.logs.map((log: any, i: number) => (
                         <tr key={i} className="hover:bg-slate-50/50">
-                          <td className="py-2 px-4 text-slate-700 font-medium text-xs line-clamp-1">
-                            {log.className}
+                          <td className="py-2 px-4 text-slate-700 font-medium text-xs align-top">
+                            <div className="line-clamp-1">{log.className}</div>
                           </td>
-                          <td className="py-2 px-4 text-slate-500 text-xs whitespace-nowrap">
+                          <td className="py-2 px-4 text-slate-500 text-xs whitespace-nowrap align-top">
                             {new Date(log.date).toLocaleDateString("vi-VN")}
                           </td>
-                          <td className="py-2 px-4 text-center">
+                          <td className="py-2 px-4 text-center whitespace-nowrap align-top">
                             <span className={`text-[10px] font-bold px-2 py-1 rounded-md uppercase ${log.attendanceStatus === "PRESENT" ? "bg-emerald-100 text-emerald-700" :
-                                log.attendanceStatus === "ABSENT" ? "bg-rose-100 text-rose-700" : "bg-amber-100 text-amber-700"
+                              log.attendanceStatus === "ABSENT" ? "bg-rose-100 text-rose-700" : "bg-amber-100 text-amber-700"
                               }`}>
                               {log.attendanceStatus === "PRESENT" ? "Có mặt" : log.attendanceStatus === "ABSENT" ? "Vắng" : "Có phép"}
                             </span>
                           </td>
-                          <td className="py-2 px-4 text-center">
+                          <td className="py-2 px-4 text-center whitespace-nowrap align-top">
                             {log.homeworkStatus ? (
-                              <span className={`text-[10px] font-bold px-2 py-1 rounded-md uppercase ${
-                                log.homeworkStatus === "GOOD" ? "bg-blue-100 text-blue-700" :
+                              <span className={`text-[10px] font-bold px-2 py-1 rounded-md uppercase ${log.homeworkStatus === "GOOD" ? "bg-blue-100 text-blue-700" :
                                 log.homeworkStatus === "DONE" ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700"
-                              }`}>
+                                }`}>
                                 {log.homeworkStatus === "GOOD" ? "Tốt" : log.homeworkStatus === "DONE" ? "Đã làm" : "Chưa làm"}
                               </span>
                             ) : (
                               <span className="text-slate-400 text-xs">-</span>
                             )}
                           </td>
-                          <td className="py-2 px-4 text-slate-600 text-xs max-w-[200px] break-words">
+                          <td className="py-2 pl-4 pr-6 text-slate-600 text-xs whitespace-pre-wrap break-all align-top">
                             {log.note || <span className="text-slate-400 italic">Không có</span>}
                           </td>
                         </tr>
@@ -784,12 +835,71 @@ export default function TuitionClient({
                     </tbody>
                   </table>
                 </div>
+                <p className="text-xs text-center text-slate-500 mt-2 font-medium">
+                  Tổng số buổi chưa báo cáo: {hiddenReportData.logs.length} buổi
+                </p>
               </div>
             )}
+          </div>
+
+          {/* Ảnh 2: Chi tiết khoản thu và mã QR */}
+          <div id="hidden-report-export-area-2" className="bg-white w-[800px] overflow-hidden border border-slate-200" style={{ fontFamily: "sans-serif" }}>
+            <div className="bg-blue-600 p-4 text-white text-center">
+              <h2 className="text-lg font-black uppercase tracking-wider mb-1">CHI TIẾT HỌC PHÍ</h2>
+              <p className="text-blue-100 text-xs font-medium">Học sinh: {hiddenReportData.studentName}</p>
+            </div>
+            {/* 2 Columns: Items & QR */}
+            <div className="p-6 flex flex-row gap-6 items-stretch">
+              {/* Items Section */}
+              <div className="w-1/2">
+                <h3 className="text-sm font-bold text-slate-800 mb-4 uppercase tracking-wider border-l-4 border-blue-500 pl-3">Các khoản thu</h3>
+                <div className="space-y-3">
+                  {hiddenReportData.items.map((item: any, idx: number) => (
+                    <div key={idx} className="flex justify-between items-center p-3 border border-slate-100 rounded-lg bg-slate-50/50">
+                      <div>
+                        <p className="font-bold text-slate-800 text-sm">
+                          {item.type === "TUITION" ? `Học phí lớp: ${item.className}` : "Thanh toán nợ cũ (Kỳ trước)"}
+                        </p>
+                        {item.type === "TUITION" && (
+                          <p className="text-xs text-slate-500 mt-0.5">Gia hạn thêm {item.sessionsPerPackage} buổi học</p>
+                        )}
+                      </div>
+                      <div className="font-extrabold text-blue-700 whitespace-nowrap ml-2">
+                        {item.amount.toLocaleString('vi-VN')} đ
+                      </div>
+                    </div>
+                  ))}
+                  <div className="flex justify-between items-center pt-3 border-t border-slate-200 mt-3 px-3">
+                    <span className="font-bold text-slate-800 uppercase text-sm">Tổng thu:</span>
+                    <span className="text-lg font-black text-blue-600">{hiddenReportData.totalExpectedAmount.toLocaleString('vi-VN')} đ</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* QR Section */}
+              <div className="w-1/2 bg-slate-50 p-6 flex flex-col items-center justify-center border border-slate-200 rounded-xl">
+                <div className="p-2 bg-white rounded-xl shadow-sm border border-slate-200 mb-3">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={`https://qr.sepay.vn/img?bank=MBBank&acc=0700107189999&amount=${hiddenReportData.totalExpectedAmount}&des=${encodeURIComponent(`HT${hiddenReportData.phoneParent}`)}&template=`}
+                    alt="QR Code"
+                    crossOrigin="anonymous"
+                    className="w-40 h-40 object-contain"
+                  />
+                </div>
+                <p className="font-bold text-slate-800 flex items-center gap-2">
+                  Quét mã thanh toán
+                  <span className="bg-emerald-100 text-emerald-700 text-[10px] uppercase font-black px-2 py-0.5 rounded-full">
+                    VietQR
+                  </span>
+                </p>
+                <p className="text-sm text-slate-500 mt-1 mb-2">Học sinh: <span className="font-mono">{hiddenReportData.studentName}</span></p>
+              </div>
+            </div>
 
             {/* Footer text */}
             <div className="bg-slate-800 text-slate-300 text-xs py-3 px-6 text-center">
-              Cảm ơn Quý phụ huynh đã đồng hành cùng Trung tâm!
+              Cảm ơn Quý phụ huynh!
             </div>
           </div>
         </div>
@@ -800,7 +910,7 @@ export default function TuitionClient({
         <div className="fixed -left-[9999px] -top-[9999px] opacity-0 pointer-events-none">
           <div id="hidden-teacher-qr" className="bg-white w-[800px] overflow-hidden border border-slate-200" style={{ fontFamily: "sans-serif" }}>
             <div className="bg-rose-600 p-6 text-white text-center">
-              <h1 className="text-2xl font-black uppercase tracking-wider mb-1">TRUNG TÂM GIÁO DỤC</h1>
+              <h1 className="text-2xl font-black uppercase tracking-wider mb-1">Farm Edu</h1>
               <p className="text-rose-100 text-sm font-medium">THANH TOÁN TIỀN PHÒNG / TRỪ LƯƠNG ÂM</p>
             </div>
             <div className="p-6 border-b border-slate-100">
@@ -815,16 +925,16 @@ export default function TuitionClient({
                 </div>
               </div>
             </div>
-            
+
             <div className="bg-slate-50 p-6 flex items-center justify-between border-t border-slate-100">
               <div className="flex items-center gap-4">
                 <div className="p-1 bg-white rounded-xl shadow-sm border border-slate-200">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img 
-                    src={`https://qr.sepay.vn/img?bank=MBBank&acc=0700107189999&amount=${Math.abs(selectedTeacher.salaryBalance)}&des=${encodeURIComponent(`HT ${selectedTeacher.phone || teacherZaloPhone || selectedTeacher.username}`)}&template=`} 
-                    alt="QR Code" 
-                    crossOrigin="anonymous" 
-                    className="w-24 h-24 object-contain" 
+                  <img
+                    src={`https://qr.sepay.vn/img?bank=MBBank&acc=0700107189999&amount=${Math.abs(selectedTeacher.salaryBalance)}&des=${encodeURIComponent(`HT ${selectedTeacher.phone || teacherZaloPhone || selectedTeacher.username}`)}&template=`}
+                    alt="QR Code"
+                    crossOrigin="anonymous"
+                    className="w-24 h-24 object-contain"
                   />
                 </div>
                 <div>

@@ -102,6 +102,7 @@ export type StudentCombinedReport = {
   }[];
   totalExpectedAmount: number;
   logs: {
+    id: string;
     className: string;
     date: Date;
     slot: number;
@@ -212,4 +213,21 @@ export async function getStudentCombinedReport(studentId: string): Promise<Stude
       teacherName: log.classSession.teacher.fullName
     }))
   };
+}
+
+export async function markReportAsSent(logIds: string[]) {
+  if (!logIds || logIds.length === 0) return { success: true };
+  try {
+    await prisma.attendanceLog.updateMany({
+      where: { id: { in: logIds } },
+      data: { 
+        isReportSent: true,
+        reportedAt: new Date()
+      }
+    });
+    return { success: true };
+  } catch (e) {
+    console.error("Lỗi đánh dấu báo cáo:", e);
+    return { success: false };
+  }
 }

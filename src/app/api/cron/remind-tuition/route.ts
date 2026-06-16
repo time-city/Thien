@@ -32,7 +32,7 @@ export async function GET(request: Request) {
     });
 
     const now = new Date();
-    const twentyFourHours = 24 * 60 * 60 * 1000;
+    const twentyFourHours = 24 * 60 * 60 * 1000; // Để 0 để test luôn
     let sentCount = 0;
 
     for (const student of studentsWithDebt) {
@@ -61,9 +61,12 @@ export async function GET(request: Request) {
             // Gọi API Zalo Bot
             const zaloResponse = await fetch("http://116.118.9.61:8080/send", {
               method: "POST",
-              headers: { "Content-Type": "application/json" },
+              headers: {
+                "Content-Type": "application/json",
+                "x-api-key": process.env.NEXT_PUBLIC_ZALO_BOT_API_KEY || ""
+              },
               body: JSON.stringify({
-                phone: student.phoneParent,
+                target: student.phoneParent,
                 message: message
               })
             });
@@ -83,7 +86,8 @@ export async function GET(request: Request) {
                 }
               });
             } else {
-              console.error(`[Cron] Lỗi khi gửi Zalo cho ${student.fullName}`);
+              const errorText = await zaloResponse.text();
+              console.error(`[Cron] Lỗi khi gửi Zalo cho ${student.fullName}. Status: ${zaloResponse.status}, Chi tiết: ${errorText}`);
             }
           } catch (zaloError) {
             console.error(`[Cron] Không thể kết nối Zalo Bot cho ${student.fullName}`, zaloError);

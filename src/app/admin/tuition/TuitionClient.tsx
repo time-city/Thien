@@ -202,15 +202,15 @@ export default function TuitionClient({
           const descStr = data.phoneParent ? `HT${data.phoneParent}` : `HT${studentId}`;
 
           const message = `
-Nông trại Khoa học tự nhiên kính gửi quý phụ huynh Báo cáo học tập${dateStr}.
-• Học sinh: ${data.studentName}
-• Lớp đang học: ${classNames}
+Nông trại Khoa học tự nhiên kính gửi quý phụ huynh: **Báo cáo học tập${dateStr}.**
+• Học sinh: **${data.studentName}**
+• Lớp đang học: **${classNames}**
 
 Phụ huynh thanh toán học phí (mã QR hoặc tiền mặt):
-• Số tiền: ${formattedPrice} vnđ
-• Nội dung chuyển khoản: ${descStr}
+• Số tiền: **${formattedPrice} vnđ**
+• Nội dung chuyển khoản: **${descStr}**
 
-Tin nhắn được thông báo tự động, phụ huynh có thể trao đổi thêm qua Zalo.`.trim();
+_Tin nhắn được thông báo tự động, phụ huynh có thể trao đổi thêm qua Zalo._`.trim();
 
           await new Promise(r => setTimeout(r, 1000));
 

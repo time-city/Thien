@@ -205,15 +205,15 @@ export default function CourseReportModal({
       const descStr = report?.phoneParent ? `HT${report.phoneParent}` : `HT${studentId}`;
 
       const message = `
-Nông trại Khoa học tự nhiên kính gửi quý phụ huynh Báo cáo học tập${dateStr}.
-• Học sinh: ${studentName}
-• Lớp đang học: ${classNames}
+Nông trại Khoa học tự nhiên kính gửi quý phụ huynh: **Báo cáo học tập${dateStr}.**
+• Học sinh: **${studentName}**
+• Lớp đang học: **${classNames}**
 
 Phụ huynh thanh toán học phí (mã QR hoặc tiền mặt):
-• Số tiền: ${formattedPrice} vnđ
-• Nội dung chuyển khoản: ${descStr}
+• Số tiền: **${formattedPrice} vnđ**
+• Nội dung chuyển khoản: **${descStr}**
 
-Tin nhắn được thông báo tự động, phụ huynh có thể trao đổi thêm qua Zalo.`.trim();
+_Tin nhắn được thông báo tự động, phụ huynh có thể trao đổi thêm qua Zalo._`.trim();
 
       // Send Image 1
       const formData1 = new FormData();
@@ -292,7 +292,11 @@ Tin nhắn được thông báo tự động, phụ huynh có thể trao đổi 
     const classNamesArray = report.items.filter(i => i.type === "TUITION").map(i => i.className);
     const classNames = classNamesArray.length > 0 ? classNamesArray.join("; ") : "Tổng hợp";
 
-    const message = `NHẮC BÁO HỌC PHÍ\nNông trại Khoa học tự nhiên CHƯA NHẬN học phí học sinh: ${studentName}\nPhiếu nhắc học phí định kỳ\nLớp: ${classNames}\n Phụ huynh đã nộp nhưng hệ thống chưa cập nhật, vui lòng nhắn tin xác nhận để được kiểm tra lại tình trạng học phí.`;
+    const message = `**NHẮC BÁO HỌC PHÍ**
+Nông trại Khoa học tự nhiên **CHƯA NHẬN** học phí học sinh: **${studentName}**
+Lớp: **${classNames}**
+
+_Phụ huynh đã nộp nhưng hệ thống chưa cập nhật, vui lòng nhắn tin xác nhận để được kiểm tra lại tình trạng học phí._`;
 
     try {
       setSendingZalo(true);
@@ -400,104 +404,104 @@ Tin nhắn được thông báo tự động, phụ huynh có thể trao đổi 
       >
 
         {/* Phần Control Panel */}
-        <div className="w-full md:w-1/3 bg-slate-50 border-b md:border-b-0 md:border-r border-slate-200 p-5 flex flex-col md:h-full shrink-0 md:overflow-y-auto min-h-0">
-          <div className="flex justify-between items-center mb-6">
-            <h2 className="text-lg font-extrabold text-slate-800 flex items-center gap-2">
-              <FileText size={20} className="text-blue-600" /> Thanh Toán
+        <div className="w-full md:w-1/3 bg-slate-50 border-b md:border-b-0 md:border-r border-slate-200 p-3 md:p-5 flex flex-col md:h-full shrink-0 md:overflow-y-auto min-h-0">
+          <div className="flex justify-between items-center mb-2 md:mb-6">
+            <h2 className="text-sm md:text-lg font-extrabold text-slate-800 flex items-center gap-1.5 md:gap-2">
+              <FileText className="text-blue-600 w-4 h-4 md:w-5 md:h-5" /> Thanh Toán
             </h2>
             <button onClick={onClose} disabled={loading} className="p-1.5 bg-slate-200 hover:bg-slate-300 rounded-full text-slate-600 transition-colors md:hidden disabled:opacity-50 disabled:cursor-not-allowed">
-              <X size={18} />
+              <X size={16} />
             </button>
           </div>
 
-          <div className="space-y-4 flex-1">
+          <div className="space-y-2.5 md:space-y-4 flex-1">
             <div className="space-y-1">
-              <label className="text-xs font-bold text-slate-500 uppercase">Khấu hao / Giảm giá (VNĐ)</label>
-              <div className="flex flex-col sm:flex-row gap-2">
+              <label className="text-[10px] md:text-xs font-bold text-slate-500 uppercase">Khấu hao / Giảm giá (VNĐ)</label>
+              <div className="flex gap-2">
                 <CurrencyInput
                   placeholder="Nhập số tiền..."
                   value={discountAmountStr}
                   onChange={(val) => setDiscountAmountStr(val.toString())}
-                  className="flex-1 w-full h-11 px-3 border border-slate-200 rounded-xl bg-white text-sm font-semibold focus:ring-2 focus:ring-blue-100 outline-none transition-all"
+                  className="flex-1 w-full h-8 md:h-11 px-2.5 md:px-3 border border-slate-200 rounded-md md:rounded-xl bg-white text-[11px] md:text-sm font-semibold focus:ring-2 focus:ring-blue-100 outline-none transition-all"
                 />
                 <button
                   onClick={handleApplyDiscount}
                   disabled={isApplyingDiscount || !discountAmount || loading}
-                  className="h-11 px-4 whitespace-nowrap sm:w-auto w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl font-bold text-sm transition-colors flex items-center justify-center"
+                  className="h-8 md:h-11 px-3 md:px-4 whitespace-nowrap w-fit bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-md md:rounded-xl font-bold text-[10px] md:text-sm transition-colors flex items-center justify-center"
                 >
-                  {isApplyingDiscount ? <Loader2 size={16} className="animate-spin" /> : "Xác nhận"}
+                  {isApplyingDiscount ? <Loader2 size={14} className="animate-spin md:w-4 md:h-4" /> : "Xác nhận"}
                 </button>
               </div>
             </div>
 
-            <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-3">
-              <div className="flex justify-between items-center text-sm">
+            <div className="bg-white border border-slate-200 rounded-md md:rounded-xl p-2.5 md:p-4 space-y-1.5 md:space-y-3">
+              <div className="flex justify-between items-center text-[11px] md:text-sm">
                 <span className="text-slate-500 font-medium">Tổng phí gốc:</span>
                 <span className="font-bold text-slate-700">{originalPrice.toLocaleString('vi-VN')} đ</span>
               </div>
-              <div className="flex justify-between items-center text-sm text-emerald-600">
+              <div className="flex justify-between items-center text-[11px] md:text-sm text-emerald-600">
                 <span className="font-medium">Giảm trừ:</span>
                 <span className="font-bold">-{(discountAmount).toLocaleString('vi-VN')} đ</span>
               </div>
-              <div className="pt-3 border-t border-slate-100 flex justify-between items-center">
-                <span className="text-sm font-bold text-slate-800">Thực nhận:</span>
-                <span className="text-lg font-extrabold text-blue-600">{finalPrice.toLocaleString('vi-VN')} đ</span>
+              <div className="pt-1.5 md:pt-3 border-t border-slate-100 flex justify-between items-center">
+                <span className="text-xs md:text-sm font-bold text-slate-800">Thực nhận:</span>
+                <span className="text-sm md:text-lg font-extrabold text-blue-600">{finalPrice.toLocaleString('vi-VN')} đ</span>
               </div>
             </div>
 
-            <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 mt-4">
-              <label className="text-xs font-bold text-emerald-700 uppercase mb-2 block">Xác Nhận Thu Tiền Mặt</label>
-              <div className="flex flex-col sm:flex-row gap-2">
+            <div className="bg-emerald-50 border border-emerald-200 rounded-md md:rounded-xl p-2.5 md:p-4 mt-2.5 md:mt-4">
+              <label className="text-[9px] md:text-xs font-bold text-emerald-700 uppercase mb-1.5 md:mb-2 block">Xác Nhận Thu Tiền Mặt</label>
+              <div className="flex gap-2">
                 <CurrencyInput
                   placeholder="Nhập số tiền..."
                   value={cashAmount}
                   onChange={(val) => setCashAmount(val.toString())}
-                  className="flex-1 w-full h-10 px-3 border border-emerald-200 rounded-lg text-sm outline-none focus:border-emerald-400"
+                  className="flex-1 w-full h-8 md:h-10 px-2.5 md:px-3 border border-emerald-200 rounded-md md:rounded-lg text-[11px] md:text-sm outline-none focus:border-emerald-400"
                 />
                 <button
                   onClick={handlePayCash}
                   disabled={isProcessing || !cashAmount || loading}
-                  className="h-10 px-4 whitespace-nowrap sm:w-auto w-full bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg font-bold text-sm transition-colors flex items-center justify-center"
+                  className="h-8 md:h-10 px-3 md:px-4 whitespace-nowrap w-fit bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-md md:rounded-lg font-bold text-[10px] md:text-sm transition-colors flex items-center justify-center"
                 >
-                  {isProcessing ? <Loader2 size={16} className="animate-spin" /> : "Xác nhận"}
+                  {isProcessing ? <Loader2 size={14} className="animate-spin md:w-4 md:h-4" /> : "Xác nhận"}
                 </button>
               </div>
             </div>
 
-            <div className="bg-blue-50 text-blue-700 text-xs p-3 rounded-xl border border-blue-100 leading-relaxed">
-              Kiểm tra các khoản thu bên phải. Bấm "Tạo Mã QR" để chốt tổng tiền. Bạn có thể cho phụ huynh quét mã, hoặc thu tiền mặt trực tiếp.
+            <div className="bg-blue-50 text-blue-700 text-[9px] md:text-xs p-2 md:p-3 rounded-md md:rounded-xl border border-blue-100 leading-tight md:leading-relaxed mt-1 md:mt-0">
+              Bấm "Tạo Mã QR" chốt tiền để quét mã, hoặc thu tiền mặt.
             </div>
           </div>
 
-          <div className="mt-6 pt-4 border-t border-slate-200">
+          <div className="mt-2.5 md:mt-6 pt-2.5 md:pt-4 border-t border-slate-200">
             {report?.logs && report.logs.length > 0 ? (
               <button
                 onClick={() => setConfirmSendOpen(true)}
                 disabled={loading || !report}
-                className="w-full h-12 mb-3 bg-green-600 hover:bg-green-700 text-white rounded-xl font-bold text-sm transition-all shadow-sm flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full h-8 md:h-12 mb-1.5 md:mb-3 bg-green-600 hover:bg-green-700 text-white rounded-md md:rounded-xl font-bold text-[11px] md:text-sm transition-all shadow-sm flex items-center justify-center gap-1.5 md:gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                <Send size={18} />
+                <Send className="w-3.5 h-3.5 md:w-[18px] md:h-[18px]" />
                 Gửi báo cáo qua Zalo
               </button>
             ) : (
               <button
                 onClick={handleSendReminder}
                 disabled={loading || !report || sendingZalo}
-                className="w-full h-12 mb-3 bg-orange-500 hover:bg-orange-600 text-white rounded-xl font-bold text-sm transition-all shadow-sm flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full h-8 md:h-12 mb-1.5 md:mb-3 bg-orange-500 hover:bg-orange-600 text-white rounded-md md:rounded-xl font-bold text-[11px] md:text-sm transition-all shadow-sm flex items-center justify-center gap-1.5 md:gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {sendingZalo ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />}
+                {sendingZalo ? <Loader2 size={14} className="animate-spin md:w-4 md:h-4" /> : <Send className="w-3.5 h-3.5 md:w-[18px] md:h-[18px]" />}
                 Nhắc lại phụ huynh (Zalo)
               </button>
             )}
             <button
               onClick={handleExportPng}
               disabled={loading || exporting || !report}
-              className="w-full h-12 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-sm transition-all shadow-sm flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
+              className="w-full h-8 md:h-12 bg-blue-600 hover:bg-blue-700 text-white rounded-md md:rounded-xl font-bold text-[11px] md:text-sm transition-all shadow-sm flex items-center justify-center gap-1.5 md:gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
             >
-              {exporting ? <Loader2 size={18} className="animate-spin" /> : <Download size={18} />}
+              {exporting ? <Loader2 size={14} className="animate-spin md:w-4 md:h-4" /> : <Download className="w-3.5 h-3.5 md:w-[18px] md:h-[18px]" />}
               {exporting ? "Đang xuất ảnh..." : "Tải báo cáo ảnh (PNG)"}
             </button>
-            <button onClick={onClose} disabled={loading} className="w-full mt-3 h-10 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-xl font-bold text-sm transition-all hidden md:block disabled:opacity-50 disabled:cursor-not-allowed">
+            <button onClick={onClose} disabled={loading} className="w-full mt-1.5 md:mt-3 h-8 md:h-10 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-md md:rounded-xl font-bold text-[11px] md:text-sm transition-all hidden md:block disabled:opacity-50 disabled:cursor-not-allowed">
               Đóng
             </button>
           </div>

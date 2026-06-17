@@ -31,25 +31,25 @@ export default function GlobalConfirmModal() {
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => !isLoading && closeConfirm()}>
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
-        <div className="p-6">
-          <div className="flex justify-between items-start mb-4">
+        <div className="p-4 sm:p-6">
+          <div className="flex justify-between items-start mb-3 sm:mb-4">
             <div
-              className={`p-3 rounded-full ${
+              className={`p-2.5 sm:p-3 rounded-full ${
                 isDestructive ? "bg-rose-100 text-rose-600" : "bg-blue-100 text-blue-600"
               }`}
             >
-              <AlertTriangle size={24} />
+              <AlertTriangle size={20} className="sm:w-6 sm:h-6" />
             </div>
             <button
               onClick={() => !isLoading && closeConfirm()}
               disabled={isLoading}
               className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full transition-colors disabled:opacity-50"
             >
-              <X size={20} />
+              <X size={18} className="sm:w-5 sm:h-5" />
             </button>
           </div>
-          <h3 className="text-xl font-bold text-slate-900 mb-2">{title}</h3>
-          <div className="text-sm text-slate-500 leading-relaxed">{message}</div>
+          <h3 className="text-lg sm:text-xl font-bold text-slate-900 mb-2">{title}</h3>
+          <div className="text-xs sm:text-sm text-slate-500 leading-relaxed">{message}</div>
         </div>
         
         <div className="p-4 bg-slate-50 flex justify-end gap-3 border-t border-slate-100">

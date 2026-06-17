@@ -53,8 +53,11 @@ export async function GET(request: Request) {
 
         const classNameDisplay = classNames ? classNames : "Tổng hợp / Nợ cũ";
 
-        // Gửi tin nhắn Zalo
-        const message = `NHẮC BÁO HỌC PHÍ \nNông trại Khoa học tự nhiên CHƯA NHẬN học phí học sinh: ${student.fullName}\nPhiếu nhắc học phí định kỳ\nLớp: ${classNameDisplay}\n Phụ huynh đã nộp nhưng hệ thống chưa cập nhật, vui lòng nhắn tin xác nhận để được kiểm tra lại tình trạng học phí.`;
+        const message = `**NHẮC BÁO HỌC PHÍ**
+Nông trại Khoa học tự nhiên **CHƯA NHẬN** học phí học sinh: **${student.fullName}**
+Lớp: **${classNameDisplay}**
+
+_Phụ huynh đã nộp nhưng hệ thống chưa cập nhật, vui lòng nhắn tin xác nhận để được kiểm tra lại tình trạng học phí._`;
 
         if (student.phoneParent) {
           try {

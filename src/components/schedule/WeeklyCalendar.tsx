@@ -11,7 +11,7 @@ import {
 import Link from "next/link";
 import { MapPin, Trash2, CheckSquare, XSquare, ChevronLeft, ChevronRight, Loader2, XCircle, CheckCircle } from "lucide-react";
 import { toast } from "sonner";
-import { deleteBulkSchedules } from "@/actions/schedule";
+import { deleteBulkSchedules, deleteSchedule } from "@/actions/schedule";
 import { approveSessionRequest, rejectSessionRequest } from "@/actions/mutations";
 import { useConfirm } from "@/hooks/useconfirm"; 
 import { useRouter } from "next/navigation";
@@ -90,6 +90,12 @@ export default function WeeklyCalendar({ userRole, sessions }: WeeklyCalendarPro
   const [isDeleting, setIsDeleting] = useState(false); 
   const router = useRouter();
 
+  const [deleteModalState, setDeleteModalState] = useState<{
+    isOpen: boolean;
+    type: "SINGLE" | "BULK";
+    sessionId?: string;
+  }>({ isOpen: false, type: "SINGLE" });
+
   // Optimistic UI State
   const [optimisticSessions, addOptimisticSession] = useOptimistic(
     sessions as ScheduleSession[],
@@ -149,35 +155,45 @@ export default function WeeklyCalendar({ userRole, sessions }: WeeklyCalendarPro
   
   const handleDeleteClick = () => {
     if (selectedIds.size === 0) return;
+    setDeleteModalState({ isOpen: true, type: "BULK" });
+  };
 
-    confirm({
-      title: "Xác nhận xóa lịch dạy",
-      message: (
-        <>
-          Bạn có chắc chắn muốn xóa <strong>{selectedIds.size} ca học</strong> đã chọn không? Hành động này sẽ xóa hoàn toàn dữ liệu điểm danh liên quan và không thể hoàn tác.
-        </>
-      ),
-      confirmText: "Xóa dữ liệu",
-      cancelText: "Hủy bỏ",
-      isDestructive: true,
-      onConfirm: () => {
-        setIsDeleting(true);
-        startTransition(async () => {
+  const executeDelete = async (mode: "SINGLE" | "FOLLOWING") => {
+    setIsDeleting(true);
+    startTransition(async () => {
+      try {
+        let result;
+        if (deleteModalState.type === "BULK") {
           const idsToDelete = Array.from(selectedIds);
-          addOptimisticSession({ type: "DELETE_MANY", payload: idsToDelete });
-          const result = await deleteBulkSchedules(idsToDelete);
-          setIsDeleting(false);
-
+          if (mode === "SINGLE") {
+            addOptimisticSession({ type: "DELETE_MANY", payload: idsToDelete });
+          }
+          result = await deleteBulkSchedules(idsToDelete, mode);
           if (result.success) {
             toast.success(`Đã xóa thành công ${idsToDelete.length} ca học!`);
             setSelectedIds(new Set());
             setIsSelectMode(false);
-            window.dispatchEvent(new Event("schedule-updated"));
-          } else {
-            toast.error(result.error || "Xóa thất bại!");
           }
-        });
-      },
+        } else if (deleteModalState.type === "SINGLE" && deleteModalState.sessionId) {
+          if (mode === "SINGLE") {
+            addOptimisticSession({ type: "DELETE_MANY", payload: [deleteModalState.sessionId] });
+          }
+          result = await deleteSchedule(deleteModalState.sessionId, mode);
+          if (result.success) {
+            toast.success(`Đã xóa thành công ca học!`);
+          }
+        }
+
+        if (result?.success) {
+          window.dispatchEvent(new Event("schedule-updated"));
+          router.refresh();
+        } else {
+          toast.error(result?.error || "Xóa thất bại!");
+        }
+      } finally {
+        setIsDeleting(false);
+        setDeleteModalState({ isOpen: false, type: "SINGLE" });
+      }
     });
   };
 
@@ -423,6 +439,19 @@ export default function WeeklyCalendar({ userRole, sessions }: WeeklyCalendarPro
                                     {ev.className}
                                   </span>
                                   {ev.isPending && <Loader2 size={12} className="animate-spin text-slate-400 shrink-0" />}
+                                  {isAdmin && !isSelectMode && !ev.isPending && !ev.isCompleted && (
+                                    <button
+                                      onClick={(e) => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        setDeleteModalState({ isOpen: true, type: "SINGLE", sessionId: ev.id });
+                                      }}
+                                      className="p-1 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-md transition-colors shrink-0"
+                                      title="Xóa ca học"
+                                    >
+                                      <Trash2 size={12} />
+                                    </button>
+                                  )}
                                 </div>
                                 <span className={`font-semibold flex items-center gap-1 mt-0.5 ${isSelected ? "text-blue-100" : ev.isCompleted ? "text-slate-400" : ev.attendanceConflict ? "text-rose-600" : "text-blue-600"}`}>
                                   <MapPin size={10} strokeWidth={2.5} className="shrink-0" /> {ev.room}
@@ -559,6 +588,19 @@ export default function WeeklyCalendar({ userRole, sessions }: WeeklyCalendarPro
                                   <span className={`font-extrabold line-clamp-2 ${isSelected ? "text-white" : ev.isCompleted ? "text-slate-400" : "text-slate-900"}`}>
                                     {ev.className}
                                   </span>
+                                  {isAdmin && !isSelectMode && !ev.isPending && !ev.isCompleted && (
+                                    <button
+                                      onClick={(e) => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        setDeleteModalState({ isOpen: true, type: "SINGLE", sessionId: ev.id });
+                                      }}
+                                      className="p-1 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-md transition-colors shrink-0"
+                                      title="Xóa ca học"
+                                    >
+                                      <Trash2 size={12} />
+                                    </button>
+                                  )}
                                 </div>
                                 <span className={`font-semibold flex items-center gap-1 mt-0.5 ${isSelected ? "text-blue-100" : ev.isCompleted ? "text-slate-400" : ev.attendanceConflict ? "text-rose-600" : "text-blue-600"}`}>
                                   <MapPin size={12} strokeWidth={2.5} className="shrink-0" /> {ev.room}
@@ -672,6 +714,51 @@ export default function WeeklyCalendar({ userRole, sessions }: WeeklyCalendarPro
           </div>
         </div>
       )}
+      {/* === MODAL XÓA LỊCH === */}
+      {deleteModalState.isOpen && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-sm" onClick={() => setDeleteModalState({ isOpen: false, type: "SINGLE" })}>
+          <div className="bg-white w-[95%] max-w-md rounded-2xl shadow-xl border border-slate-200 p-5" onClick={(e) => e.stopPropagation()}>
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-lg font-extrabold text-slate-800">
+                {deleteModalState.type === "BULK" ? `Xóa ${selectedIds.size} ca học` : "Xóa ca học"}
+              </h2>
+              <button
+                onClick={() => setDeleteModalState({ isOpen: false, type: "SINGLE" })}
+                className="p-1.5 bg-slate-100 hover:bg-slate-200 rounded-full text-slate-600 transition-colors"
+              >
+                <XSquare size={18} />
+              </button>
+            </div>
+            
+            <p className="text-sm text-slate-600 mb-6 leading-relaxed">
+              Bạn có muốn xóa thêm các ca học lặp lại tiếp theo của cùng lớp học và giáo viên này không?
+            </p>
+
+            <div className="flex flex-col gap-3">
+              <button
+                disabled={isDeleting}
+                onClick={() => executeDelete("SINGLE")}
+                className="w-full flex flex-col items-center justify-center gap-1 py-3 px-4 rounded-xl border-2 border-slate-200 hover:border-blue-500 hover:bg-blue-50 transition-colors text-slate-700 hover:text-blue-700 font-bold disabled:opacity-50 relative"
+              >
+                <span>Chỉ xóa {deleteModalState.type === "BULK" ? "các ca đã chọn" : "ca này"}</span>
+                <span className="text-xs font-normal opacity-80">Không ảnh hưởng đến lịch trong tương lai</span>
+                {isDeleting && <Loader2 size={16} className="animate-spin absolute right-4" />}
+              </button>
+              
+              <button
+                disabled={isDeleting}
+                onClick={() => executeDelete("FOLLOWING")}
+                className="w-full flex flex-col items-center justify-center gap-1 py-3 px-4 rounded-xl border-2 border-slate-200 hover:border-rose-500 hover:bg-rose-50 transition-colors text-slate-700 hover:text-rose-700 font-bold disabled:opacity-50 relative"
+              >
+                <span>Xóa {deleteModalState.type === "BULK" ? "các ca này" : "ca này"} và các ca tiếp theo</span>
+                <span className="text-xs font-normal opacity-80">Xóa vĩnh viễn chuỗi lịch này về sau</span>
+                {isDeleting && <Loader2 size={16} className="animate-spin absolute right-4" />}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

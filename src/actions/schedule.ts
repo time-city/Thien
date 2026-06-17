@@ -175,6 +175,8 @@ export async function deleteSchedule(
 
   if (mode === "SINGLE") {
     await prisma.classSession.delete({ where: { id: sessionId } });
+    revalidatePath("/schedule");
+    revalidatePath("/admin/schedule");
     revalidatePath("/schedule/me");
     return { success: true };
   }
@@ -213,12 +215,16 @@ export async function deleteSchedule(
     .map((s) => s.id);
 
   if (toDeleteIds.length === 0) {
+    revalidatePath("/schedule");
+    revalidatePath("/admin/schedule");
     revalidatePath("/schedule/me");
     return { success: true };
   }
 
   // Delete many
   await prisma.classSession.deleteMany({ where: { id: { in: toDeleteIds } } });
+  revalidatePath("/schedule");
+  revalidatePath("/admin/schedule");
   revalidatePath("/schedule/me");
 
   return { success: true };
@@ -261,19 +267,64 @@ export async function getOccupiedPatterns(startDate: string, endDate: string, te
 
 // xoá nhiều lịch cùng lúc (dành cho SUPER_ADMIN)
 
-export async function deleteBulkSchedules(sessionIds: string[]) {
+export async function deleteBulkSchedules(sessionIds: string[], mode: "SINGLE" | "FOLLOWING" = "SINGLE") {
   if (!sessionIds || sessionIds.length === 0) {
     return { success: false, error: "Không có lịch nào được chọn" };
   }
 
   try {
-    await prisma.classSession.deleteMany({
-      where: {
-        id: { in: sessionIds },
-      },
-    });
+    if (mode === "SINGLE") {
+      await prisma.classSession.deleteMany({
+        where: {
+          id: { in: sessionIds },
+        },
+      });
+    } else {
+      // FOLLOWING mode cho bulk
+      const targets = await prisma.classSession.findMany({
+        where: { id: { in: sessionIds } },
+        select: { id: true, classId: true, teacherId: true, slot: true, date: true },
+      });
 
-    revalidatePath("/schedule"); // Hoặc đường dẫn trang lịch của ông
+      let allIdsToDelete = new Set<string>();
+
+      for (const target of targets) {
+        const targetDate = target.date;
+        const targetDow = (() => {
+          const js = targetDate.getDay();
+          return js === 0 ? 7 : js;
+        })();
+
+        const candidates = await prisma.classSession.findMany({
+          where: {
+            classId: target.classId,
+            teacherId: target.teacherId,
+            slot: target.slot,
+            date: { gte: targetDate },
+          },
+          select: { id: true, date: true },
+        });
+
+        for (const s of candidates) {
+          const js = s.date.getDay();
+          const dow = js === 0 ? 7 : js;
+          if (dow === targetDow) {
+            allIdsToDelete.add(s.id);
+          }
+        }
+      }
+
+      const toDeleteArray = Array.from(allIdsToDelete);
+      if (toDeleteArray.length > 0) {
+        await prisma.classSession.deleteMany({
+          where: { id: { in: toDeleteArray } },
+        });
+      }
+    }
+
+    revalidatePath("/schedule");
+    revalidatePath("/admin/schedule");
+    revalidatePath("/schedule/me");
     return { success: true };
   } catch (error) {
     console.error("Lỗi khi xóa lịch hàng loạt:", error);

@@ -23,6 +23,10 @@ const localizer = dateFnsLocalizer({
   locales: { vi },
 });
 
+const formats = {
+  dayFormat: (date: Date) => format(date, "dd/MM", { locale: vi }),
+};
+
 export default function TeacherBookingCalendar({
   rooms,
   classes,
@@ -282,14 +286,16 @@ export default function TeacherBookingCalendar({
           </div>
         ) : (
           <div className="flex-1 p-2 min-h-0 relative">
-            <div className="w-full h-full border border-slate-200 rounded-xl overflow-hidden rbc-custom-scroll-wrapper">
-              <Calendar
+            <div className="w-full h-full border border-slate-200 rounded-xl overflow-x-auto overflow-y-hidden rbc-custom-scroll-wrapper">
+              <div className="h-full min-w-[700px] md:min-w-full">
+                <Calendar
                 localizer={localizer}
                 events={events}
                 startAccessor="start"
                 endAccessor="end"
                 defaultView="week"
                 culture="vi"
+                formats={formats}
                 date={currentDate}
                 onNavigate={(date) => setCurrentDate(date)}
                 selectable
@@ -308,9 +314,9 @@ export default function TeacherBookingCalendar({
                     const isMine = s.teacherId === teacherId;
 
                     return (
-                      <div className="w-full h-full flex flex-col relative group pr-5 select-none">
-                        <div className="font-semibold truncate">{isMine ? s.className : "Đã có người đặt"}</div>
-                        <div className="text-[9px] opacity-90 truncate">{isMine ? "Lớp của bạn" : "Không thể thao tác"}</div>
+                      <div className="w-full h-full flex flex-col relative group pr-4 select-none break-words text-left">
+                        <div className="font-semibold leading-tight text-[11px]">{isMine ? s.className : "Đã có người đặt"}</div>
+                        <div className="text-[9px] opacity-80 leading-normal mt-0.5">{isMine ? "Lớp của bạn" : "Không thể thao tác"}</div>
 
                         {/* Hiện icon Dấu X để xin huỷ ca học CỦA MÌNH */}
                         {isMine && s.status !== "CANCELLED" && s.status !== "REJECTED" && !s.isCancelRequested && (
@@ -342,8 +348,8 @@ export default function TeacherBookingCalendar({
                       style: {
                         backgroundColor: '#f1f5f9', color: '#64748b',
                         borderRadius: '4px', border: `1px solid #e2e8f0`, borderLeft: `3px solid #94a3b8`,
-                        width: '96%', marginLeft: '2px', padding: '2px 4px', fontSize: '11px',
-                        fontWeight: '500', lineHeight: '1.1', overflow: 'hidden', whiteSpace: 'nowrap', cursor: 'not-allowed'
+                        width: '96%', marginLeft: '2px', padding: '4px 6px', fontSize: '11px',
+                        fontWeight: '500', lineHeight: '1.2', overflow: 'hidden', whiteSpace: 'normal', cursor: 'not-allowed'
                       }
                     };
                   }
@@ -362,14 +368,15 @@ export default function TeacherBookingCalendar({
                       backgroundColor, color: textColor, opacity,
                       borderRadius: '4px', border: `1px solid ${borderColor}`, borderLeft: `3px solid ${borderColor}`,
                       boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.03)',
-                      width: '96%', marginLeft: '2px', padding: '2px 4px',
-                      fontSize: '11px', fontWeight: '500', lineHeight: '1.1',
-                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                      width: '96%', marginLeft: '2px', padding: '4px 6px',
+                      fontSize: '11px', fontWeight: '500', lineHeight: '1.2',
+                      overflow: 'hidden', whiteSpace: 'normal',
                       cursor: 'pointer',
                     },
                   };
                 }}
               />
+              </div>
             </div>
           </div>
         )}

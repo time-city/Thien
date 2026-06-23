@@ -56,6 +56,10 @@ const localizer = dateFnsLocalizer({
   locales: { vi },
 });
 
+const formats = {
+  dayFormat: (date: Date) => format(date, "dd/MM", { locale: vi }),
+};
+
 export default function WeeklyCalendar({
   userRole,
   sessions,
@@ -259,8 +263,9 @@ export default function WeeklyCalendar({
 
         {/* LƯỚI LỊCH */}
         <div className="flex-1 p-2 min-h-0 relative">
-          <div className="w-full h-full border border-slate-200 rounded-xl overflow-hidden rbc-no-scroll-wrapper">
-            <DnDCalendar
+          <div className="w-full h-full border border-slate-200 rounded-xl overflow-x-auto overflow-y-hidden rbc-no-scroll-wrapper">
+            <div className="h-full min-w-[700px] md:min-w-full">
+              <DnDCalendar
               localizer={localizer}
               events={events}
               startAccessor={(event: CalendarEvent) => event.start as Date}
@@ -270,6 +275,7 @@ export default function WeeklyCalendar({
               onSelectEvent={handleSelectEvent}
               min={new Date(2026, 1, 1, 0, 0, 0)} max={new Date(2026, 1, 1, 23, 59, 59)}
               views={['week']} step={30} toolbar={false}
+              formats={formats}
 
               // Cho phép kéo dời giờ ca học cũ
               resizable={isAdmin}
@@ -285,9 +291,9 @@ export default function WeeklyCalendar({
                 event: ({ event }: any) => {
                   const s = event.resource as ScheduleSession;
                   return (
-                    <div className="w-full h-full flex flex-col relative group pr-5 select-none">
-                      <div className="font-semibold truncate">{s.className}</div>
-                      <div className="text-[9px] opacity-90 truncate">{s.teacherFullName}</div>
+                    <div className="w-full h-full flex flex-col relative group pr-4 select-none break-words text-left">
+                      <div className="font-semibold leading-tight text-[11px]">{s.className}</div>
+                      <div className="text-[9px] opacity-80 leading-normal mt-0.5">{s.teacherFullName}</div>
                       {isAdmin && (
                         <button onClick={(e) => { e.stopPropagation(); setDeleteModalState({ isOpen: true, type: "SINGLE", sessionId: s.id }); }} className="absolute top-0 right-0 p-[3px] text-white/70 hover:text-white bg-black/10 hover:bg-red-500 rounded opacity-0 group-hover:opacity-100 transition-all z-10" title="Xóa ca học này">
                           <Trash2 size={13} />
@@ -303,9 +309,10 @@ export default function WeeklyCalendar({
                 let backgroundColor = '#eff6ff'; let borderColor = '#3b82f6'; let textColor = '#1e3a8a';
                 if (s.status === 'PENDING') { backgroundColor = '#fffbeb'; borderColor = '#f59e0b'; textColor = '#78350f'; }
                 else if (s.status === 'COMPLETED' || s.isAttendanceSubmitted) { backgroundColor = '#f8fafc'; borderColor = '#94a3b8'; textColor = '#334155'; }
-                return { style: { backgroundColor, color: textColor, opacity: s.pending ? 0.6 : 1, borderRadius: '4px', border: `1px solid ${borderColor}`, borderLeft: `3px solid ${borderColor}`, boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.03)', width: '96%', marginLeft: '2px', padding: '2px 4px', fontSize: '11px', fontWeight: '500', lineHeight: '1.1', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: 'pointer' } };
+                return { style: { backgroundColor, color: textColor, opacity: s.pending ? 0.6 : 1, borderRadius: '4px', border: `1px solid ${borderColor}`, borderLeft: `3px solid ${borderColor}`, boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.03)', width: '96%', marginLeft: '2px', padding: '4px 6px', fontSize: '11px', fontWeight: '500', lineHeight: '1.2', overflow: 'hidden', whiteSpace: 'normal', cursor: 'pointer' } };
               }}
             />
+            </div>
           </div>
         </div>
       </div>

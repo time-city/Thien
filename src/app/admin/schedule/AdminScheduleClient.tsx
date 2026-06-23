@@ -25,6 +25,10 @@ const localizer = dateFnsLocalizer({
   locales,
 })
 
+const formats = {
+  dayFormat: (date: Date) => format(date, "dd/MM", { locale: vi }),
+};
+
 export default function AdminScheduleClient({
   rooms,
   initialSchedule,
@@ -238,6 +242,7 @@ export default function AdminScheduleClient({
             endAccessor="end"
             defaultView="week"
             culture="vi"
+            formats={formats}
             min={new Date(2026, 1, 1, 6, 0, 0)}
             max={new Date(2026, 1, 1, 23, 0, 0)}
             onSelectEvent={(event) => {

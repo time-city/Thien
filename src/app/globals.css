@@ -113,9 +113,8 @@
 
   .rbc-no-scroll-wrapper .rbc-event-content {
     font-size: 9px !important;
-    white-space: nowrap;
+    white-space: normal !important;
     overflow: hidden;
-    text-overflow: ellipsis;
   }
 }
 

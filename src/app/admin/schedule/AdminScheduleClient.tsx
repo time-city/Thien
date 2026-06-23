@@ -2,43 +2,28 @@
 
 import { useState, useMemo, useTransition, useOptimistic } from "react";
 import { useRouter } from "next/navigation";
-import { format, addDays, startOfWeek, isSameDay, addWeeks } from "date-fns";
+import { format, addDays, startOfWeek, isSameDay, addWeeks, parse, getDay } from "date-fns";
+import { vi } from "date-fns/locale";
 import { ChevronLeft, ChevronRight, CheckCircle, XCircle, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { approveSessionRequest, rejectSessionRequest, approveCancelSession, rejectCancelSession } from "@/actions/mutations";
 import type { RoomData, ScheduleItemData as BaseScheduleItemData } from "@/actions/queries";
+import { Calendar, dateFnsLocalizer, Event as CalendarEvent } from "react-big-calendar";
+import "react-big-calendar/lib/css/react-big-calendar.css";
+
 export type ScheduleItemData = BaseScheduleItemData & { pending?: boolean };
 
-const SHIFTS = [
-  { id: 1, label: "Ca 1", time: "07:30 - 09:00" },
-  { id: 2, label: "Ca 2", time: "09:30 - 11:00" },
-  { id: 3, label: "Ca 3", time: "13:30 - 15:00" },
-  { id: 4, label: "Ca 4", time: "15:30 - 17:00" },
-  { id: 5, label: "Ca 5", time: "17:30 - 19:00" },
-  { id: 6, label: "Ca 6", time: "19:30 - 21:00" },
-] as const;
-
-const DAYS = [
-  { id: 1, label: "Thứ 2" },
-  { id: 2, label: "Thứ 3" },
-  { id: 3, label: "Thứ 4" },
-  { id: 4, label: "Thứ 5" },
-  { id: 5, label: "Thứ 6" },
-  { id: 6, label: "Thứ 7" },
-  { id: 7, label: "Chủ Nhật" },
-] as const;
-
-function toISODate(d: Date): string {
-  const yyyy = d.getFullYear();
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const dd = String(d.getDate()).padStart(2, "0");
-  return `${yyyy}-${mm}-${dd}`;
+const locales = {
+  'vi': vi,
 }
 
-function dayOfWeekMon1Sun7(date: Date): number {
-  const js = date.getDay();
-  return js === 0 ? 7 : js;
-}
+const localizer = dateFnsLocalizer({
+  format,
+  parse,
+  startOfWeek: () => startOfWeek(new Date(), { weekStartsOn: 1 }),
+  getDay,
+  locales,
+})
 
 export default function AdminScheduleClient({
   rooms,
@@ -71,10 +56,6 @@ export default function AdminScheduleClient({
 
   const [currentDate, setCurrentDate] = useState<Date>(() => new Date());
   const [selectedSession, setSelectedSession] = useState<ScheduleItemData | null>(null);
-  
-  const { startOfThisWeek } = useMemo(() => {
-    return { startOfThisWeek: startOfWeek(currentDate, { weekStartsOn: 1 }) };
-  }, [currentDate]);
 
   const [isPending, startTransition] = useTransition();
 
@@ -169,6 +150,16 @@ export default function AdminScheduleClient({
     });
   };
 
+  const events: CalendarEvent[] = optimisticSchedule
+    .filter(s => s.status !== "REJECTED" && s.status !== "CANCELLED")
+    .map(s => ({
+      id: s.id,
+      title: `${s.className} (${s.teacherName})`,
+      start: new Date(s.startTime),
+      end: new Date(s.endTime),
+      resource: s,
+    }));
+
   return (
     <div className="max-w-7xl mx-auto p-4 md:p-8">
       <div className="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -219,7 +210,7 @@ export default function AdminScheduleClient({
                       <strong>Phòng:</strong> {rooms.find(r => r.id === s.roomId)?.name || "Chưa rõ"}
                     </div>
                     <div className="text-sm text-slate-600">
-                      <strong>Thời gian:</strong> {format(new Date(s.date), "dd/MM/yyyy")} - Ca {s.slot} ({SHIFTS.find(shift => shift.id === s.slot)?.time})
+                      <strong>Thời gian:</strong> {format(new Date(s.startTime), "dd/MM/yyyy HH:mm")} - {format(new Date(s.endTime), "HH:mm")}
                     </div>
                     {isCancel && s.cancelReason && (
                       <div className="text-sm bg-rose-50/50 p-2 rounded-lg text-rose-800 italic mt-1">
@@ -239,134 +230,30 @@ export default function AdminScheduleClient({
           )}
         </div>
       ) : (
-        <div className="w-full overflow-x-auto border border-slate-200 rounded-xl bg-white shadow-sm scrollbar-thin scrollbar-thumb-slate-300 scrollbar-track-slate-100">
-          <div className="min-w-[900px]">
-            {/* Toolbar */}
-            <div className="p-3 border-b border-slate-200 flex justify-between items-center bg-slate-50/50">
-              <div className="font-bold text-slate-700">
-                Tuần: {format(startOfThisWeek, "dd/MM")} - {format(addDays(startOfThisWeek, 6), "dd/MM/yyyy")}
-              </div>
-              <div className="flex items-center gap-1 bg-white border border-slate-200 rounded-lg p-1 shadow-sm">
-                <button
-                  onClick={() => setCurrentDate((d) => addWeeks(d, -1))}
-                  className="p-1.5 rounded hover:bg-slate-100 text-slate-600 transition-colors"
-                >
-                  <ChevronLeft size={18} />
-                </button>
-                <button
-                  onClick={() => setCurrentDate(new Date())}
-                  className="px-3 py-1 text-[13px] font-bold text-slate-700 hover:bg-slate-50 transition-colors"
-                >
-                  Hôm nay
-                </button>
-                <button
-                  onClick={() => setCurrentDate((d) => addWeeks(d, 1))}
-                  className="p-1.5 rounded hover:bg-slate-100 text-slate-600 transition-colors"
-                >
-                  <ChevronRight size={18} />
-                </button>
-              </div>
-            </div>
-
-            {/* Header Days */}
-            <div className="grid grid-cols-[80px_repeat(7,1fr)] bg-slate-50 border-b border-slate-200">
-              <div className="p-2 border-r border-slate-200 flex items-center justify-center font-bold text-slate-500 text-[12px] uppercase tracking-wider">
-                Ca học
-              </div>
-              {DAYS.map((d) => {
-                const dateForCol = addDays(startOfThisWeek, d.id - 1);
-                const isToday = isSameDay(dateForCol, new Date());
-                return (
-                  <div
-                    key={d.id}
-                    className={`p-2 border-r border-slate-200 last:border-r-0 text-center flex flex-col justify-center items-center ${
-                      isToday ? "bg-blue-50/50" : ""
-                    }`}
-                  >
-                    <div className={`font-extrabold text-[13px] ${isToday ? "text-blue-700" : "text-slate-900"}`}>
-                      {d.label}
-                    </div>
-                    <div className={`text-[11px] font-semibold ${isToday ? "text-blue-500" : "text-slate-500"}`}>
-                      {format(dateForCol, "dd/MM")}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* Slots */}
-            <div>
-              {SHIFTS.map((shift) => (
-                <div key={shift.id} className="grid grid-cols-[80px_repeat(7,1fr)] border-b border-slate-200 last:border-b-0">
-                  <div className="p-2 border-r border-slate-200 bg-slate-50/30 flex flex-col justify-center items-center gap-0.5">
-                    <span className="font-bold text-slate-800 text-[13px]">{shift.label}</span>
-                    <span className="text-[11px] text-slate-500 font-medium">{shift.time}</span>
-                  </div>
-
-                  {DAYS.map((day) => {
-                    const dateForCell = addDays(startOfThisWeek, day.id - 1);
-                    const dateISO = toISODate(dateForCell);
-                    const isToday = isSameDay(dateForCell, new Date());
-
-                    const cellSessions = optimisticSchedule.filter((s) => {
-                      if (s.status === "REJECTED" || s.status === "CANCELLED") return false;
-                      return toISODate(s.date) === dateISO && dayOfWeekMon1Sun7(s.date) === day.id && s.slot === shift.id;
-                    });
-
-                    return (
-                      <div
-                        key={day.id}
-                        className={`p-1.5 border-r border-slate-100 last:border-r-0 min-h-[80px] ${
-                          isToday ? "bg-blue-50/20" : ""
-                        }`}
-                      >
-                        {cellSessions.length === 0 ? (
-                          <div className="h-full min-h-[60px] rounded border border-transparent" />
-                        ) : (
-                          <div className="flex flex-col gap-1.5 h-full">
-                            {cellSessions.map((ev) => {
-                              const isPending = ev.status === "PENDING";
-                              const isCompleted = ev.status === "COMPLETED" || ev.isAttendanceSubmitted;
-
-                              const bgClass = isPending 
-                                ? "bg-amber-100 border-amber-300 text-amber-900 hover:scale-[1.02] cursor-pointer"
-                                : isCompleted 
-                                ? "bg-slate-100 border-slate-200 text-slate-500 cursor-default opacity-80"
-                                : "bg-white border-slate-200 text-slate-700 cursor-default";
-
-                              return (
-                                <button
-                                  key={ev.id}
-                                  onClick={() => isPending && setSelectedSession(ev)}
-                                  className={`p-2 w-full text-left rounded-lg border text-[11px] leading-snug shadow-sm flex flex-col gap-1 transition-all ${bgClass} ${ev.pending ? "opacity-50 pointer-events-none" : ""}`}
-                                  disabled={ev.pending}
-                                >
-                                  <div className="font-extrabold line-clamp-1 flex items-center justify-between">
-                                    {ev.className}
-                                    {ev.pending && <Loader2 size={12} className="animate-spin text-slate-500" />}
-                                  </div>
-                                  <div className="font-medium opacity-80 line-clamp-1">{ev.teacherName}</div>
-                                  <div className="text-[10px] font-bold mt-1">
-                                    {isPending ? (
-                                      <span className="text-amber-600">Chờ duyệt</span>
-                                    ) : isCompleted ? (
-                                      <span className="text-slate-500">Đã xong</span>
-                                    ) : (
-                                      <span className="text-green-600">Đã duyệt</span>
-                                    )}
-                                  </div>
-                                </button>
-                              );
-                            })}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              ))}
-            </div>
-          </div>
+        <div className="w-full h-[80vh] border border-slate-200 rounded-xl bg-white shadow-sm p-4">
+          <Calendar
+            localizer={localizer}
+            events={events}
+            startAccessor="start"
+            endAccessor="end"
+            defaultView="week"
+            culture="vi"
+            min={new Date(2026, 1, 1, 6, 0, 0)}
+            max={new Date(2026, 1, 1, 23, 0, 0)}
+            onSelectEvent={(event) => {
+              const s = event.resource as ScheduleItemData;
+              setSelectedSession(s);
+            }}
+            eventPropGetter={(event) => {
+              const s = event.resource as ScheduleItemData;
+              let backgroundColor = '#3b82f6';
+              if (s.status === 'PENDING') backgroundColor = '#f59e0b';
+              else if (s.isCancelRequested) backgroundColor = '#ef4444';
+              else if (s.status === 'COMPLETED' || s.isAttendanceSubmitted) backgroundColor = '#94a3b8';
+              
+              return { style: { backgroundColor } };
+            }}
+          />
         </div>
       )}
 
@@ -392,13 +279,9 @@ export default function AdminScheduleClient({
                 <span className="text-slate-500">Lớp học:</span>
                 <span className="font-bold text-slate-900">{selectedSession.className}</span>
               </div>
-              <div className="flex justify-between border-b pb-2">
-                <span className="text-slate-500">Ngày:</span>
-                <span className="font-bold text-slate-900">{format(selectedSession.date, "dd/MM/yyyy")}</span>
-              </div>
               <div className="flex justify-between">
-                <span className="text-slate-500">Ca học:</span>
-                <span className="font-bold text-slate-900">Ca {selectedSession.slot} ({SHIFTS.find(s => s.id === selectedSession.slot)?.time})</span>
+                <span className="text-slate-500">Thời gian:</span>
+                <span className="font-bold text-slate-900">{format(new Date(selectedSession.startTime), "dd/MM/yyyy HH:mm")} - {format(new Date(selectedSession.endTime), "HH:mm")}</span>
               </div>
             </div>
 
@@ -416,18 +299,22 @@ export default function AdminScheduleClient({
               >
                 Đóng
               </button>
-              <button
-                onClick={selectedSession.isCancelRequested ? handleRejectCancel : handleReject}
-                className="flex-1 flex items-center justify-center gap-1.5 px-4 py-2 bg-rose-100 text-rose-700 font-bold rounded-xl hover:bg-rose-200 transition-colors"
-              >
-                <XCircle size={16} /> Từ chối {selectedSession.isCancelRequested && "Huỷ"}
-              </button>
-              <button
-                onClick={selectedSession.isCancelRequested ? handleApproveCancel : handleApprove}
-                className="flex-1 flex items-center justify-center gap-1.5 px-4 py-2 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 transition-colors"
-              >
-                <CheckCircle size={16} /> Đồng ý {selectedSession.isCancelRequested && "Huỷ"}
-              </button>
+              {(selectedSession.status === 'PENDING' || selectedSession.isCancelRequested) && (
+                <>
+                  <button
+                    onClick={selectedSession.isCancelRequested ? handleRejectCancel : handleReject}
+                    className="flex-1 flex items-center justify-center gap-1.5 px-4 py-2 bg-rose-100 text-rose-700 font-bold rounded-xl hover:bg-rose-200 transition-colors"
+                  >
+                    <XCircle size={16} /> Từ chối {selectedSession.isCancelRequested && "Huỷ"}
+                  </button>
+                  <button
+                    onClick={selectedSession.isCancelRequested ? handleApproveCancel : handleApprove}
+                    className="flex-1 flex items-center justify-center gap-1.5 px-4 py-2 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 transition-colors"
+                  >
+                    <CheckCircle size={16} /> Đồng ý {selectedSession.isCancelRequested && "Huỷ"}
+                  </button>
+                </>
+              )}
             </div>
           </div>
         </div>

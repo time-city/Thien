@@ -111,7 +111,6 @@ export default async function ClassRosterPage({
         className: sessionInfo.class?.name || "Lớp Tự Do",
         teacherName: sessionInfo.teacher.fullName,
         date: sessionInfo.date.toISOString(),
-        slot: sessionInfo.slot,
       }}
       students={mappedStudents}
       currentPage={currentPage}

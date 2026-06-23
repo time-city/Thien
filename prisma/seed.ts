@@ -50,8 +50,8 @@ async function main() {
   })
 
   // 2. TẠO PHÒNG HỌC & LỚP HỌC
-  const room1 = await prisma.room.create({ data: { name: 'Phòng 101', capacity: 20, feePerSession: 50000 } })
-  const room2 = await prisma.room.create({ data: { name: 'Phòng 202', capacity: 30, feePerSession: 80000 } })
+  const room1 = await prisma.room.create({ data: { name: 'Phòng 101', capacity: 20, feePerHour: 25000 } })
+  const room2 = await prisma.room.create({ data: { name: 'Phòng 202', capacity: 30, feePerHour: 40000 } })
 
   // Lớp Lương Cứng: Giáo viên được trả lương cứng mỗi buổi.
   const classToan = await prisma.class.create({
@@ -152,8 +152,11 @@ async function main() {
   }
 
   // 5. TẠO LỊCH HỌC VÀ ĐIỂM DANH (Cho một lớp để test)
+  const d1 = new Date();
+  const sTime1 = new Date(d1); sTime1.setHours(7, 30, 0, 0);
+  const eTime1 = new Date(d1); eTime1.setHours(9, 0, 0, 0);
   const session1 = await prisma.classSession.create({
-    data: { classId: classToan.id, teacherId: teacher1.id, roomId: room1.id, date: new Date(), slot: 1, status: 'COMPLETED', isPaid: false }
+    data: { classId: classToan.id, teacherId: teacher1.id, roomId: room1.id, date: d1, startTime: sTime1, endTime: eTime1, status: 'COMPLETED', isPaid: false }
   })
 
   // Đã thanh toán lương thử nghiệm
@@ -169,12 +172,18 @@ async function main() {
   }
 
   // TẠO CÁC BUỔI HỌC SCHEDULED ĐỂ USER TEST TÍNH NĂNG COMPLETED
+  const d2 = new Date(); d2.setDate(d2.getDate() + 1);
+  const sTime2 = new Date(d2); sTime2.setHours(9, 30, 0, 0);
+  const eTime2 = new Date(d2); eTime2.setHours(11, 0, 0, 0);
   await prisma.classSession.create({
-    data: { classId: classToan.id, teacherId: teacher1.id, roomId: room1.id, date: new Date(new Date().setDate(new Date().getDate() + 1)), slot: 2, status: 'SCHEDULED', isPaid: false }
+    data: { classId: classToan.id, teacherId: teacher1.id, roomId: room1.id, date: d2, startTime: sTime2, endTime: eTime2, status: 'SCHEDULED', isPaid: false }
   })
 
+  const d3 = new Date(); d3.setDate(d3.getDate() + 2);
+  const sTime3 = new Date(d3); sTime3.setHours(13, 30, 0, 0);
+  const eTime3 = new Date(d3); eTime3.setHours(15, 0, 0, 0);
   await prisma.classSession.create({
-    data: { classId: classIelts.id, teacherId: teacher2.id, roomId: room2.id, date: new Date(new Date().setDate(new Date().getDate() + 2)), slot: 3, status: 'SCHEDULED', isPaid: false }
+    data: { classId: classIelts.id, teacherId: teacher2.id, roomId: room2.id, date: d3, startTime: sTime3, endTime: eTime3, status: 'SCHEDULED', isPaid: false }
   })
 
   console.log('✅ Seeding thành công! Đã setup đầy đủ lớp Lương cứng, lớp Freelance, và ví giáo viên để test tính lương.')

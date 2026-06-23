@@ -307,7 +307,7 @@ export default function TeacherSettingsPage({
                   {teachingHistory.map((row) => (
                     <tr key={row.id} className="hover:bg-slate-50/70 transition-colors">
                       <td className="px-5 py-3 text-sm font-bold text-slate-700">{formatDateVn(row.date)}</td>
-                      <td className="px-5 py-3 text-sm font-medium text-slate-500">Ca {row.slot}</td>
+                    <td className="px-5 py-3 text-sm font-medium text-slate-500">{row.startTime ? `${formatDateVn(row.startTime)} ` : ""}{row.endTime ? "" : ""}</td>
                       <td className="px-5 py-3 text-sm font-medium text-slate-600">{row.className}</td>
                       <td className="px-5 py-3 text-right">
                         {row.status === "completed" ? (

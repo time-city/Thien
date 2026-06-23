@@ -1,5 +1,6 @@
-import { getRooms, getSchedule } from "@/actions/queries";
+import { getRooms, getSchedule, getAllClasses, getAllUsers } from "@/actions/queries";
 import AdminScheduleClient from "./AdminScheduleClient";
+import WeeklyCalendar from "@/components/schedule/WeeklyCalendar";
 
 export default async function AdminSchedulePage({
   searchParams,
@@ -8,16 +9,50 @@ export default async function AdminSchedulePage({
 }) {
   const { roomId } = await searchParams;
 
-  const [rooms, schedule] = await Promise.all([
+  if (!roomId) {
+    const [rooms, schedule] = await Promise.all([
+      getRooms(),
+      getSchedule(roomId)
+    ]);
+
+    return (
+      <AdminScheduleClient 
+        rooms={rooms} 
+        initialSchedule={schedule} 
+        selectedRoomId="" 
+      />
+    );
+  }
+
+  const [rooms, schedule, classes, teachers] = await Promise.all([
     getRooms(),
-    getSchedule(roomId)
+    getSchedule(roomId),
+    getAllClasses(),
+    getAllUsers()
   ]);
 
   return (
-    <AdminScheduleClient 
-      rooms={rooms} 
-      initialSchedule={schedule} 
-      selectedRoomId={roomId || ""} 
+    <WeeklyCalendar
+      userRole="SUPER_ADMIN"
+      sessions={schedule.map((s) => ({
+        id: s.id,
+        classId: s.classId,
+        className: s.className,
+        teacherId: s.teacherId,
+        teacherFullName: s.teacherName,
+        roomId: s.roomId,
+        roomName: s.roomName,
+        date: s.date,
+        startTime: s.startTime,
+        endTime: s.endTime,
+        status: s.status,
+        isAttendanceSubmitted: s.isAttendanceSubmitted,
+      }))}
+      rooms={rooms}
+      classes={classes}
+      teachers={teachers}
+      selectedRoomId={roomId}
     />
   );
 }
+

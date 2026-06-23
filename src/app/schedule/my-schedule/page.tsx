@@ -38,9 +38,11 @@ export default async function MySchedulePage() {
           teacherFullName: s.teacherName,
           roomName: s.roomName,
           date: s.date,
-          slot: s.slot,
+          startTime: s.startTime,
+          endTime: s.endTime,
           status: s.status,
           isAttendanceSubmitted: s.isAttendanceSubmitted,
+          roomId: s.roomId,
         }))}
       />
     </div>

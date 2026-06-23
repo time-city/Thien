@@ -29,7 +29,8 @@ export type RentalLogData = {
   classSessionId: string | null;
   className: string | null;
   date: Date;
-  slot: number;
+  startTime: Date;
+  endTime: Date;
   status: RentalStatus;
   feeCalculated: number;
 };
@@ -189,7 +190,7 @@ export type RoomData = {
   id: string;
   name: string;
   capacity: number | null;
-  feePerSession: number;
+  feePerHour: number;
   isActive: boolean;
   sessionCount: number;
 };
@@ -229,7 +230,7 @@ export async function getRooms(): Promise<RoomData[]> {
     id: room.id,
     name: room.name,
     capacity: room.capacity,
-    feePerSession: room.feePerSession,
+    feePerHour: room.feePerHour,
     isActive: room.isActive,
     sessionCount: room._count.sessions,
   }));
@@ -484,7 +485,8 @@ export type ScheduleItemData = {
   roomId: string | null;
   roomName: string | null;
   date: Date;
-  slot: number;
+  startTime: Date;
+  endTime: Date;
   status: string;
   isAttendanceSubmitted: boolean;
   isCancelRequested?: boolean;
@@ -499,7 +501,7 @@ export async function getSchedule(roomId?: string, teacherId?: string, status?: 
       ...(status ? { status: status as SessionStatus } : { status: { not: "CANCELLED" } }),
     },
     include: { class: true, teacher: true, room: true },
-    orderBy: [{ date: "asc" }, { slot: "asc" }]
+    orderBy: [{ date: "asc" }, { startTime: "asc" }]
   });
 
   return sessions.map(s => ({
@@ -511,7 +513,8 @@ export async function getSchedule(roomId?: string, teacherId?: string, status?: 
     roomId: s.roomId,
     roomName: s.room?.name ?? null,
     date: s.date,
-    slot: s.slot,
+    startTime: s.startTime,
+    endTime: s.endTime,
     status: s.status,
     isAttendanceSubmitted: s.isAttendanceSubmitted,
     isCancelRequested: s.isCancelRequested,
@@ -526,7 +529,8 @@ export type TeacherBookingHistoryItem = {
   roomId: string | null;
   roomName: string | null;
   date: Date;
-  slot: number;
+  startTime: Date;
+  endTime: Date;
   status: string;
   createdAt?: Date;
   roomFee: number;
@@ -538,7 +542,7 @@ export async function getTeacherBookingHistory(teacherId: string): Promise<Teach
   const sessions = await prisma.classSession.findMany({
     where: { teacherId },
     include: { class: true, room: true },
-    orderBy: [{ date: "desc" }, { slot: "desc" }] // Sort newest first
+    orderBy: [{ date: "desc" }, { startTime: "desc" }] // Sort newest first
   });
 
   return sessions.map(s => ({
@@ -548,9 +552,10 @@ export async function getTeacherBookingHistory(teacherId: string): Promise<Teach
     roomId: s.roomId,
     roomName: s.room?.name ?? null,
     date: s.date,
-    slot: s.slot,
+    startTime: s.startTime,
+    endTime: s.endTime,
     status: s.status,
-    roomFee: s.room?.feePerSession ?? 0,
+    roomFee: s.room?.feePerHour ?? 0,
     isCancelRequested: s.isCancelRequested,
     isAttendanceSubmitted: s.isAttendanceSubmitted,
   }));
@@ -566,7 +571,7 @@ export async function getCompletedSessions(): Promise<ScheduleItemData[]> {
       ]
     },
     include: { class: true, teacher: true, room: true },
-    orderBy: [{ date: "asc" }, { slot: "asc" }]
+    orderBy: [{ date: "asc" }, { startTime: "asc" }]
   });
 
   return sessions.map(s => ({
@@ -578,7 +583,8 @@ export async function getCompletedSessions(): Promise<ScheduleItemData[]> {
     roomId: s.roomId,
     roomName: s.room?.name ?? null,
     date: s.date,
-    slot: s.slot,
+    startTime: s.startTime,
+    endTime: s.endTime,
     status: s.status,
     isAttendanceSubmitted: s.isAttendanceSubmitted,
     isCancelRequested: s.isCancelRequested,
@@ -624,7 +630,8 @@ export async function getRentalLogs(): Promise<RentalLogData[]> {
     classSessionId: log.classSessionId,
     className: log.classSession.class?.name || "Lớp Tự Do (Thuê phòng)",
     date: log.classSession.date,
-    slot: log.classSession.slot,
+    startTime: log.classSession.startTime,
+    endTime: log.classSession.endTime,
     feeCalculated: log.feeCalculated,
     status: log.status,
   }));
@@ -653,7 +660,8 @@ export type TeacherInfo = {
 export type TeachingHistory = {
   id: string;
   date: Date;
-  slot: number;
+  startTime: Date;
+  endTime: Date;
   className: string;
   status: "completed" | "scheduled";
   isCancelRequested?: boolean;
@@ -692,7 +700,8 @@ export async function getTeacherSettingsInfo(teacherId: string) {
   const teachingHistory: TeachingHistory[] = sessions.map((s) => ({
     id: s.id,
     date: s.date,
-    slot: s.slot,
+    startTime: s.startTime,
+    endTime: s.endTime,
     className: s.class?.name || "Lớp Tự Do (Thuê phòng)",
     status: s.status === "COMPLETED" ? "completed" : "scheduled",
     isCancelRequested: s.isCancelRequested,

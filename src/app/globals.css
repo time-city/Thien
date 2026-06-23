@@ -5,3 +5,281 @@
     @apply bg-slate-50 text-slate-800 antialiased;
   }
 }
+
+/* ==========================================================================
+   HOÀN TOÀN CHỐN SCROLL - FIT 1 MÀN HÌNH - RESPONSIVE DI ĐỘNG
+   ========================================================================== */
+
+/* Ép bộ lịch chạy dạng Flexbox để điền đầy khung cha */
+.rbc-no-scroll-wrapper .rbc-calendar {
+  height: 100% !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+/* Khóa cứng khung View, chặn thanh scroll dọc xuất hiện */
+.rbc-no-scroll-wrapper .rbc-time-view {
+  border: none !important;
+  flex: 1 1 0% !important;
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
+}
+
+/* Triệt tiêu scroll nội bộ của cột giờ và cột nội dung */
+.rbc-no-scroll-wrapper .rbc-time-content {
+  flex: 1 1 0% !important;
+  overflow-y: hidden !important;
+  /* CHẶN SCROLL DỌC TUYỆT ĐỐI */
+  border-top: 1px solid #e2e8f0 !important;
+}
+
+/* Xóa bỏ min-height bắt buộc của các ô thời gian, ép chúng chia đều màn hình */
+.rbc-no-scroll-wrapper .rbc-timeslot-group {
+  min-height: 0 !important;
+
+  /* LƯU Ý CHÍ MẠNG: Khung giờ của ông từ 7:00 đến 22:00 là tổng cộng 15 tiếng. 
+     Nên chia 15 để lưới khớp 100% với sự kiện. Nếu sau này đổi giờ, nhớ đổi số 15 này */
+  height: calc(100% / 15) !important;
+
+  display: block !important;
+  /* Hủy flexbox để không bị bóp méo */
+  border-bottom: 1px solid #f1f5f9 !important;
+  box-sizing: border-box !important;
+}
+
+/* Đường nét đứt chia 30 phút ở giữa */
+.rbc-no-scroll-wrapper .rbc-time-slot {
+  height: 50% !important;
+  display: block !important;
+  border-top: 1px dashed #e2e8f0 !important;
+  /* Đổi màu nét đứt cho rõ hơn 1 xíu */
+  box-sizing: border-box !important;
+}
+
+.rbc-no-scroll-wrapper .rbc-timeslot-group .rbc-time-slot:first-child {
+  border-top: none !important;
+}
+
+/* Định dạng nhãn hiển thị giờ bên trái */
+.rbc-no-scroll-wrapper .rbc-time-gutter .rbc-label {
+  display: block !important;
+  position: relative;
+  top: -6px;
+  /* Đẩy text nhích lên xíu cho ngay tâm vạch kẻ */
+  font-size: 10px !important;
+  color: #94a3b8 !important;
+  font-weight: 500;
+  padding-right: 8px !important;
+  text-align: right !important;
+  line-height: 1 !important;
+}
+
+/* Căn chỉnh lại Header (Thứ hai, thứ ba...) */
+.rbc-no-scroll-wrapper .rbc-header {
+  border-left: none !important;
+  border-bottom: none !important;
+  padding: 6px 0 !important;
+  font-weight: bold !important;
+  font-size: 11px !important;
+  color: #475569 !important;
+}
+
+.rbc-no-scroll-wrapper .rbc-header button {
+  font-weight: bold !important;
+}
+
+.rbc-no-scroll-wrapper .rbc-header.rbc-today {
+  color: #2563eb !important;
+  background-color: #f0f4ff !important;
+}
+
+/* Responsive cho thiết bị di động (Màn hình nhỏ hơn 768px) */
+@media (max-width: 768px) {
+
+  /* Thu hẹp cột chứa giờ bên trái để nhường chỗ cho lưới lịch */
+  .rbc-no-scroll-wrapper .rbc-time-header-gutter,
+  .rbc-no-scroll-wrapper .rbc-time-gutter {
+    width: 38px !important;
+    min-width: 38px !important;
+    max-width: 38px !important;
+  }
+
+  /* Thu nhỏ chữ hiển thị trên cục sự kiện tránh tràn khung */
+  .rbc-no-scroll-wrapper .rbc-event-label {
+    font-size: 9px !important;
+    font-weight: bold;
+  }
+
+  .rbc-no-scroll-wrapper .rbc-event-content {
+    font-size: 9px !important;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}
+
+/* Định dạng thanh hiển thị giờ hiện tại */
+.rbc-no-scroll-wrapper .rbc-current-time-indicator {
+  background-color: #ef4444 !important;
+  height: 1.5px !important;
+  z-index: 10;
+}
+
+/* ==========================================================================
+   GIAO DIỆN CALENDAR "CHUẨN GOOGLE" (TINH TẾ & CHỐNG SCROLL LỆCH)
+   ========================================================================== */
+
+/* 1. XÓA VIỀN THÔ NGOÀI CÙNG & BẬT SCROLL MƯỢT */
+.rbc-custom-scroll-wrapper .rbc-calendar {
+  height: 100% !important;
+  display: flex !important;
+  flex-direction: column !important;
+  border: none !important;
+}
+
+.rbc-custom-scroll-wrapper .rbc-time-view {
+  border: none !important;
+  flex: 1 1 0% !important;
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
+}
+
+.rbc-custom-scroll-wrapper .rbc-time-content {
+  flex: 1 1 0% !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  border-top: 1px solid #e2e8f0 !important;
+  /* slate-200 */
+}
+
+/* Custom Scrollbar siêu mỏng, sang chảnh */
+.rbc-custom-scroll-wrapper .rbc-time-content::-webkit-scrollbar {
+  width: 6px;
+}
+
+.rbc-custom-scroll-wrapper .rbc-time-content::-webkit-scrollbar-thumb {
+  background-color: #cbd5e1;
+  border-radius: 10px;
+}
+
+.rbc-custom-scroll-wrapper .rbc-time-content::-webkit-scrollbar-track {
+  background-color: transparent;
+}
+
+/* 2. ÉP TỶ LỆ 24 TIẾNG / 18 TIẾNG (Như cũ) */
+.rbc-custom-scroll-wrapper .rbc-time-column {
+  min-height: calc(100% * 24 / 18) !important;
+}
+
+/* 3. LÀM MỀM HÓA GRID LƯỚI & CANH CHỈNH TEXT GIỜ LÊN VẠCH KẺ */
+.rbc-custom-scroll-wrapper .rbc-timeslot-group {
+  min-height: 0 !important;
+  flex: 1 1 0% !important;
+  display: flex !important;
+  flex-direction: column !important;
+  border-bottom: 1px solid #e2e8f0 !important;
+  /* Vạch liền chia các tiếng */
+}
+
+.rbc-custom-scroll-wrapper .rbc-time-slot {
+  flex: 1 1 0% !important;
+  display: block !important;
+  border-top: 1px dashed #f1f5f9 !important;
+  /* Vạch đứt siêu mờ chia 30p */
+}
+
+/* Xóa vạch đứt ở dòng đầu tiên để không đè lên vạch liền */
+.rbc-custom-scroll-wrapper .rbc-timeslot-group .rbc-time-slot:first-child {
+  border-top: none !important;
+}
+
+/* VIỀN DỌC MỜ NHẠT CHIA CÁC NGÀY */
+.rbc-custom-scroll-wrapper .rbc-day-slot {
+  border-left: 1px solid #f1f5f9 !important;
+}
+
+/* CỘT CHỨA GIỜ: Kéo text lên ngang tâm vạch kẻ */
+.rbc-custom-scroll-wrapper .rbc-time-gutter .rbc-timeslot-group {
+  border-bottom: none !important;
+  /* Cột giờ không có viền ngang */
+}
+
+.rbc-custom-scroll-wrapper .rbc-time-gutter .rbc-label {
+  display: block !important;
+  position: relative !important;
+  top: -8px !important;
+  /* 🟢 ĐẨY TEXT LÊN NGAY TÂM VẠCH */
+  font-size: 10px !important;
+  color: #94a3b8 !important;
+  /* slate-400 */
+  font-weight: 500;
+  padding-right: 12px !important;
+  text-align: right !important;
+}
+
+/* 4. CĂN CHỈNH HEADER THẬT SẠCH SẼ */
+.rbc-custom-scroll-wrapper .rbc-time-header {
+  border-bottom: none !important;
+  /* Xóa viền kép */
+}
+
+.rbc-custom-scroll-wrapper .rbc-time-header-content {
+  border-left: 1px solid transparent !important;
+}
+
+.rbc-custom-scroll-wrapper .rbc-header {
+  border-left: none !important;
+  border-bottom: 1px solid transparent !important;
+  padding: 10px 0 !important;
+  font-weight: 600 !important;
+  font-size: 12px !important;
+  color: #64748b !important;
+}
+
+/* CỘT "TODAY" (HÔM NAY): Tone màu dịu mắt, liên mạch từ trên xuống */
+.rbc-custom-scroll-wrapper .rbc-header.rbc-today {
+  color: #2563eb !important;
+  background-color: transparent !important;
+  /* Để header today không bị cụt màu nền */
+}
+
+.rbc-custom-scroll-wrapper .rbc-day-bg.rbc-today {
+  background-color: #f8fafc !important;
+  /* Xanh xám slate-50 cực dịu */
+}
+
+/* THANH CHỈ GIỜ HIỆN TẠI (Đỏ) */
+.rbc-custom-scroll-wrapper .rbc-current-time-indicator {
+  background-color: #ef4444 !important;
+  height: 2px !important;
+  z-index: 10;
+}
+
+.rbc-custom-scroll-wrapper .rbc-current-time-indicator::before {
+  content: "";
+  position: absolute;
+  left: -4px;
+  top: -3px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: #ef4444;
+}
+
+/* TRỊ LỖI LỆCH KÍCH THƯỚC SỰ KIỆN */
+.rbc-custom-scroll-wrapper .rbc-event {
+  box-sizing: border-box !important;
+}
+
+/* Responsive mobile */
+@media (max-width: 768px) {
+
+  .rbc-custom-scroll-wrapper .rbc-time-header-gutter,
+  .rbc-custom-scroll-wrapper .rbc-time-gutter {
+    width: 42px !important;
+    min-width: 42px !important;
+    max-width: 42px !important;
+  }
+}

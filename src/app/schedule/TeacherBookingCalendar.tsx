@@ -1,44 +1,27 @@
 "use client";
 
-import { useState, useMemo, useTransition, useOptimistic } from "react";
+import { useState, useMemo, useTransition, useOptimistic, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { format, addDays, startOfWeek, isSameDay, addWeeks } from "date-fns";
-import { ChevronLeft, ChevronRight, XCircle, MapPin, CalendarPlus } from "lucide-react";
+import { format, startOfWeek, endOfWeek, isSameDay, addWeeks, subWeeks, parse, getDay } from "date-fns";
+import { vi } from "date-fns/locale";
+import { ChevronLeft, ChevronRight, XCircle, MapPin, CalendarPlus, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { requestRoomBooking, rejectSessionRequest, requestCancelSession } from "@/actions/mutations";
 import type { RoomData, ScheduleItemData as BaseScheduleItemData, ClassData } from "@/actions/queries";
+import { Calendar, dateFnsLocalizer, Event as CalendarEvent } from "react-big-calendar";
+
+// Import CSS y chang bên WeeklyCalendar
+import "react-big-calendar/lib/css/react-big-calendar.css";
+
 export type ScheduleItemData = BaseScheduleItemData & { pending?: boolean };
 
-const SHIFTS = [
-  { id: 1, label: "Ca 1", time: "07:30 - 09:00" },
-  { id: 2, label: "Ca 2", time: "09:30 - 11:00" },
-  { id: 3, label: "Ca 3", time: "13:30 - 15:00" },
-  { id: 4, label: "Ca 4", time: "15:30 - 17:00" },
-  { id: 5, label: "Ca 5", time: "17:30 - 19:00" },
-  { id: 6, label: "Ca 6", time: "19:30 - 21:00" },
-] as const;
-
-const DAYS = [
-  { id: 1, label: "Thứ 2" },
-  { id: 2, label: "Thứ 3" },
-  { id: 3, label: "Thứ 4" },
-  { id: 4, label: "Thứ 5" },
-  { id: 5, label: "Thứ 6" },
-  { id: 6, label: "Thứ 7" },
-  { id: 7, label: "Chủ Nhật" },
-] as const;
-
-function toISODate(d: Date): string {
-  const yyyy = d.getFullYear();
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const dd = String(d.getDate()).padStart(2, "0");
-  return `${yyyy}-${mm}-${dd}`;
-}
-
-function dayOfWeekMon1Sun7(date: Date): number {
-  const js = date.getDay();
-  return js === 0 ? 7 : js;
-}
+const localizer = dateFnsLocalizer({
+  format,
+  parse,
+  startOfWeek: () => startOfWeek(new Date(), { weekStartsOn: 1 }),
+  getDay,
+  locales: { vi },
+});
 
 export default function TeacherBookingCalendar({
   rooms,
@@ -56,6 +39,9 @@ export default function TeacherBookingCalendar({
   selectedRoomId: string;
 }) {
   const router = useRouter();
+
+  // State điều hướng ngày tháng
+  const [currentDate, setCurrentDate] = useState<Date>(() => new Date());
   // Optimistic UI State
   const [optimisticSchedule, addOptimisticSchedule] = useOptimistic(
     initialSchedule as ScheduleItemData[],
@@ -72,28 +58,35 @@ export default function TeacherBookingCalendar({
       }
     }
   );
-  const [currentDate, setCurrentDate] = useState<Date>(() => new Date());
-  
+
   // Modal states
-  const [bookingSlot, setBookingSlot] = useState<{ date: Date; slot: number } | null>(null);
+  const [bookingSlot, setBookingSlot] = useState<{ start: Date; end: Date } | null>(null);
   const [selectedClassId, setSelectedClassId] = useState("");
   const [cancelSession, setCancelSession] = useState<ScheduleItemData | null>(null);
   const [cancelReason, setCancelReason] = useState("");
-  const [isProcessing, setIsProcessing] = useState(false);
 
   const [isPending, startTransition] = useTransition();
 
-  const { startOfThisWeek } = useMemo(() => {
-    return { startOfThisWeek: startOfWeek(currentDate, { weekStartsOn: 1 }) };
-  }, [currentDate]);
+  // Hàm chuyển đổi tuần
+  const handleNavigate = (action: 'PREV' | 'NEXT' | 'TODAY') => {
+    if (action === 'TODAY') {
+      setCurrentDate(new Date());
+    } else if (action === 'PREV') {
+      setCurrentDate(prev => subWeeks(prev, 1));
+    } else if (action === 'NEXT') {
+      setCurrentDate(prev => addWeeks(prev, 1));
+    }
+  };
 
   const handleRoomChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const roomId = e.target.value;
-    if (roomId) {
-      router.push(`/schedule?roomId=${roomId}`);
-    } else {
-      router.push(`/schedule`);
-    }
+    startTransition(() => {
+      if (roomId) {
+        router.push(`/schedule?roomId=${roomId}`);
+      } else {
+        router.push(`/schedule`);
+      }
+    });
   };
 
   const handleRequestBooking = () => {
@@ -105,26 +98,25 @@ export default function TeacherBookingCalendar({
     const currentSlot = bookingSlot;
     const currentClassId = selectedClassId;
     const currentRoomId = selectedRoomId;
-    
-    // Đóng modal ngay lập tức
+
     setBookingSlot(null);
     setSelectedClassId("");
 
     startTransition(async () => {
-      const dateStr = toISODate(currentSlot.date);
       const tempId = `temp-${Date.now()}`;
-      
+
       const tempSession: ScheduleItemData = {
         id: tempId,
         roomId: currentRoomId,
-        roomName: "",
+        roomName: rooms.find(r => r.id === currentRoomId)?.name || "",
         isAttendanceSubmitted: false,
         classId: currentClassId === "freelance" ? "" : currentClassId,
         className: currentClassId === "freelance" ? "Lớp Tự Do (Thuê phòng)" : classes.find(c => c.id === currentClassId)?.name || "",
         teacherId: teacherId,
         teacherName: "",
-        date: currentSlot.date,
-        slot: currentSlot.slot,
+        date: currentSlot.start,
+        startTime: currentSlot.start,
+        endTime: currentSlot.end,
         status: "PENDING",
         isCancelRequested: false,
         cancelReason: null,
@@ -132,12 +124,12 @@ export default function TeacherBookingCalendar({
       };
 
       addOptimisticSchedule({ type: "ADD", payload: tempSession });
-      
+
       const result = await requestRoomBooking({
         roomId: currentRoomId,
         classId: currentClassId,
-        date: dateStr,
-        slot: currentSlot.slot,
+        startTime: currentSlot.start.toISOString(),
+        endTime: currentSlot.end.toISOString(),
       });
 
       if (result.success) {
@@ -151,7 +143,7 @@ export default function TeacherBookingCalendar({
 
   const handleCancelRequest = () => {
     if (!cancelSession) return;
-    
+
     if (cancelSession.status === "SCHEDULED" && !cancelReason.trim()) {
       toast.warning("Vui lòng nhập lý do huỷ ca.");
       return;
@@ -159,14 +151,13 @@ export default function TeacherBookingCalendar({
 
     const currentCancel = cancelSession;
     const currentReason = cancelReason;
-    
-    // Đóng modal ngay lập tức
+
     setCancelSession(null);
     setCancelReason("");
-    
+
     startTransition(async () => {
       let result;
-      
+
       if (currentCancel.status === "PENDING") {
         addOptimisticSchedule({ type: "CANCEL_PENDING", payload: { id: currentCancel.id } });
         result = await rejectSessionRequest(currentCancel.id);
@@ -174,7 +165,7 @@ export default function TeacherBookingCalendar({
         addOptimisticSchedule({ type: "CANCEL_SCHEDULED", payload: { id: currentCancel.id, reason: currentReason } });
         result = await requestCancelSession(currentCancel.id, currentReason);
       }
-      
+
       if (result && result.success) {
         toast.success(currentCancel.status === "PENDING" ? "Đã hủy yêu cầu đặt phòng!" : "Đã gửi yêu cầu huỷ ca!");
         window.dispatchEvent(new Event("schedule-updated"));
@@ -185,347 +176,229 @@ export default function TeacherBookingCalendar({
     });
   };
 
+  const handleSelectSlot = useCallback(
+    ({ start, end }: { start: Date; end: Date }) => {
+      setBookingSlot({ start, end });
+    },
+    []
+  );
+
+  const handleSelectEvent = useCallback(
+    (event: CalendarEvent) => {
+      const s = event.resource as ScheduleItemData;
+      // Chỉ cho phép giáo viên thao tác trên ca dạy của chính mình
+      if (s.teacherId !== teacherId) {
+        toast.warning("Ca học này đã có người đăng ký.");
+        return;
+      }
+      if (s.status === "PENDING" || (s.status === "SCHEDULED" && !s.isCancelRequested)) {
+        setCancelSession(s);
+        setCancelReason("");
+      } else {
+        // Nếu đã duyệt và không xin huỷ, redirect qua trang điểm danh
+        router.push(`/ta?classId=${s.classId}&sessionId=${s.id}`);
+      }
+    },
+    [teacherId, router]
+  );
+
+  const events: CalendarEvent[] = useMemo(() => {
+    return optimisticSchedule
+      .filter(s => s.status !== "REJECTED" && s.status !== "CANCELLED")
+      .map(s => ({
+        id: s.id,
+        title: s.className,
+        start: new Date(s.startTime),
+        end: new Date(s.endTime),
+        resource: s,
+      }));
+  }, [optimisticSchedule]);
+
   return (
-    <div className="max-w-7xl mx-auto p-4 md:p-8">
-      <div className="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-extrabold text-slate-900">Đăng Ký Phòng Học</h1>
-          <p className="text-sm text-slate-500 mt-1">Lựa chọn phòng và ca trống để đăng ký lịch dạy</p>
+    // THIẾT KẾ FLEXBOX FULL MÀN HÌNH (h-dvh) CHỐNG SCROLL TOÀN TRANG
+    <div className="h-dvh w-full mx-auto p-2 md:p-4 flex flex-col overflow-hidden bg-slate-50">
+      <div className="flex-1 flex flex-col rounded-2xl bg-white shadow-sm border border-slate-200 overflow-hidden">
+
+        {/* HEADER ĐIỀU HƯỚNG MỚI */}
+        <div className="flex-shrink-0 px-4 py-3 border-b border-slate-100 bg-gradient-to-b from-slate-50 to-white">
+          <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-3">
+
+            <div className="flex flex-wrap items-center gap-3 md:gap-4">
+              <h2 className="text-sm md:text-base font-extrabold text-slate-900 hidden sm:block">Đăng Ký Phòng</h2>
+
+              {/* SELECT ROOM (Tích hợp lên Header cho gọn) */}
+              <div className="flex items-center gap-2">
+                <select
+                  value={selectedRoomId}
+                  disabled={isPending}
+                  onChange={handleRoomChange}
+                  className="border border-slate-300 rounded-lg px-3 py-1.5 bg-white text-xs md:text-sm font-bold text-slate-700 focus:ring-2 focus:ring-blue-500 outline-none shadow-sm cursor-pointer disabled:opacity-50"
+                >
+                  <option value="">-- Chọn Phòng --</option>
+                  {rooms.map((room) => (
+                    <option key={room.id} value={room.id}>
+                      {room.name} {room.feePerHour > 0 ? `(${Number(room.feePerHour).toLocaleString('vi-VN')}đ/h)` : ""}
+                    </option>
+                  ))}
+                </select>
+                {isPending && <Loader2 className="w-4 h-4 animate-spin text-blue-600" />}
+              </div>
+
+              {/* NÚT CHUYỂN TUẦN */}
+              <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-lg border border-slate-200 shadow-sm">
+                <button onClick={() => handleNavigate('PREV')} className="p-1 hover:bg-white hover:shadow-sm rounded transition-all text-slate-700 hover:text-blue-600">
+                  <ChevronLeft size={16} />
+                </button>
+                <button onClick={() => handleNavigate('TODAY')} className="px-2 md:px-3 text-xs md:text-sm font-bold text-slate-700 hover:text-blue-600 transition-colors">
+                  Hôm nay
+                </button>
+                <button onClick={() => handleNavigate('NEXT')} className="p-1 hover:bg-white hover:shadow-sm rounded transition-all text-slate-700 hover:text-blue-600">
+                  <ChevronRight size={16} />
+                </button>
+              </div>
+
+              {/* HIỂN THỊ NGÀY THÁNG */}
+              <div className="text-xs md:text-sm font-semibold text-blue-800 bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-100 hidden md:block">
+                Tuần {format(startOfWeek(currentDate, { weekStartsOn: 1 }), "dd/MM")} - {format(endOfWeek(currentDate, { weekStartsOn: 1 }), "dd/MM/yyyy")}
+              </div>
+            </div>
+
+            {/* CHÚ GIẢI */}
+            <div className="flex flex-wrap items-center gap-2 text-[10px] md:text-xs text-slate-600">
+              <span className="inline-flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-blue-500" /> Của bạn</span>
+              <span className="inline-flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-amber-400" /> Đang chờ</span>
+              <span className="inline-flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-rose-500" /> Xin huỷ</span>
+              <span className="inline-flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-slate-300" /> Kín lịch</span>
+            </div>
+          </div>
         </div>
 
-        <div className="flex flex-col sm:flex-row gap-3">
-          <select
-            value={selectedRoomId}
-            onChange={handleRoomChange}
-            className="border border-slate-300 rounded-lg px-4 py-2 bg-white text-sm font-medium focus:ring-2 focus:ring-blue-500 outline-none shadow-sm"
-          >
-            <option value="">-- Chọn Phòng Để Xem Lịch --</option>
-            {rooms.map((room) => (
-              <option key={room.id} value={room.id}>
-                {room.name} {room.feePerSession > 0 ? `(Phí: ${Number(room.feePerSession).toLocaleString('vi-VN')}đ)` : ""}
-              </option>
-            ))}
-          </select>
-        </div>
+        {/* NỘI DUNG LỊCH (Bọc class scroll tuỳ chỉnh) */}
+        {!selectedRoomId ? (
+          <div className="flex-1 flex flex-col items-center justify-center p-8 bg-slate-50/50">
+            <MapPin size={48} className="text-slate-300 mb-4 animate-bounce" />
+            <h3 className="text-lg font-bold text-slate-700 mb-2">Vui lòng chọn phòng</h3>
+            <p className="text-slate-500 text-sm">Chọn một phòng ở menu phía trên để xem lịch trống và kéo thả đăng ký nhé!</p>
+          </div>
+        ) : (
+          <div className="flex-1 p-2 min-h-0 relative">
+            <div className="w-full h-full border border-slate-200 rounded-xl overflow-hidden rbc-custom-scroll-wrapper">
+              <Calendar
+                localizer={localizer}
+                events={events}
+                startAccessor="start"
+                endAccessor="end"
+                defaultView="week"
+                culture="vi"
+                date={currentDate}
+                onNavigate={(date) => setCurrentDate(date)}
+                selectable
+                onSelectSlot={handleSelectSlot}
+                onSelectEvent={handleSelectEvent}
+                min={new Date(2026, 1, 1, 0, 0, 0)} // Full 24 tiếng
+                max={new Date(2026, 1, 1, 23, 59, 59)}
+                views={['week']}
+                step={30}
+                toolbar={false}
+
+                // RENDER GIAO DIỆN CỤC SỰ KIỆN
+                components={{
+                  event: ({ event }: any) => {
+                    const s = event.resource as ScheduleItemData;
+                    const isMine = s.teacherId === teacherId;
+
+                    return (
+                      <div className="w-full h-full flex flex-col relative group pr-5 select-none">
+                        <div className="font-semibold truncate">{isMine ? s.className : "Đã có người đặt"}</div>
+                        <div className="text-[9px] opacity-90 truncate">{isMine ? "Lớp của bạn" : "Không thể thao tác"}</div>
+
+                        {/* Hiện icon Dấu X để xin huỷ ca học CỦA MÌNH */}
+                        {isMine && s.status !== "CANCELLED" && s.status !== "REJECTED" && !s.isCancelRequested && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setCancelSession(s);
+                              setCancelReason("");
+                            }}
+                            className="absolute top-0 right-0 p-[3px] text-white/70 hover:text-white bg-black/10 hover:bg-rose-500 rounded opacity-0 group-hover:opacity-100 transition-all z-10"
+                            title="Yêu cầu huỷ ca"
+                          >
+                            <XCircle size={13} />
+                          </button>
+                        )}
+                      </div>
+                    );
+                  }
+                }}
+
+                // CSS BO VIỀN NHƯ GOOGLE CALENDAR
+                eventPropGetter={(event: CalendarEvent) => {
+                  const s = event.resource as ScheduleItemData;
+                  const isMine = s.teacherId === teacherId;
+
+                  // Style cho Lớp Của Người Khác (Làm xám, mờ đi)
+                  if (!isMine) {
+                    return {
+                      style: {
+                        backgroundColor: '#f1f5f9', color: '#64748b',
+                        borderRadius: '4px', border: `1px solid #e2e8f0`, borderLeft: `3px solid #94a3b8`,
+                        width: '96%', marginLeft: '2px', padding: '2px 4px', fontSize: '11px',
+                        fontWeight: '500', lineHeight: '1.1', overflow: 'hidden', whiteSpace: 'nowrap', cursor: 'not-allowed'
+                      }
+                    };
+                  }
+
+                  // Style cho Lớp Của Mình
+                  let backgroundColor = '#eff6ff'; let borderColor = '#3b82f6'; let textColor = '#1e3a8a';
+
+                  if (s.status === 'PENDING') { backgroundColor = '#fffbeb'; borderColor = '#f59e0b'; textColor = '#78350f'; }
+                  else if (s.isCancelRequested) { backgroundColor = '#fef2f2'; borderColor = '#ef4444'; textColor = '#991b1b'; }
+                  else if (s.status === 'COMPLETED' || s.isAttendanceSubmitted) { backgroundColor = '#f8fafc'; borderColor = '#94a3b8'; textColor = '#334155'; }
+
+                  const opacity = s.pending ? 0.6 : 1;
+
+                  return {
+                    style: {
+                      backgroundColor, color: textColor, opacity,
+                      borderRadius: '4px', border: `1px solid ${borderColor}`, borderLeft: `3px solid ${borderColor}`,
+                      boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.03)',
+                      width: '96%', marginLeft: '2px', padding: '2px 4px',
+                      fontSize: '11px', fontWeight: '500', lineHeight: '1.1',
+                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                      cursor: 'pointer',
+                    },
+                  };
+                }}
+              />
+            </div>
+          </div>
+        )}
       </div>
 
-      {!selectedRoomId ? (
-        <div className="space-y-4">
-          <h2 className="text-lg font-bold text-slate-800">Các Lớp Đang Chờ Duyệt</h2>
-          {optimisticSchedule.filter(s => s.status === "PENDING" && s.teacherId === teacherId).length === 0 ? (
-            <div className="bg-white border border-slate-200 rounded-xl p-16 text-center shadow-sm">
-              <MapPin size={48} className="mx-auto text-slate-300 mb-4" />
-              <h3 className="text-lg font-bold text-slate-700 mb-2">Vui lòng chọn phòng</h3>
-              <p className="text-slate-500">Bạn cần chọn một phòng cụ thể ở menu trên để xem lịch trống và đăng ký.</p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {optimisticSchedule.filter(s => s.status === "PENDING" && s.teacherId === teacherId).map(s => (
-                <div key={s.id} className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm flex flex-col gap-2 relative transition-all hover:shadow-md">
-                  <div className="font-extrabold text-blue-700 text-lg">{s.className}</div>
-                  <div className="text-sm text-slate-600">
-                    <strong>Phòng:</strong> {rooms.find(r => r.id === s.roomId)?.name || "Chưa rõ"}
-                  </div>
-                  <div className="text-sm text-slate-600">
-                    <strong>Thời gian:</strong> {format(new Date(s.date), "dd/MM/yyyy")} - Ca {s.slot} ({SHIFTS.find(shift => shift.id === s.slot)?.time})
-                  </div>
-                  <button 
-                    onClick={() => setCancelSession(s)} 
-                    className="mt-3 w-full py-2 bg-rose-50 text-rose-600 font-bold rounded-lg hover:bg-rose-100 transition-colors flex items-center justify-center gap-2 border border-rose-200"
-                  >
-                    Hủy Yêu Cầu
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      ) : (
-        <div className="w-full border border-slate-200 rounded-xl bg-white shadow-sm">
-          {/* Toolbar - Dùng chung cho cả Desktop & Mobile */}
-          <div className="p-3 border-b border-slate-200 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-slate-50/50">
-            <div className="font-bold text-slate-700">
-              Tuần: {format(startOfThisWeek, "dd/MM")} - {format(addDays(startOfThisWeek, 6), "dd/MM/yyyy")}
-            </div>
-            <div className="flex items-center gap-1 bg-white border border-slate-200 rounded-lg p-1 shadow-sm w-full sm:w-auto justify-between sm:justify-start">
-              <button
-                onClick={() => setCurrentDate((d) => addWeeks(d, -1))}
-                className="p-1.5 rounded hover:bg-slate-100 text-slate-600 transition-colors"
-              >
-                <ChevronLeft size={18} />
-              </button>
-              <button
-                onClick={() => setCurrentDate(new Date())}
-                className="px-3 py-1 text-[13px] font-bold text-slate-700 hover:bg-slate-50 transition-colors"
-              >
-                Hôm nay
-              </button>
-              <button
-                onClick={() => setCurrentDate((d) => addWeeks(d, 1))}
-                className="p-1.5 rounded hover:bg-slate-100 text-slate-600 transition-colors"
-              >
-                <ChevronRight size={18} />
-              </button>
-            </div>
-          </div>
-
-          {/* === DESKTOP VIEW === */}
-          <div className="hidden lg:block w-full overflow-x-auto scrollbar-thin scrollbar-thumb-slate-300 scrollbar-track-slate-100">
-            <div className="min-w-[900px]">
-              {/* Header Days */}
-              <div className="grid grid-cols-[80px_repeat(7,1fr)] bg-slate-50 border-b border-slate-200">
-                <div className="p-2 border-r border-slate-200 flex items-center justify-center font-bold text-slate-500 text-[12px] uppercase tracking-wider">
-                  Ca học
-                </div>
-                {DAYS.map((d) => {
-                  const dateForCol = addDays(startOfThisWeek, d.id - 1);
-                  const isToday = isSameDay(dateForCol, new Date());
-                  return (
-                    <div
-                      key={d.id}
-                      className={`p-2 border-r border-slate-200 last:border-r-0 text-center flex flex-col justify-center items-center ${
-                        isToday ? "bg-blue-50/50" : ""
-                      }`}
-                    >
-                      <div className={`font-extrabold text-[13px] ${isToday ? "text-blue-700" : "text-slate-900"}`}>
-                        {d.label}
-                      </div>
-                      <div className={`text-[11px] font-semibold ${isToday ? "text-blue-500" : "text-slate-500"}`}>
-                        {format(dateForCol, "dd/MM")}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-
-              {/* Slots */}
-              <div>
-                {SHIFTS.map((shift) => (
-                  <div key={shift.id} className="grid grid-cols-[80px_repeat(7,1fr)] border-b border-slate-200 last:border-b-0">
-                    <div className="p-2 border-r border-slate-200 bg-slate-50/30 flex flex-col justify-center items-center gap-0.5">
-                      <span className="font-bold text-slate-800 text-[13px]">{shift.label}</span>
-                      <span className="text-[11px] text-slate-500 font-medium">{shift.time}</span>
-                    </div>
-
-                    {DAYS.map((day) => {
-                      const dateForCell = addDays(startOfThisWeek, day.id - 1);
-                      const dateISO = toISODate(dateForCell);
-                      const isToday = isSameDay(dateForCell, new Date());
-
-                      const cellSessions = optimisticSchedule.filter((s) => {
-                        return toISODate(s.date) === dateISO && dayOfWeekMon1Sun7(s.date) === day.id && s.slot === shift.id;
-                      });
-
-                      const teacherBusySessions = teacherSchedule.filter((s) => {
-                        return toISODate(s.date) === dateISO && dayOfWeekMon1Sun7(s.date) === day.id && s.slot === shift.id;
-                      });
-
-                      const session = cellSessions.length > 0 ? cellSessions[0] : null;
-                      const teacherBusy = teacherBusySessions.length > 0 && (!session || session.id !== teacherBusySessions[0].id) ? teacherBusySessions[0] : null;
-
-                      return (
-                        <div
-                          key={day.id}
-                          className={`p-1.5 border-r border-slate-100 last:border-r-0 min-h-[80px] ${
-                            isToday && !session ? "bg-blue-50/20" : ""
-                          }`}
-                        >
-                          {!session ? (
-                            !teacherBusy ? (
-                              <button
-                                onClick={() => setBookingSlot({ date: dateForCell, slot: shift.id })}
-                                className="w-full h-full min-h-[60px] rounded border-2 border-dashed border-slate-200 hover:border-blue-400 hover:bg-blue-50/50 flex flex-col items-center justify-center gap-1 transition-colors text-slate-400 hover:text-blue-500 group"
-                              >
-                                <CalendarPlus size={16} className="opacity-0 group-hover:opacity-100 transition-opacity" />
-                                <span className="text-[10px] font-semibold opacity-0 group-hover:opacity-100 transition-opacity">Đặt phòng</span>
-                              </button>
-                            ) : (
-                              <div className="w-full h-full min-h-[60px] p-2 rounded-lg border border-rose-200 bg-rose-50 text-rose-500 flex flex-col justify-center items-center cursor-not-allowed">
-                                <span className="text-[11px] font-bold text-center">Bạn bị trùng lịch ở {teacherBusy.roomName || "phòng khác"}</span>
-                              </div>
-                            )
-                          ) : (
-                            <div className="w-full h-full">
-                              {session.teacherId !== teacherId ? (
-                                <div className="w-full h-full min-h-[60px] p-2 rounded-lg border border-slate-200 bg-slate-100 text-slate-400 flex flex-col justify-center items-center cursor-not-allowed">
-                                  <span className="text-[11px] font-bold">Đã có người đặt</span>
-                                </div>
-                              ) : (
-                                <button
-                                  onClick={() => {
-                                    if (session.status === "PENDING" || (session.status === "SCHEDULED" && !session.isCancelRequested)) {
-                                      setCancelSession(session);
-                                      setCancelReason("");
-                                    }
-                                  }}
-                                  className={`w-full h-full min-h-[60px] p-2 text-left rounded-lg border text-[11px] leading-snug shadow-sm flex flex-col gap-1 transition-all ${
-                                    session.status === "PENDING"
-                                      ? "bg-amber-100 border-amber-300 text-amber-900 hover:scale-[1.02] cursor-pointer"
-                                      : session.isCancelRequested
-                                      ? "bg-rose-50 border-rose-200 text-rose-800 cursor-default opacity-80"
-                                      : "bg-blue-50 border-blue-200 text-blue-900 hover:scale-[1.02] cursor-pointer"
-                                  } ${session.pending ? "opacity-50 pointer-events-none" : ""}`}
-                                  disabled={session.pending}
-                                >
-                                  <div className="font-extrabold line-clamp-1">{session.className}</div>
-                                  <div className="text-[10px] font-bold mt-auto">
-                                    {session.status === "PENDING" ? (
-                                      <span className="text-amber-600">Chờ duyệt (Nhấn hủy)</span>
-                                    ) : session.isCancelRequested ? (
-                                      <span className="text-rose-600 font-bold">Đang chờ duyệt huỷ ca</span>
-                                    ) : (
-                                      <span className="text-blue-600 font-bold flex flex-col">
-                                        <span>Đã duyệt</span>
-                                        <span className="text-[9px] text-blue-500 opacity-80">(Nhấn để xin huỷ)</span>
-                                      </span>
-                                    )}
-                                  </div>
-                                </button>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {/* === MOBILE VIEW === */}
-          <div className="block lg:hidden flex flex-col divide-y divide-slate-200">
-            {DAYS.map((day) => {
-              const dateForCell = addDays(startOfThisWeek, day.id - 1);
-              const dateISO = toISODate(dateForCell);
-              const isToday = isSameDay(dateForCell, new Date());
-
-              return (
-                <div key={day.id} className={`flex flex-col ${isToday ? "bg-blue-50/20" : ""}`}>
-                  {/* Header Ngày */}
-                  <div className="p-3 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
-                    <span className={`font-extrabold text-sm ${isToday ? "text-blue-700" : "text-slate-900"}`}>
-                      {day.id <= 6 ? `Thứ ${day.id + 1}` : "Chủ Nhật"}
-                    </span>
-                    <span className={`text-xs font-semibold ${isToday ? "text-blue-500" : "text-slate-500"}`}>
-                      {format(dateForCell, "dd/MM/yyyy")}
-                    </span>
-                  </div>
-
-                  {/* Các Ca Học */}
-                  <div className="flex flex-col divide-y divide-slate-100">
-                    {SHIFTS.map((shift) => {
-                      const cellSessions = optimisticSchedule.filter((s) => {
-                        return toISODate(s.date) === dateISO && dayOfWeekMon1Sun7(s.date) === day.id && s.slot === shift.id;
-                      });
-
-                      const teacherBusySessions = teacherSchedule.filter((s) => {
-                        return toISODate(s.date) === dateISO && dayOfWeekMon1Sun7(s.date) === day.id && s.slot === shift.id;
-                      });
-
-                      const session = cellSessions.length > 0 ? cellSessions[0] : null;
-                      const teacherBusy = teacherBusySessions.length > 0 && (!session || session.id !== teacherBusySessions[0].id) ? teacherBusySessions[0] : null;
-
-                      return (
-                        <div key={shift.id} className="p-3 flex gap-3 items-center">
-                          {/* Thông tin Ca */}
-                          <div className="w-16 shrink-0 flex flex-col pt-1">
-                            <span className="font-bold text-slate-800 text-xs">{shift.label}</span>
-                            <span className="text-[10px] text-slate-500 font-medium">{shift.time}</span>
-                          </div>
-
-                          {/* Lớp / Trạng thái */}
-                          <div className="flex-1">
-                            {!session ? (
-                              !teacherBusy ? (
-                                <button
-                                  onClick={() => setBookingSlot({ date: dateForCell, slot: shift.id })}
-                                  className="w-full h-[40px] rounded border border-dashed border-slate-300 hover:border-blue-400 hover:bg-blue-50/50 flex items-center justify-center gap-2 transition-colors text-slate-400 hover:text-blue-500"
-                                >
-                                  <CalendarPlus size={14} />
-                                  <span className="text-xs font-semibold">Đặt phòng</span>
-                                </button>
-                              ) : (
-                                <div className="w-full p-2 rounded-lg border border-rose-200 bg-rose-50 text-rose-500 flex flex-col justify-center items-center cursor-not-allowed text-xs font-bold text-center">
-                                  Bạn bị trùng lịch ở {teacherBusy.roomName || "phòng khác"}
-                                </div>
-                              )
-                            ) : (
-                              <div className="w-full">
-                                {session.teacherId !== teacherId ? (
-                                  <div className="w-full p-2 rounded-lg border border-slate-200 bg-slate-100 text-slate-400 flex flex-col justify-center items-center cursor-not-allowed text-xs font-bold">
-                                    Đã có người đặt
-                                  </div>
-                                ) : (
-                                  <button
-                                    onClick={() => {
-                                      if (session.status === "PENDING" || (session.status === "SCHEDULED" && !session.isCancelRequested)) {
-                                        setCancelSession(session);
-                                        setCancelReason("");
-                                      }
-                                    }}
-                                    className={`w-full text-left p-2.5 rounded-lg border text-xs shadow-sm flex flex-col gap-1 transition-all ${
-                                      session.status === "PENDING"
-                                        ? "bg-amber-100 border-amber-300 text-amber-900 active:scale-[0.98]"
-                                        : session.isCancelRequested
-                                        ? "bg-rose-50 border-rose-200 text-rose-800 cursor-default"
-                                        : "bg-blue-50 border-blue-200 text-blue-900 active:scale-[0.98]"
-                                    } ${session.pending ? "opacity-50 pointer-events-none" : ""}`}
-                                    disabled={session.pending}
-                                  >
-                                    <div className="font-extrabold line-clamp-1">{session.className}</div>
-                                    <div className="text-[10px] font-bold mt-1">
-                                      {session.status === "PENDING" ? (
-                                        <span className="text-amber-600">Chờ duyệt (Nhấn hủy)</span>
-                                      ) : session.isCancelRequested ? (
-                                        <span className="text-rose-600">Đang chờ duyệt huỷ ca</span>
-                                      ) : (
-                                        <span className="text-blue-600 flex items-center justify-between">
-                                          <span>Đã duyệt</span>
-                                          <span className="text-[9px] opacity-70">Nhấn để huỷ</span>
-                                        </span>
-                                      )}
-                                    </div>
-                                  </button>
-                                )}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* Booking Modal */}
+      {/* MODAL: Đăng ký phòng (Hiện khi quét chuột (Select Slot) vào giờ trống) */}
       {bookingSlot && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm px-4">
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/50 backdrop-blur-sm px-4">
           <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-2xl">
             <h3 className="text-xl font-bold text-slate-900 mb-2">Đăng Ký Phòng</h3>
-            <p className="text-sm text-slate-500 mb-6">Chọn lớp học bạn muốn dạy trong ca này.</p>
-            
+            <p className="text-sm text-slate-500 mb-6">Chọn lớp học bạn muốn dạy trong khoảng thời gian này.</p>
+
             <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 mb-4 space-y-2 text-sm">
               <div className="flex justify-between border-b pb-2">
                 <span className="text-slate-500">Phòng:</span>
                 <span className="font-bold text-slate-900">
-                  {rooms.find(r => r.id === selectedRoomId)?.name} 
+                  {rooms.find(r => r.id === selectedRoomId)?.name}
                   <span className="text-blue-600 ml-1">
-                    ({Number(rooms.find(r => r.id === selectedRoomId)?.feePerSession || 0).toLocaleString('vi-VN')}đ/Ca)
+                    ({Number(rooms.find(r => r.id === selectedRoomId)?.feePerHour || 0).toLocaleString('vi-VN')}đ/h)
                   </span>
                 </span>
               </div>
               <div className="flex justify-between border-b pb-2">
                 <span className="text-slate-500">Ngày:</span>
-                <span className="font-bold text-slate-900">{format(bookingSlot.date, "dd/MM/yyyy")}</span>
+                <span className="font-bold text-slate-900">{format(bookingSlot.start, "dd/MM/yyyy")}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-500">Ca học:</span>
-                <span className="font-bold text-slate-900">Ca {bookingSlot.slot} ({SHIFTS.find(s => s.id === bookingSlot.slot)?.time})</span>
+                <span className="text-slate-500">Thời gian:</span>
+                <span className="font-bold text-slate-900">{format(bookingSlot.start, "HH:mm")} - {format(bookingSlot.end, "HH:mm")}</span>
               </div>
             </div>
 
@@ -552,15 +425,15 @@ export default function TeacherBookingCalendar({
             <div className="flex gap-3">
               <button
                 onClick={() => setBookingSlot(null)}
-                disabled={isProcessing}
+                disabled={isPending}
                 className="flex-1 px-4 py-2.5 bg-slate-100 text-slate-700 font-bold rounded-xl hover:bg-slate-200 transition-colors"
               >
                 Hủy
               </button>
               <button
                 onClick={handleRequestBooking}
-                disabled={isProcessing || !selectedClassId}
-                className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={isPending || !selectedClassId}
+                className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 transition-colors disabled:opacity-50"
               >
                 Xác nhận
               </button>
@@ -569,9 +442,9 @@ export default function TeacherBookingCalendar({
         </div>
       )}
 
-      {/* Cancel Modal */}
+      {/* MODAL: Yêu Cầu Huỷ Ca (Hiện khi click icon dấu X) */}
       {cancelSession && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm px-4">
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/50 backdrop-blur-sm px-4">
           <div className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl text-center">
             <div className="w-16 h-16 bg-rose-100 rounded-full flex items-center justify-center mx-auto mb-4">
               <XCircle size={32} className="text-rose-600" />
@@ -580,12 +453,12 @@ export default function TeacherBookingCalendar({
               {cancelSession.status === "PENDING" ? "Hủy Đăng Ký?" : "Yêu Cầu Huỷ Ca"}
             </h3>
             <p className="text-sm text-slate-500 mb-4">
-              {cancelSession.status === "PENDING" 
+              {cancelSession.status === "PENDING"
                 ? <>Bạn có chắc chắn muốn hủy yêu cầu đặt phòng cho lớp <strong>{cancelSession.className}</strong> không?</>
                 : <>Bạn đang yêu cầu huỷ ca học đã được duyệt của lớp <strong>{cancelSession.className}</strong>. Xin lưu ý: nếu được duyệt, tiền phòng sẽ được hoàn lại.</>
               }
             </p>
-            
+
             {cancelSession.status === "SCHEDULED" && (
               <textarea
                 placeholder="Nhập lý do xin huỷ ca (VD: Ốm đột xuất...)"
@@ -595,18 +468,18 @@ export default function TeacherBookingCalendar({
                 rows={3}
               />
             )}
-            
+
             <div className="flex gap-3">
               <button
                 onClick={() => { setCancelSession(null); setCancelReason(""); }}
-                disabled={isProcessing}
+                disabled={isPending}
                 className="flex-1 px-4 py-2.5 bg-slate-100 text-slate-700 font-bold rounded-xl hover:bg-slate-200 transition-colors"
               >
                 Đóng
               </button>
               <button
                 onClick={handleCancelRequest}
-                disabled={isProcessing}
+                disabled={isPending}
                 className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-rose-600 text-white font-bold rounded-xl hover:bg-rose-700 transition-colors disabled:opacity-50"
               >
                 {cancelSession.status === "PENDING" ? "Đồng ý Hủy" : "Gửi Yêu Cầu Huỷ"}

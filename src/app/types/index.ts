@@ -214,5 +214,6 @@ export interface UISessionInfo {
   className: string;
   teacherName: string;
   date: string;
-  slot: number;
+  // slot cũ (Ca X) chưa còn dùng theo Time Range
+  slot?: number;
 }

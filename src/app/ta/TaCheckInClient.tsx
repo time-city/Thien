@@ -168,7 +168,7 @@ export default function TaCheckInClient({
             <p className="text-[13px] text-slate-500 font-medium mt-1 leading-tight">
               Lớp: <span className="font-bold text-slate-700">{sessionInfo.className}</span> | 
               GV: <span className="font-bold text-slate-700">{sessionInfo.teacherName}</span> | 
-              Ca {sessionInfo.slot} - {new Date(sessionInfo.date).toLocaleDateString('vi-VN')}
+              {new Date(sessionInfo.date).toLocaleDateString('vi-VN')}
             </p>
           </div>
 

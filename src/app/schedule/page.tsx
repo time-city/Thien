@@ -10,12 +10,15 @@ export default async function SchedulePage({
 }: {
   searchParams: Promise<{ roomId?: string }>;
 }) {
+
+
   const session = await auth();
   if (!session?.user) {
     return <div className="p-8 text-center text-slate-500">Vui lòng đăng nhập</div>;
   }
 
   const { roomId } = await searchParams;
+
   const userId = session.user.id;
   const userRole = session.user.role;
 
@@ -26,10 +29,10 @@ export default async function SchedulePage({
     const rooms = await getRooms();
     const classes = await getAllClasses();
     const teachers = await getAllUsers();
-    
+
     // Nếu chưa chọn phòng thì có thể hiện form chọn phòng, 
     // Hoặc lấy lịch của phòng đã chọn.
-    const schedule = roomId ? await getSchedule(roomId) : []; 
+    const schedule = roomId ? await getSchedule(roomId) : [];
 
     return (
       <div className="max-w-7xl mx-auto p-4 md:p-8">
@@ -38,7 +41,7 @@ export default async function SchedulePage({
             <h1 className="text-2xl font-extrabold text-slate-900">Quản Lý Lịch Dạy</h1>
             <p className="text-sm text-slate-500 mt-1">Duyệt, xem và tạo lịch định kỳ</p>
           </div>
-          <BulkScheduleModal classes={classes} teachers={teachers} rooms={rooms} />
+          <BulkScheduleModal classes={classes} teachers={teachers} rooms={rooms} defaultData={{ roomId }} />
         </div>
 
         {/* Room Selector for Admin */}
@@ -55,19 +58,26 @@ export default async function SchedulePage({
           </div>
         ) : (
           <WeeklyCalendar
-            userRole={userRole}
+            userRole="SUPER_ADMIN"
+            // 🟢 SỬA CHỮ "sessions" THÀNH "schedule" (hoặc tên biến ông đang dùng)
             sessions={schedule.map((s) => ({
               id: s.id,
               classId: s.classId,
               className: s.className,
               teacherId: s.teacherId,
               teacherFullName: s.teacherName,
+              roomId: s.roomId,
               roomName: s.roomName,
               date: s.date,
-              slot: s.slot,
+              startTime: s.startTime,
+              endTime: s.endTime,
               status: s.status,
               isAttendanceSubmitted: s.isAttendanceSubmitted,
             }))}
+            rooms={rooms}
+            classes={classes}
+            teachers={teachers}
+            selectedRoomId={roomId}
           />
         )}
       </div>
@@ -86,7 +96,7 @@ export default async function SchedulePage({
     ]);
 
     // Lọc classes mà giáo viên được gán
-    const myClasses = classes.filter(c => 
+    const myClasses = classes.filter(c =>
       c.teachers.some(t => t.teacherId === userId)
     );
 

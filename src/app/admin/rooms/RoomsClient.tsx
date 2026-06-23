@@ -12,7 +12,7 @@ type RoomItem = {
   id: string;
   name: string;
   capacity: number | null;
-  feePerSession: number;
+  feePerHour: number;
   isActive: boolean;
   sessionCount: number;
 };
@@ -20,7 +20,7 @@ type RoomItem = {
 type RoomFormState = {
   name: string;
   capacity: string;
-  feePerSession: number;
+  feePerHour: number;
   isActive: boolean;
 };
 
@@ -31,7 +31,7 @@ export default function RoomsClient({ initialRooms }: { initialRooms: RoomItem[]
   const [rooms, setRooms] = useState<RoomItem[]>(initialRooms);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingRoom, setEditingRoom] = useState<RoomItem | null>(null);
-  const [form, setForm] = useState<RoomFormState>({ name: "", capacity: "", feePerSession: 0, isActive: true });
+  const [form, setForm] = useState<RoomFormState>({ name: "", capacity: "", feePerHour: 0, isActive: true });
   const [loading, setLoading] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
@@ -44,7 +44,7 @@ export default function RoomsClient({ initialRooms }: { initialRooms: RoomItem[]
 
   const openCreate = () => {
     setEditingRoom(null);
-    setForm({ name: "", capacity: "", feePerSession: 0, isActive: true });
+    setForm({ name: "", capacity: "", feePerHour: 0, isActive: true });
     setIsModalOpen(true);
   };
 
@@ -53,7 +53,7 @@ export default function RoomsClient({ initialRooms }: { initialRooms: RoomItem[]
     setForm({
       name: room.name,
       capacity: room.capacity === null ? "" : String(room.capacity),
-      feePerSession: room.feePerSession ?? 0,
+      feePerHour: room.feePerHour ?? 0,
       isActive: room.isActive,
     });
     setIsModalOpen(true);
@@ -71,7 +71,7 @@ export default function RoomsClient({ initialRooms }: { initialRooms: RoomItem[]
     const payload = {
       name: form.name,
       capacity: form.capacity.trim() === "" ? undefined : Number(form.capacity),
-      feePerSession: form.feePerSession,
+      feePerHour: form.feePerHour,
       isActive: form.isActive,
     };
 
@@ -84,7 +84,7 @@ export default function RoomsClient({ initialRooms }: { initialRooms: RoomItem[]
         }
         toast.success("Cập nhật phòng học thành công");
       } else {
-        const res = await createRoom({ name: form.name, capacity: payload.capacity, feePerSession: payload.feePerSession });
+        const res = await createRoom({ name: form.name, capacity: payload.capacity, feePerHour: payload.feePerHour });
         if (!res.success) {
           toast.error(res.error || "Lỗi tạo phòng học");
           return;
@@ -180,7 +180,7 @@ export default function RoomsClient({ initialRooms }: { initialRooms: RoomItem[]
               <tr className="bg-slate-50 border-b border-slate-200 text-[11px] uppercase tracking-widest font-extrabold text-slate-500">
                 <th className="py-3 px-4">Tên phòng</th>
                 <th className="py-3 px-4 hidden sm:table-cell">Sức chứa</th>
-                <th className="py-3 px-4 hidden sm:table-cell">Phí / Ca</th>
+                <th className="py-3 px-4 hidden sm:table-cell">Phí / Giờ</th>
                 <th className="py-3 px-4 hidden md:table-cell">Trạng thái</th>
                 <th className="py-3 px-4 w-28 text-center">Thao tác</th>
               </tr>
@@ -208,7 +208,7 @@ export default function RoomsClient({ initialRooms }: { initialRooms: RoomItem[]
                     </td>
                     <td className="py-3 px-4 hidden sm:table-cell">
                       <span className="font-bold text-blue-700 text-sm">
-                        {Number(room.feePerSession ?? 0).toLocaleString('vi-VN')}đ
+                        {Number(room.feePerHour ?? 0).toLocaleString('vi-VN')}đ/h
                       </span>
                     </td>
                     <td className="py-3 px-4 hidden md:table-cell">
@@ -289,10 +289,10 @@ export default function RoomsClient({ initialRooms }: { initialRooms: RoomItem[]
               </div>
 
               <div>
-                <label className="block text-sm font-bold text-slate-700 mb-2">Phí phòng / Ca (VNĐ)</label>
+                <label className="block text-sm font-bold text-slate-700 mb-2">Phí phòng / Giờ (VNĐ)</label>
                 <CurrencyInput
-                  value={form.feePerSession}
-                  onChange={(val) => setForm((prev) => ({ ...prev, feePerSession: val }))}
+                  value={form.feePerHour}
+                  onChange={(val) => setForm((prev) => ({ ...prev, feePerHour: val }))}
                   className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-100 focus:border-blue-500 outline-none transition-all text-sm"
                 />
               </div>

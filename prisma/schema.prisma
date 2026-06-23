@@ -144,7 +144,7 @@ model Room {
   id            String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   name          String         @unique // VD: "Phòng 1", "Phòng 2"
   capacity      Int?
-  feePerSession Float          @default(0) // Phí thuê phòng/ca
+  feePerHour    Float          @default(0) // Phí thuê phòng/giờ
   isActive      Boolean        @default(true)
   createdAt     DateTime       @default(now())
 
@@ -281,7 +281,8 @@ model ClassSession {
   teacherId             String        @db.Uuid
   roomId                String?       @db.Uuid   // Cho phép xếp phòng học
   date                  DateTime      @db.Date
-  slot                  Int
+  startTime             DateTime      @db.Timestamptz
+  endTime               DateTime      @db.Timestamptz
   status                SessionStatus @default(SCHEDULED)
   isAttendanceSubmitted Boolean       @default(false)
   attendanceSubmittedAt DateTime?

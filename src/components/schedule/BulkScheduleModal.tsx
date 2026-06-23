@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Plus, X, Calendar as CalendarIcon, Users, Check, Ban, BookOpen, UserCircle, Building2 } from "lucide-react";
-import { createBulkSchedule, getOccupiedPatterns } from "@/actions/schedule";
+import { Plus, X, Calendar as CalendarIcon, BookOpen, UserCircle, Building2, Trash2 } from "lucide-react";
+import { createBulkSchedule } from "@/actions/schedule";
 import { toast } from "sonner";
 import { useConfirm } from "@/hooks/useconfirm";
 
@@ -17,19 +17,39 @@ type BulkScheduleModalProps = {
   classes: ClassItem[];
   teachers?: { id: string; fullName: string }[];
   rooms?: { id: string; name: string }[];
+  defaultData?: { roomId?: string; startTime?: string; endTime?: string; day?: number; date?: string };
+  isOpen?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  showTriggerButton?: boolean;
 };
 
 type SchedulePattern = {
   day: number;
-  slot: number;
+  startTimeString: string;
+  endTimeString: string;
 };
 
-export default function BulkScheduleModal({ classes, rooms = [], teachers = [] }: BulkScheduleModalProps) {
-  const [isOpen, setIsOpen] = useState(false);
+export default function BulkScheduleModal({
+  classes,
+  rooms = [],
+  teachers = [],
+  defaultData,
+  isOpen: controlledIsOpen,
+  onOpenChange,
+  showTriggerButton = true
+}: BulkScheduleModalProps) {
+  const [internalIsOpen, setInternalIsOpen] = useState(false);
+  const isOpen = controlledIsOpen !== undefined ? controlledIsOpen : internalIsOpen;
+  const setIsOpen = (open: boolean) => {
+    if (onOpenChange) onOpenChange(open);
+    setInternalIsOpen(open);
+  };
   const [isLoading, setIsLoading] = useState(false);
 
+
+
   const [classId, setClassId] = useState(classes[0]?.id || "");
-  const [roomId, setRoomId] = useState("");
+  const [roomId, setRoomId] = useState(defaultData?.roomId || "");
   const [startDate, setStartDate] = useState(new Date().toISOString().split("T")[0]);
   const [endDate, setEndDate] = useState(() => {
     const d = new Date();
@@ -39,8 +59,10 @@ export default function BulkScheduleModal({ classes, rooms = [], teachers = [] }
 
   const [selectedPatterns, setSelectedPatterns] = useState<SchedulePattern[]>([]);
 
-  const [occupiedSlots, setOccupiedSlots] = useState<Set<string>>(new Set());
-  const [isScanning, setIsScanning] = useState(false);
+  // Current input for adding a pattern
+  const [currentDay, setCurrentDay] = useState<number>(1);
+  const [currentStartTime, setCurrentStartTime] = useState("08:00");
+  const [currentEndTime, setCurrentEndTime] = useState("10:00");
 
   const { confirm } = useConfirm();
 
@@ -59,45 +81,60 @@ export default function BulkScheduleModal({ classes, rooms = [], teachers = [] }
     }
   }, [classId, selectedClassObj]);
 
+  // Đồng bộ thông tin từ defaultData khi kéo thả tạo lịch
+  useEffect(() => {
+    if (defaultData && isOpen) {
+      if (defaultData.roomId) {
+        setRoomId(defaultData.roomId);
+      }
+      if (defaultData.date) {
+        setStartDate(defaultData.date);
+        const d = new Date(defaultData.date);
+        d.setDate(d.getDate() + 28);
+        setEndDate(d.toISOString().split("T")[0]);
+      }
+      if (defaultData.day !== undefined && defaultData.startTime && defaultData.endTime) {
+        setCurrentDay(defaultData.day);
+        setCurrentStartTime(defaultData.startTime);
+        setCurrentEndTime(defaultData.endTime);
+        setSelectedPatterns([
+          {
+            day: defaultData.day,
+            startTimeString: defaultData.startTime,
+            endTimeString: defaultData.endTime,
+          }
+        ]);
+      }
+    }
+  }, [defaultData, isOpen]);
+
   const assignedTeacherId = isFreelance ? freelanceTeacherId : selectedClassTeacherId;
   const assignedTeacherName = isFreelance
     ? (teachers?.find(t => t.id === freelanceTeacherId)?.fullName || "Chưa chọn giáo viên")
     : (selectedClassObj?.teachers?.find(t => t.teacherId === selectedClassTeacherId)?.teacherName || "Chưa phân công");
 
-  // Quét lịch trống
-  useEffect(() => {
-    if (!isOpen || !roomId) return;
+  const handleAddPattern = () => {
+    if (currentStartTime >= currentEndTime) {
+      toast.error("Giờ kết thúc phải lớn hơn giờ bắt đầu");
+      return;
+    }
 
-    let isMounted = true;
-    const scanSchedule = async () => {
-      setIsScanning(true);
-      const res = await getOccupiedPatterns(startDate, endDate, assignedTeacherId, roomId);
-
-      if (isMounted) {
-        const newSet = new Set<string>();
-        res.forEach(item => newSet.add(`${item.day}-${item.slot}`));
-        setOccupiedSlots(newSet);
-
-        setSelectedPatterns(prev => prev.filter(p => !newSet.has(`${p.day}-${p.slot}`)));
-        setIsScanning(false);
-      }
-    };
-
-    const timer = setTimeout(() => scanSchedule(), 300);
-    return () => {
-      isMounted = false;
-      clearTimeout(timer);
-    };
-  }, [startDate, endDate, isOpen, assignedTeacherId, roomId]);
-
-  const handleToggleCell = (day: number, slot: number) => {
-    setSelectedPatterns((prev) => {
-      const exists = prev.find((p) => p.day === day && p.slot === slot);
-      if (exists) {
-        return prev.filter((p) => !(p.day === day && p.slot === slot));
-      }
-      return [...prev, { day, slot }];
+    // Check overlap
+    const hasOverlap = selectedPatterns.some(p => {
+      if (p.day !== currentDay) return false;
+      return currentStartTime < p.endTimeString && currentEndTime > p.startTimeString;
     });
+
+    if (hasOverlap) {
+      toast.error("Khung giờ này bị trùng với lịch đã chọn!");
+      return;
+    }
+
+    setSelectedPatterns([...selectedPatterns, { day: currentDay, startTimeString: currentStartTime, endTimeString: currentEndTime }]);
+  };
+
+  const handleRemovePattern = (index: number) => {
+    setSelectedPatterns(selectedPatterns.filter((_, i) => i !== index));
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -107,7 +144,7 @@ export default function BulkScheduleModal({ classes, rooms = [], teachers = [] }
       return;
     }
     if (selectedPatterns.length === 0) {
-      toast.warning("Vui lòng click chọn ít nhất 1 ô lịch học trên bảng lưới!");
+      toast.warning("Vui lòng thêm ít nhất 1 khung giờ!");
       return;
     }
 
@@ -126,7 +163,7 @@ export default function BulkScheduleModal({ classes, rooms = [], teachers = [] }
       message: (
         <>
           Bạn đang chuẩn bị tạo lịch {isFreelance ? "thuê phòng tự do" : <>cho lớp <strong>{selectedClassObj?.name}</strong></>} do giáo viên <strong>{assignedTeacherName}</strong> phụ trách tại phòng <strong>{rooms.find(r => r.id === roomId)?.name || "Chưa rõ"}</strong>.<br /><br />
-          Tần suất: <strong>{selectedPatterns.length} ca/tuần</strong>, từ ngày <strong>{new Date(startDate).toLocaleDateString('vi-VN')}</strong> đến ngày <strong>{new Date(endDate).toLocaleDateString('vi-VN')}</strong>.<br /><br />
+          Tần suất: <strong>{selectedPatterns.length} buổi/tuần</strong>, từ ngày <strong>{new Date(startDate).toLocaleDateString('vi-VN')}</strong> đến ngày <strong>{new Date(endDate).toLocaleDateString('vi-VN')}</strong>.<br /><br />
           Bạn có chắc chắn muốn tiếp tục?
         </>
       ),
@@ -159,20 +196,21 @@ export default function BulkScheduleModal({ classes, rooms = [], teachers = [] }
   };
 
   const daysHeader = [
-    { label: "T2", val: 1 }, { label: "T3", val: 2 }, { label: "T4", val: 3 },
-    { label: "T5", val: 4 }, { label: "T6", val: 5 }, { label: "T7", val: 6 }, { label: "CN", val: 0 }
+    { label: "Thứ 2", val: 1 }, { label: "Thứ 3", val: 2 }, { label: "Thứ 4", val: 3 },
+    { label: "Thứ 5", val: 4 }, { label: "Thứ 6", val: 5 }, { label: "Thứ 7", val: 6 }, { label: "Chủ Nhật", val: 0 }
   ];
-  const slots = [1, 2, 3, 4, 5, 6];
 
   return (
     <>
-      <button
-        onClick={() => setIsOpen(true)}
-        className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl font-bold text-sm shadow-sm flex items-center gap-2 transition-all"
-      >
-        <Plus size={18} />
-        Tạo lịch dạy định kỳ
-      </button>
+      {showTriggerButton && (
+        <button
+          onClick={() => setIsOpen(true)}
+          className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl font-bold text-sm shadow-sm flex items-center gap-2 transition-all"
+        >
+          <Plus size={18} />
+          Tạo lịch dạy định kỳ
+        </button>
+      )}
 
       {isOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4 animate-in fade-in duration-200" onClick={() => setIsOpen(false)}>
@@ -244,64 +282,93 @@ export default function BulkScheduleModal({ classes, rooms = [], teachers = [] }
 
               <div className="space-y-2">
                 <label className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
-                  <Building2 size={14} /> Chọn Phòng Học <span className="text-rose-500">*</span>
+                  <Building2 size={14} /> Phòng Học <span className="text-rose-500">*</span>
                 </label>
-                <select
-                  value={roomId}
-                  onChange={(e) => setRoomId(e.target.value)}
-                  className="w-full h-11 px-3 border border-slate-200 rounded-xl bg-slate-50 text-sm font-semibold focus:ring-2 focus:ring-blue-100 outline-none cursor-pointer"
-                  required
-                >
-                  <option value="">-- Vui lòng chọn phòng học --</option>
-                  {rooms.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
-                </select>
+                {defaultData?.roomId ? (
+                  <div className="w-full h-11 px-3 border border-blue-200 rounded-xl bg-blue-50 text-blue-700 flex items-center text-sm font-semibold shadow-sm">
+                    {rooms.find(r => r.id === roomId)?.name || "Chưa xác định"}
+                  </div>
+                ) : (
+                  <select
+                    value={roomId}
+                    onChange={(e) => setRoomId(e.target.value)}
+                    className="w-full h-11 px-3 border border-slate-200 rounded-xl bg-slate-50 text-sm font-semibold focus:ring-2 focus:ring-blue-100 outline-none cursor-pointer"
+                    required
+                  >
+                    <option value="">-- Vui lòng chọn phòng học --</option>
+                    {rooms.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
+                  </select>
+                )}
               </div>
 
-              {/* BẢNG LƯỚI CHỌN LỊCH TRỰC QUAN */}
-              <div className="space-y-3 relative">
-                <div className="flex justify-between items-end">
-                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">
-                    Click vào các ô dưới đây để chọn lịch học:
-                  </label>
-                  {isScanning && <span className="text-xs font-bold text-blue-500 animate-pulse">Đang quét phòng trống...</span>}
-                </div>
+              {/* LỊCH HỌC TRONG TUẦN */}
+              <div className="space-y-3">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
+                  <CalendarIcon size={14} /> Khung giờ trong tuần
+                </label>
 
-                <div className={`border border-slate-200 rounded-xl overflow-hidden bg-slate-50 transition-opacity ${isScanning ? "opacity-50 pointer-events-none" : ""}`}>
-                  <div className="grid grid-cols-8 border-b border-slate-200 bg-slate-100/50">
-                    <div className="p-1 sm:p-2 text-center text-[10px] sm:text-xs font-bold text-slate-400 border-r border-slate-200">Ca</div>
-                    {daysHeader.map(day => (
-                      <div key={day.val} className="p-1 sm:p-2 text-center text-[10px] sm:text-xs font-bold text-slate-600 border-r border-slate-200 last:border-r-0">
-                        {day.label}
-                      </div>
-                    ))}
+                <div className="border border-slate-200 rounded-xl p-4 bg-slate-50 space-y-4">
+                  <div className="flex flex-col sm:flex-row gap-3 items-end">
+                    <div className="w-full sm:w-1/3">
+                      <label className="text-[11px] font-bold text-slate-500 uppercase mb-1 block">Thứ</label>
+                      <select
+                        value={currentDay}
+                        onChange={(e) => setCurrentDay(Number(e.target.value))}
+                        className="w-full h-10 px-3 border border-slate-300 rounded-lg text-sm"
+                      >
+                        {daysHeader.map(d => (
+                          <option key={d.val} value={d.val}>{d.label}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="w-full sm:w-1/3">
+                      <label className="text-[11px] font-bold text-slate-500 uppercase mb-1 block">Từ giờ</label>
+                      <input
+                        type="time"
+                        value={currentStartTime}
+                        onChange={(e) => setCurrentStartTime(e.target.value)}
+                        className="w-full h-10 px-3 border border-slate-300 rounded-lg text-sm"
+                      />
+                    </div>
+                    <div className="w-full sm:w-1/3">
+                      <label className="text-[11px] font-bold text-slate-500 uppercase mb-1 block">Đến giờ</label>
+                      <input
+                        type="time"
+                        value={currentEndTime}
+                        onChange={(e) => setCurrentEndTime(e.target.value)}
+                        className="w-full h-10 px-3 border border-slate-300 rounded-lg text-sm"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleAddPattern}
+                      className="h-10 px-4 bg-blue-100 text-blue-700 hover:bg-blue-200 rounded-lg font-bold text-sm shrink-0 whitespace-nowrap"
+                    >
+                      Thêm
+                    </button>
                   </div>
 
-                  {slots.map(slot => (
-                    <div key={slot} className="grid grid-cols-8 border-b border-slate-200 last:border-b-0">
-                      <div className="p-1 sm:p-2 flex items-center justify-center text-[10px] sm:text-xs font-bold text-slate-500 border-r border-slate-200 bg-slate-50">
-                        Ca {slot}
-                      </div>
-                      {daysHeader.map(day => {
-                        const isOccupied = occupiedSlots.has(`${day.val}-${slot}`);
-                        const isSelected = selectedPatterns.some(p => p.day === day.val && p.slot === slot);
-
-                        return (
+                  {selectedPatterns.length > 0 && (
+                    <div className="flex flex-wrap gap-2 pt-2">
+                      {selectedPatterns.map((p, idx) => (
+                        <div key={idx} className="bg-white border border-blue-200 text-blue-800 text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-2 shadow-sm">
+                          <span>{daysHeader.find(d => d.val === p.day)?.label}: {p.startTimeString} - {p.endTimeString}</span>
                           <button
-                            key={`${day.val}-${slot}`}
                             type="button"
-                            disabled={isOccupied}
-                            onClick={() => handleToggleCell(day.val, slot)}
-                            title={isOccupied ? "Ca này đã có lớp học khác xí chỗ" : "Click để chọn"}
-                            className={`h-10 border-r border-slate-200 last:border-r-0 flex items-center justify-center transition-colors ${isOccupied ? "bg-slate-200/60 cursor-not-allowed text-slate-300" :
-                                isSelected ? "bg-blue-600 text-white shadow-inner" : "bg-white hover:bg-blue-50"
-                              }`}
+                            onClick={() => handleRemovePattern(idx)}
+                            className="text-slate-400 hover:text-rose-500 transition-colors"
                           >
-                            {isOccupied ? <Ban size={14} /> : isSelected ? <Check size={16} strokeWidth={3} /> : null}
+                            <Trash2 size={14} />
                           </button>
-                        );
-                      })}
+                        </div>
+                      ))}
                     </div>
-                  ))}
+                  )}
+                  {selectedPatterns.length === 0 && (
+                    <div className="text-sm text-slate-400 italic py-2">
+                      Chưa có khung giờ nào được chọn.
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -336,10 +403,10 @@ export default function BulkScheduleModal({ classes, rooms = [], teachers = [] }
 
               <button
                 type="submit"
-                disabled={isLoading || isScanning}
+                disabled={isLoading}
                 className="w-full h-12 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white rounded-xl font-bold text-base transition-all shadow-sm flex items-center justify-center gap-2"
               >
-                {isLoading ? "Đang xử lý..." : `Xác Nhận Tạo Lịch (${selectedPatterns.length} ca/tuần)`}
+                {isLoading ? "Đang xử lý..." : `Xác Nhận Tạo Lịch (${selectedPatterns.length} buổi/tuần)`}
               </button>
             </form>
           </div>

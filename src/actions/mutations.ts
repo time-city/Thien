@@ -16,7 +16,7 @@ async function checkSuperAdmin() {
 export async function getPendingSessionsCount() {
   const session = await auth();
   if (session?.user?.role !== "SUPER_ADMIN") return 0;
-  
+
   return await prisma.classSession.count({
     where: { status: "PENDING" }
   });
@@ -44,16 +44,16 @@ function parseDobToUtcDate(dob: StudentDobInput): Date | null {
   // Create midnight UTC to avoid timezone shift
   return new Date(Date.UTC(y, m - 1, d));
 }
-export async function createStudent(data: { 
-  fullName: string; 
-  phoneStudent?: string; 
-  parentName?: string; 
-  phoneParent?: string; 
+export async function createStudent(data: {
+  fullName: string;
+  phoneStudent?: string;
+  parentName?: string;
+  phoneParent?: string;
   gender?: string;
   dob?: StudentDobInput;
   school?: string | null;
   // Đổi từ classIds sang mảng object chứa trạng thái học phí
-  classEnrollments?: { classId: string; feeStatus: "PAID" | "UNPAID" }[]; 
+  classEnrollments?: { classId: string; feeStatus: "PAID" | "UNPAID" }[];
 }) {
   await checkSuperAdmin();
   try {
@@ -63,7 +63,7 @@ export async function createStudent(data: {
     if (data.classEnrollments && data.classEnrollments.length > 0) {
       const classIds = data.classEnrollments.map(c => c.classId);
       const classesInfo = await prisma.class.findMany({ where: { id: { in: classIds } } });
-      
+
       enrollmentsData = data.classEnrollments.map(ce => {
         const cls = classesInfo.find(c => c.id === ce.classId);
         return {
@@ -116,7 +116,7 @@ export async function updateStudent(id: string, data: any) {
         });
         const existingClassIds = existingEnrollments.map(e => e.classId);
         const newClassIds = classEnrollments.map(ce => ce.classId);
-        
+
         const classIdsToRemove = existingClassIds.filter(cid => !newClassIds.includes(cid));
         // Lọc ra NHỮNG LỚP ĐƯỢC THÊM MỚI HOÀN TOÀN
         const classesToAdd = classEnrollments.filter(ce => !existingClassIds.includes(ce.classId));
@@ -159,11 +159,11 @@ export async function updateStudent(id: string, data: any) {
     return { success: false, error: "Lỗi cập nhật học sinh" };
   }
 }
-export async function importStudentsCsv(data: { 
-  fullName: string; 
-  phoneStudent?: string; 
-  parentName?: string; 
-  phoneParent?: string; 
+export async function importStudentsCsv(data: {
+  fullName: string;
+  phoneStudent?: string;
+  parentName?: string;
+  phoneParent?: string;
   gender?: string;
   className?: string;
   school?: string;
@@ -189,9 +189,9 @@ export async function importStudentsCsv(data: {
     // 4. Báo lỗi nếu có lớp chưa được tạo
     const missingClasses = classNamesInCsv.filter(name => !existingClassNames.includes(name));
     if (missingClasses.length > 0) {
-      return { 
-        success: false, 
-        error: `Các lớp sau chưa được tạo trên hệ thống: ${missingClasses.join(', ')}. Vui lòng tạo lớp trước khi import.` 
+      return {
+        success: false,
+        error: `Các lớp sau chưa được tạo trên hệ thống: ${missingClasses.join(', ')}. Vui lòng tạo lớp trước khi import.`
       };
     }
 
@@ -220,7 +220,7 @@ export async function importStudentsCsv(data: {
 
         const classNameStr = row.className?.trim();
         const classInfo = classNameStr ? existingClasses.find(c => c.name === classNameStr) : null;
-        
+
         let enrollmentsData: any = undefined;
         if (classInfo) {
           const isPaid = row.feeStatus === "PAID";
@@ -256,7 +256,7 @@ export async function importStudentsCsv(data: {
 
     revalidatePath("/admin/students");
     return { success: true, count: validData.length };
-  } catch(error) {
+  } catch (error) {
     console.error("importStudentsCsv error:", error);
     return { success: false, error: "Lỗi import file CSV" };
   }
@@ -373,14 +373,14 @@ export async function addStudentByTeacher(data: TeacherStudentPayload) {
 // 1B. ACTIONS CHO PHÒNG HỌC (ROOMS)
 // ==========================================
 
-export async function createRoom(data: { name: string; capacity?: number; feePerSession?: number }) {
+export async function createRoom(data: { name: string; capacity?: number; feePerHour?: number }) {
   await checkSuperAdmin();
   try {
     await prisma.room.create({
       data: {
         name: data.name.trim(),
         capacity: typeof data.capacity === "number" ? data.capacity : null,
-        feePerSession: typeof data.feePerSession === "number" ? data.feePerSession : 0,
+        feePerHour: typeof data.feePerHour === "number" ? data.feePerHour : 0,
       },
     });
 
@@ -394,7 +394,7 @@ export async function createRoom(data: { name: string; capacity?: number; feePer
 
 export async function updateRoom(
   id: string,
-  data: { name: string; capacity?: number; feePerSession?: number; isActive?: boolean }
+  data: { name: string; capacity?: number; feePerHour?: number; isActive?: boolean }
 ) {
   await checkSuperAdmin();
   try {
@@ -403,7 +403,7 @@ export async function updateRoom(
       data: {
         name: data.name.trim(),
         capacity: typeof data.capacity === "number" ? data.capacity : null,
-        feePerSession: typeof data.feePerSession === "number" ? data.feePerSession : undefined,
+        feePerHour: typeof data.feePerHour === "number" ? data.feePerHour : undefined,
         ...(typeof data.isActive === "boolean" ? { isActive: data.isActive } : {}),
       },
     });
@@ -456,13 +456,13 @@ export async function getStudentDeletionImpact(studentId: string) {
     const paymentsCount = await prisma.paymentHistory.count({ where: { studentId } });
     const attendanceCount = await prisma.attendanceLog.count({ where: { studentId } });
 
-    return { 
-      success: true, 
-      impact: { 
-        enrollmentCount: enrollmentsCount, 
-        paymentCount: paymentsCount, 
-        attendanceCount: attendanceCount 
-      } 
+    return {
+      success: true,
+      impact: {
+        enrollmentCount: enrollmentsCount,
+        paymentCount: paymentsCount,
+        attendanceCount: attendanceCount
+      }
     };
   } catch (error) {
     return { success: false, error: "Không thể kiểm tra dữ liệu học sinh." };
@@ -635,7 +635,7 @@ export async function saveStudentEvaluation(data: {
 
     revalidatePath("/ta");
     revalidatePath("/schedule");
-    
+
     return { success: true };
   } catch (error) {
     console.error("Save evaluation error:", error);
@@ -791,9 +791,9 @@ export async function deleteTeacher(teacherId: string) {
 // ==========================================
 // 4. ACTIONS CHO LỚP HỌC (CLASSES)
 // ==========================================
-export async function createClass(data: { 
-  name: string; 
-  category: string; 
+export async function createClass(data: {
+  name: string;
+  category: string;
   pricePerSession: number;
   sessionsPerPackage: number;
   teachers?: { teacherId: string; salaryPerSession: number }[];
@@ -832,8 +832,8 @@ export async function createClass(data: {
         createdById: session.user.id,
         teachers: teachersToCreate.length > 0
           ? {
-              create: teachersToCreate,
-            }
+            create: teachersToCreate,
+          }
           : undefined,
       },
     });
@@ -867,9 +867,9 @@ export async function approveOrRejectClass(
 
 export async function updateClass(
   id: string,
-  data: { 
-    name?: string; 
-    category?: string; 
+  data: {
+    name?: string;
+    category?: string;
     pricePerSession?: number;
     sessionsPerPackage?: number;
     teachers?: { teacherId: string; salaryPerSession: number }[];
@@ -1057,7 +1057,7 @@ export async function submitAttendanceAndCalculateFinance(
     const classId = sessionInfo.classId;
     const roomFee = 0; // Lớp trung tâm không tính phí phòng
     const now = new Date();
-    
+
     const studentIds = attendanceData.map((r) => r.studentId);
 
     if (!classId) {
@@ -1231,7 +1231,7 @@ export async function processStudentTuitionPayment(
   paymentMethod: PaymentMethod = "BANK_TRANSFER"
 ) {
   try {
-    await checkSuperAdmin(); 
+    await checkSuperAdmin();
 
     await prisma.$transaction(async (tx) => {
       for (const enrollmentId of enrollmentIds) {
@@ -1285,8 +1285,8 @@ export async function processStudentTuitionPayment(
 // ==========================================
 export async function payTeacherSalary(teacherId: string, amount: number) {
   try {
-    await checkSuperAdmin(); 
-    
+    await checkSuperAdmin();
+
     if (amount <= 0) return { success: false, error: "Số tiền thanh toán phải lớn hơn 0" };
 
     await prisma.$transaction(async (tx) => {
@@ -1330,8 +1330,8 @@ export async function payTeacherSalary(teacherId: string, amount: number) {
 
 export async function collectTeacherDebtManual(teacherId: string, amount: number) {
   try {
-    await checkSuperAdmin(); 
-    
+    await checkSuperAdmin();
+
     if (amount <= 0) return { success: false, error: "Số tiền thu phải lớn hơn 0" };
 
     await prisma.$transaction(async (tx) => {
@@ -1380,8 +1380,8 @@ export async function collectTeacherDebtManual(teacherId: string, amount: number
 export async function requestRoomBooking(data: {
   classId: string | null;
   roomId: string;
-  date: string;
-  slot: number;
+  startTime: string | Date;
+  endTime: string | Date;
 }) {
   const session = await auth();
   if (!session?.user) return { success: false, error: "Vui lòng đăng nhập" };
@@ -1391,15 +1391,21 @@ export async function requestRoomBooking(data: {
   const teacherId = session.user.id;
 
   try {
-    const dateObj = new Date(data.date);
+    const startObj = new Date(data.startTime);
+    const endObj = new Date(data.endTime);
+    // Tính số giờ để tính tiền phòng, chuyển milliseconds sang giờ
+    const diffHours = (endObj.getTime() - startObj.getTime()) / (1000 * 60 * 60);
+
+    // Đảm bảo UTC cho trường date (chỉ lưu phần ngày)
+    const dateObj = new Date(Date.UTC(startObj.getFullYear(), startObj.getMonth(), startObj.getDate()));
 
     // Kiểm tra trùng lặp thời gian phòng
     const existingRoom = await prisma.classSession.findFirst({
       where: {
         roomId: data.roomId,
-        date: dateObj,
-        slot: data.slot,
-        status: { not: "CANCELLED" }
+        status: { not: "CANCELLED" },
+        startTime: { lt: endObj },
+        endTime: { gt: startObj }
       },
     });
 
@@ -1411,9 +1417,9 @@ export async function requestRoomBooking(data: {
     const existingTeacher = await prisma.classSession.findFirst({
       where: {
         teacherId: teacherId,
-        date: dateObj,
-        slot: data.slot,
-        status: { not: "CANCELLED" }
+        status: { not: "CANCELLED" },
+        startTime: { lt: endObj },
+        endTime: { gt: startObj }
       },
     });
 
@@ -1428,15 +1434,17 @@ export async function requestRoomBooking(data: {
           teacherId: teacherId,
           roomId: data.roomId,
           date: dateObj,
-          slot: data.slot,
+          startTime: startObj,
+          endTime: endObj,
           status: role === "SUPER_ADMIN" ? "SCHEDULED" : "PENDING",
         },
       });
 
       if (role === "SUPER_ADMIN" && (data.classId === "freelance" || data.classId === null)) {
         const room = await tx.room.findUnique({ where: { id: data.roomId } });
-        const roomFee = room?.feePerSession ?? 0;
-        
+        const feePerHour = room?.feePerHour ?? 0;
+        const roomFee = feePerHour * diffHours;
+
         if (roomFee > 0) {
           await tx.user.update({
             where: { id: teacherId },
@@ -1465,54 +1473,51 @@ export async function requestRoomBooking(data: {
 }
 
 export async function approveSessionRequest(sessionId: string) {
-  await checkSuperAdmin();
   try {
-    const result = await prisma.$transaction(async (tx) => {
-      const session = await tx.classSession.findUnique({
-        where: { id: sessionId },
-        include: { room: true }
-      });
-
-      if (!session) throw new Error("Không tìm thấy phiên đăng ký");
-
-      // Nếu là lớp tự do (Freelance), trừ tiền phòng NGAY LẬP TỨC khi duyệt
-      let deductedFee = 0;
-      if (session.classId === null) {
-        const roomFee = session.room?.feePerSession ?? 0;
-        
-        if (roomFee > 0) {
-          deductedFee = roomFee;
-          await tx.user.update({
-            where: { id: session.teacherId },
-            data: { salaryBalance: { decrement: roomFee } }
-          });
-
-          await tx.roomRentalLog.create({
-            data: {
-              teacherId: session.teacherId,
-              classSessionId: session.id,
-              feeCalculated: roomFee,
-              status: "PENDING"
-            }
-          });
-        }
-      }
-
-      await tx.classSession.update({
-        where: { id: sessionId },
-        data: { status: "SCHEDULED" },
-      });
-
-      return { success: true, error: undefined, deductedFee };
+    const sessionToApprove = await prisma.classSession.findUnique({
+      where: { id: sessionId },
+      include: { room: true }
     });
 
+    if (!sessionToApprove) return { success: false, error: "Không tìm thấy yêu cầu" };
 
-    revalidatePath("/schedule");
-    revalidatePath("/admin/teachers");
-    return result;
+    let deductedFee = 0;
+
+    await prisma.$transaction(async (tx) => {
+      // 1. Đổi status thành SCHEDULED
+      await tx.classSession.update({
+        where: { id: sessionId },
+        data: { status: "SCHEDULED" }
+      });
+
+      // 2. NẾU LÀ LỚP TỰ DO (classId === null) -> TÍNH TIỀN VÀ TRỪ VÍ
+      if (sessionToApprove.classId === null && sessionToApprove.room && sessionToApprove.room.feePerHour > 0) {
+        // Tính số giờ thuê
+        const durationHours = (sessionToApprove.endTime.getTime() - sessionToApprove.startTime.getTime()) / (1000 * 60 * 60);
+        deductedFee = durationHours * sessionToApprove.room.feePerHour;
+
+        // Trừ tiền vào ví giáo viên
+        await tx.user.update({
+          where: { id: sessionToApprove.teacherId },
+          data: { salaryBalance: { decrement: deductedFee } }
+        });
+
+        // Tạo bản ghi lưu log thuê phòng
+        await tx.roomRentalLog.create({
+          data: {
+            teacherId: sessionToApprove.teacherId,
+            classSessionId: sessionId,
+            feeCalculated: deductedFee,
+            status: "PENDING" // Đang nợ trung tâm
+          }
+        });
+      }
+    });
+
+    return { success: true, deductedFee };
   } catch (error) {
-    console.error("approveSessionRequest error:", error);
-    return { success: false, error: "Lỗi duyệt phòng" };
+    console.error("Lỗi duyệt lịch:", error);
+    return { success: false, error: "Không thể duyệt lịch học" };
   }
 }
 
@@ -1526,7 +1531,7 @@ export async function requestCancelSession(sessionId: string, reason: string) {
     });
 
     if (!classSession) return { success: false, error: "Không tìm thấy phiên đăng ký" };
-    
+
     if (classSession.teacherId !== userSession.user.id && userSession.user.role !== "SUPER_ADMIN") {
       return { success: false, error: "Không đủ quyền" };
     }
@@ -1548,47 +1553,52 @@ export async function requestCancelSession(sessionId: string, reason: string) {
 }
 
 export async function approveCancelSession(sessionId: string) {
-  await checkSuperAdmin();
   try {
-    return await prisma.$transaction(async (tx) => {
-      const session = await tx.classSession.findUnique({
-        where: { id: sessionId }
+    const sessionToCancel = await prisma.classSession.findUnique({
+      where: { id: sessionId }
+    });
+
+    if (!sessionToCancel) return { success: false, error: "Không tìm thấy yêu cầu" };
+
+    await prisma.$transaction(async (tx) => {
+      // 1. Hủy ca học
+      await tx.classSession.update({
+        where: { id: sessionId },
+        data: {
+          status: "CANCELLED",
+          isCancelRequested: false // Đã xử lý xong yêu cầu
+        }
       });
 
-      if (!session) throw new Error("Không tìm thấy ca học");
-      if (!session.isCancelRequested) throw new Error("Ca này không có yêu cầu huỷ");
-
-      // Nếu là lớp tự do, hoàn tiền phòng
-      if (session.classId === null) {
-        const log = await tx.roomRentalLog.findFirst({
-          where: { classSessionId: session.id, status: { in: ["PAID", "PENDING"] } }
+      // 2. NẾU LÀ LỚP TỰ DO -> TÌM LẠI LOG THUÊ PHÒNG VÀ HOÀN TIỀN
+      if (sessionToCancel.classId === null) {
+        const rentalLog = await tx.roomRentalLog.findFirst({
+          where: {
+            classSessionId: sessionId,
+            status: "PENDING"
+          }
         });
 
-        if (log) {
-          // Hoàn tiền vào ví
+        if (rentalLog && rentalLog.feeCalculated > 0) {
+          // Cộng lại tiền vào ví giáo viên
           await tx.user.update({
-            where: { id: session.teacherId },
-            data: { salaryBalance: { increment: log.feeCalculated } }
+            where: { id: sessionToCancel.teacherId },
+            data: { salaryBalance: { increment: rentalLog.feeCalculated } }
           });
-          
-          // Cập nhật trạng thái log thành REFUNDED
+
+          // Cập nhật log thành đã hoàn tiền
           await tx.roomRentalLog.update({
-            where: { id: log.id },
+            where: { id: rentalLog.id },
             data: { status: "REFUNDED" }
           });
         }
       }
-
-      await tx.classSession.update({
-        where: { id: sessionId },
-        data: { status: "CANCELLED", isCancelRequested: false, cancelReason: null }
-      });
-
-      return { success: true, error: undefined };
     });
+
+    return { success: true };
   } catch (error) {
-    console.error("approveCancelSession error:", error);
-    return { success: false, error: "Lỗi khi duyệt huỷ ca" };
+    console.error("Lỗi duyệt huỷ ca:", error);
+    return { success: false, error: "Không thể duyệt huỷ ca học" };
   }
 }
 
@@ -1692,7 +1702,7 @@ export async function markReportAsSent(attendanceLogId: string) {
   try {
     await prisma.attendanceLog.update({
       where: { id: attendanceLogId },
-      data: { 
+      data: {
         isReportSent: true,
         reportedAt: new Date()
       }
@@ -1708,7 +1718,7 @@ export async function markMultipleReportsAsSent(attendanceLogIds: string[]) {
   try {
     await prisma.attendanceLog.updateMany({
       where: { id: { in: attendanceLogIds } },
-      data: { 
+      data: {
         isReportSent: true,
         reportedAt: new Date()
       }

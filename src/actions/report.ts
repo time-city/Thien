@@ -13,7 +13,8 @@ export type StudentCourseReport = {
   pendingInvoice: { id: string; expectedAmount: number } | null;
   logs: {
     date: Date;
-    slot: number;
+    startTime: Date;
+    endTime: Date;
     attendanceStatus: string;
     homeworkStatus: string | null;
     note: string | null;
@@ -77,7 +78,8 @@ export async function getStudentCourseReport(studentId: string, classId: string)
     logs: logs.map(log => ({
       id: log.id,
       date: log.classSession.date,
-      slot: log.classSession.slot,
+      startTime: log.classSession.startTime,
+      endTime: log.classSession.endTime,
       attendanceStatus: log.attendanceStatus,
       homeworkStatus: log.homeworkStatus,
       note: log.note,
@@ -105,7 +107,8 @@ export type StudentCombinedReport = {
     id: string;
     className: string;
     date: Date;
-    slot: number;
+    startTime: Date;
+    endTime: Date;
     attendanceStatus: string;
     homeworkStatus: string | null;
     note: string | null;
@@ -206,7 +209,8 @@ export async function getStudentCombinedReport(studentId: string): Promise<Stude
       id: log.id,
       className: log.classSession.class?.name || "Lớp Tự Do",
       date: log.classSession.date,
-      slot: log.classSession.slot,
+      startTime: log.classSession.startTime,
+      endTime: log.classSession.endTime,
       attendanceStatus: log.attendanceStatus,
       homeworkStatus: log.homeworkStatus,
       note: log.note,

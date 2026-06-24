@@ -24,7 +24,7 @@ const localizer = dateFnsLocalizer({
 });
 
 const formats = {
-  dayFormat: (date: Date) => format(date, "dd/MM", { locale: vi }),
+  dayFormat: "EEEE, dd/MM",
 };
 
 export default function TeacherBookingCalendar({
@@ -220,8 +220,8 @@ export default function TeacherBookingCalendar({
 
   return (
     // THIẾT KẾ FLEXBOX FULL MÀN HÌNH (h-dvh) CHỐNG SCROLL TOÀN TRANG
-    <div className="h-dvh w-full mx-auto p-2 md:p-4 flex flex-col overflow-hidden bg-slate-50">
-      <div className="flex-1 flex flex-col rounded-2xl bg-white shadow-sm border border-slate-200 overflow-hidden">
+    <div className="h-dvh w-full mx-auto p-0 md:p-4 flex flex-col overflow-hidden bg-slate-50">
+      <div className="flex-1 flex flex-col md:rounded-2xl bg-white md:shadow-sm md:border md:border-slate-200 overflow-hidden">
 
         {/* HEADER ĐIỀU HƯỚNG MỚI */}
         <div className="flex-shrink-0 px-4 py-3 border-b border-slate-100 bg-gradient-to-b from-slate-50 to-white">
@@ -309,6 +309,13 @@ export default function TeacherBookingCalendar({
 
                 // RENDER GIAO DIỆN CỤC SỰ KIỆN
                 components={{
+                  header: ({ date }) => {
+                    return (
+                      <div className="capitalize text-center py-1">
+                        {format(date, "EEEE, dd/MM", { locale: vi })}
+                      </div>
+                    );
+                  },
                   event: ({ event }: any) => {
                     const s = event.resource as ScheduleItemData;
                     const isMine = s.teacherId === teacherId;
@@ -401,7 +408,7 @@ export default function TeacherBookingCalendar({
               </div>
               <div className="flex justify-between border-b pb-2">
                 <span className="text-slate-500">Ngày:</span>
-                <span className="font-bold text-slate-900">{format(bookingSlot.start, "dd/MM/yyyy")}</span>
+                <span className="font-bold text-slate-900"><span className="capitalize">{format(bookingSlot.start, "EEEE", { locale: vi })}</span>, {format(bookingSlot.start, "dd/MM/yyyy")}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-500">Thời gian:</span>

@@ -210,8 +210,8 @@ export default function WeeklyCalendar({
   }, [optimisticSessions]);
 
   return (
-    <div className="h-dvh w-full mx-auto p-2 md:p-4 flex flex-col overflow-hidden bg-slate-50">
-      <div className="flex-1 flex flex-col rounded-2xl bg-white shadow-sm border border-slate-200 overflow-hidden">
+    <div className="h-dvh w-full mx-auto p-0 md:p-4 flex flex-col overflow-hidden bg-slate-50">
+      <div className="flex-1 flex flex-col md:rounded-2xl bg-white md:shadow-sm md:border md:border-slate-200 overflow-hidden">
 
         {/* HEADER ĐIỀU HƯỚNG */}
         <div className="flex-shrink-0 px-4 py-3 border-b border-slate-100 bg-gradient-to-b from-slate-50 to-white">
@@ -288,6 +288,13 @@ export default function WeeklyCalendar({
               onSelectSlot={handleSelectSlot}
 
               components={{
+                header: ({ date }) => {
+                  return (
+                    <div className="capitalize text-center py-1">
+                      {format(date, "EEEE, dd/MM", { locale: vi })}
+                    </div>
+                  );
+                },
                 event: ({ event }: any) => {
                   const s = event.resource as ScheduleSession;
                   return (

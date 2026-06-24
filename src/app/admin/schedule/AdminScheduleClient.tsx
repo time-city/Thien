@@ -26,7 +26,7 @@ const localizer = dateFnsLocalizer({
 })
 
 const formats = {
-  dayFormat: (date: Date) => format(date, "dd/MM", { locale: vi }),
+  dayFormat: "EEEE, dd/MM",
 };
 
 export default function AdminScheduleClient({
@@ -214,7 +214,7 @@ export default function AdminScheduleClient({
                       <strong>Phòng:</strong> {rooms.find(r => r.id === s.roomId)?.name || "Chưa rõ"}
                     </div>
                     <div className="text-sm text-slate-600">
-                      <strong>Thời gian:</strong> {format(new Date(s.startTime), "dd/MM/yyyy HH:mm")} - {format(new Date(s.endTime), "HH:mm")}
+                      <strong>Thời gian:</strong> <span className="capitalize">{format(new Date(s.startTime), "EEEE", { locale: vi })}</span>, {format(new Date(s.startTime), "dd/MM/yyyy HH:mm")} - {format(new Date(s.endTime), "HH:mm")}
                     </div>
                     {isCancel && s.cancelReason && (
                       <div className="text-sm bg-rose-50/50 p-2 rounded-lg text-rose-800 italic mt-1">
@@ -258,6 +258,15 @@ export default function AdminScheduleClient({
               
               return { style: { backgroundColor } };
             }}
+            components={{
+              header: ({ date }) => {
+                return (
+                  <div className="capitalize text-center py-1">
+                    {format(date, "EEEE, dd/MM", { locale: vi })}
+                  </div>
+                );
+              }
+            }}
           />
         </div>
       )}
@@ -286,7 +295,7 @@ export default function AdminScheduleClient({
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-500">Thời gian:</span>
-                <span className="font-bold text-slate-900">{format(new Date(selectedSession.startTime), "dd/MM/yyyy HH:mm")} - {format(new Date(selectedSession.endTime), "HH:mm")}</span>
+                <span className="font-bold text-slate-900"><span className="capitalize">{format(new Date(selectedSession.startTime), "EEEE", { locale: vi })}</span>, {format(new Date(selectedSession.startTime), "dd/MM/yyyy HH:mm")} - {format(new Date(selectedSession.endTime), "HH:mm")}</span>
               </div>
             </div>
 

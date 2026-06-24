@@ -30,8 +30,8 @@ export default function GlobalConfirmModal() {
   // Giữ nguyên 100% giao diện UI của ông
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => !isLoading && closeConfirm()}>
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
-        <div className="p-4 sm:p-6">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md max-h-[90vh] overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
+        <div className="p-4 sm:p-6 overflow-y-auto flex-1">
           <div className="flex justify-between items-start mb-3 sm:mb-4">
             <div
               className={`p-2.5 sm:p-3 rounded-full ${

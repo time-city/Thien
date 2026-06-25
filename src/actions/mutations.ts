@@ -1396,8 +1396,9 @@ export async function requestRoomBooking(data: {
     // Tính số giờ để tính tiền phòng, chuyển milliseconds sang giờ
     const diffHours = (endObj.getTime() - startObj.getTime()) / (1000 * 60 * 60);
 
-    // Đảm bảo UTC cho trường date (chỉ lưu phần ngày)
-    const dateObj = new Date(Date.UTC(startObj.getFullYear(), startObj.getMonth(), startObj.getDate()));
+    // Đảm bảo UTC cho trường date (chỉ lưu phần ngày) theo giờ Việt Nam (GMT+7)
+    const vnTime = new Date(startObj.getTime() + 7 * 60 * 60 * 1000);
+    const dateObj = new Date(Date.UTC(vnTime.getUTCFullYear(), vnTime.getUTCMonth(), vnTime.getUTCDate()));
 
     // Kiểm tra trùng lặp thời gian phòng
     const existingRoom = await prisma.classSession.findFirst({

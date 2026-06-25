@@ -39,11 +39,13 @@ export async function createBulkSchedule(data: {
 
       const sTime = new Date(targetDate);
       const [sh, sm] = pat.startTimeString.split(':').map(Number);
-      sTime.setHours(sh, sm, 0, 0);
+      // Giờ Việt Nam là GMT+7, chuyển giờ nhập thành UTC
+      sTime.setUTCHours(sh - 7, sm, 0, 0);
 
       const eTime = new Date(targetDate);
       const [eh, em] = pat.endTimeString.split(':').map(Number);
-      eTime.setHours(eh, em, 0, 0);
+      // Giờ Việt Nam là GMT+7, chuyển giờ nhập thành UTC
+      eTime.setUTCHours(eh - 7, em, 0, 0);
 
       datesToCheck.push({ startTime: sTime, endTime: eTime });
       sessionsToCreate.push({
@@ -346,8 +348,12 @@ export async function updateSessionTime(sessionId: string, newStartTime: Date, n
     }
 
     // Lấy ngày mới (loại bỏ phần giờ phút để lưu vào trường db.Date)
-    const newDate = new Date(start);
-    newDate.setHours(0, 0, 0, 0);
+    // Để an toàn với timezone, ta cộng 7 tiếng để ra giờ VN, lấy chuỗi YYYY-MM-DD rồi gán thành ngày UTC.
+    const startVnTime = new Date(start.getTime() + 7 * 60 * 60 * 1000);
+    const yyyy = startVnTime.getUTCFullYear();
+    const mm = startVnTime.getUTCMonth();
+    const dd = startVnTime.getUTCDate();
+    const newDate = new Date(Date.UTC(yyyy, mm, dd, 0, 0, 0, 0));
 
     // 2. Lấy thông tin ca học hiện tại
     const existingSession = await prisma.classSession.findUnique({

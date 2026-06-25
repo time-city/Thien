@@ -84,7 +84,7 @@ export default function WeeklyCalendar({
   // Optimistic UI đồng bộ mượt mà
   const [optimisticSessions, dispatchOptimistic] = useOptimistic(
     sessions as ScheduleSession[],
-    (state, action: { type: "DELETE_MANY" | "APPROVE" | "REJECT" | "UPDATE_TIME" | "ADD"; payload: any }) => {
+    (state, action: { type: "DELETE_MANY" | "APPROVE" | "REJECT" | "UPDATE_TIME" | "ADD" | "REVERT_ADD"; payload: any }) => {
       switch (action.type) {
         case "DELETE_MANY": return state.filter(s => !(action.payload as string[]).includes(s.id));
         case "APPROVE": return state.map(s => s.id === action.payload ? { ...s, status: "COMPLETED", pending: true } : s);

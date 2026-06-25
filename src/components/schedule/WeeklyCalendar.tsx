@@ -90,7 +90,8 @@ export default function WeeklyCalendar({
         case "APPROVE": return state.map(s => s.id === action.payload ? { ...s, status: "COMPLETED", pending: true } : s);
         case "REJECT": return state.map(s => s.id === action.payload ? { ...s, status: "REJECTED", pending: true } : s);
         case "UPDATE_TIME": return state.map(s => s.id === action.payload.id ? { ...s, startTime: action.payload.start, endTime: action.payload.end, pending: true } : s);
-        case "ADD": return [...state, action.payload];
+        case "ADD": return [...state, ...action.payload];
+        case "REVERT_ADD": return state.filter(s => !(action.payload as string[]).includes(s.id));
         default: return state;
       }
     }
@@ -316,7 +317,7 @@ export default function WeeklyCalendar({
                 let backgroundColor = '#eff6ff'; let borderColor = '#3b82f6'; let textColor = '#1e3a8a';
                 if (s.status === 'PENDING') { backgroundColor = '#fffbeb'; borderColor = '#f59e0b'; textColor = '#78350f'; }
                 else if (s.status === 'COMPLETED' || s.isAttendanceSubmitted) { backgroundColor = '#f8fafc'; borderColor = '#94a3b8'; textColor = '#334155'; }
-                return { style: { backgroundColor, color: textColor, opacity: s.pending ? 0.6 : 1, borderRadius: '4px', border: `1px solid ${borderColor}`, borderLeft: `3px solid ${borderColor}`, boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.03)', width: '96%', marginLeft: '2px', padding: '4px 6px', fontSize: '11px', fontWeight: '500', lineHeight: '1.2', overflow: 'hidden', whiteSpace: 'normal', cursor: 'pointer' } };
+                return { style: { backgroundColor, color: textColor, opacity: s.pending ? 0.5 : 1, borderRadius: '4px', border: `1px solid ${borderColor}`, borderLeft: `3px solid ${borderColor}`, boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.03)', width: '96%', marginLeft: '2px', padding: '2px 4px', fontSize: '11px', fontWeight: '500', lineHeight: '1.2', overflow: 'hidden', whiteSpace: 'normal', cursor: 'pointer', minHeight: '36px' } };
               }}
             />
             </div>
@@ -342,6 +343,16 @@ export default function WeeklyCalendar({
             if (!open) setBookingSlot(null);
           }}
           showTriggerButton={false}
+          onOptimisticSubmit={(newSessions) => {
+            startTransition(() => {
+              dispatchOptimistic({ type: "ADD", payload: newSessions });
+            });
+          }}
+          onRevertSubmit={(tempIds) => {
+            startTransition(() => {
+              dispatchOptimistic({ type: "REVERT_ADD", payload: tempIds });
+            });
+          }}
         />
       )}
 

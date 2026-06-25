@@ -21,6 +21,8 @@ type BulkScheduleModalProps = {
   isOpen?: boolean;
   onOpenChange?: (open: boolean) => void;
   showTriggerButton?: boolean;
+  onOptimisticSubmit?: (newSessions: any[]) => void;
+  onRevertSubmit?: (tempIds: string[]) => void;
 };
 
 type SchedulePattern = {
@@ -36,7 +38,9 @@ export default function BulkScheduleModal({
   defaultData,
   isOpen: controlledIsOpen,
   onOpenChange,
-  showTriggerButton = true
+  showTriggerButton = true,
+  onOptimisticSubmit,
+  onRevertSubmit
 }: BulkScheduleModalProps) {
   const [internalIsOpen, setInternalIsOpen] = useState(false);
   const isOpen = controlledIsOpen !== undefined ? controlledIsOpen : internalIsOpen;
@@ -171,25 +175,75 @@ export default function BulkScheduleModal({
       cancelText: "Quay lại",
       isDestructive: false,
       onConfirm: async () => {
-        setIsLoading(true);
+        // Đóng form ngay lập tức để thực hiện optimistic UI
+        setIsOpen(false);
+        setSelectedPatterns([]);
+
+        // Tính toán các ca học tạm thời để hiển thị Optimistic UI
+        const optimisticSessions: any[] = [];
+        const startD = new Date(startDate);
+        const endD = new Date(endDate);
+        const tempIds: string[] = [];
+
+        let current = new Date(startD);
+        while (current <= endD) {
+          const dayOfWeek = current.getDay();
+          const matchingPatterns = selectedPatterns.filter(p => p.day === dayOfWeek);
+          for (const pat of matchingPatterns) {
+            const tempId = `temp-${Date.now()}-${Math.random()}`;
+            tempIds.push(tempId);
+
+            const sTime = new Date(current);
+            const [sh, sm] = pat.startTimeString.split(':').map(Number);
+            sTime.setHours(sh, sm, 0, 0);
+
+            const eTime = new Date(current);
+            const [eh, em] = pat.endTimeString.split(':').map(Number);
+            eTime.setHours(eh, em, 0, 0);
+
+            optimisticSessions.push({
+              id: tempId,
+              classId: isFreelance ? "" : classId,
+              className: isFreelance ? "Lớp Tự Do (Thuê phòng)" : selectedClassObj?.name || "",
+              teacherId: assignedTeacherId,
+              teacherFullName: assignedTeacherName,
+              roomId: roomId,
+              roomName: rooms.find(r => r.id === roomId)?.name || "",
+              date: new Date(current),
+              startTime: sTime,
+              endTime: eTime,
+              status: "SCHEDULED",
+              pending: true,
+            });
+          }
+          current.setDate(current.getDate() + 1);
+        }
+
+        if (onOptimisticSubmit) {
+          onOptimisticSubmit(optimisticSessions);
+        }
+
+        const toastId = toast.loading(`Đang tạo ${optimisticSessions.length} ca học định kỳ...`);
+
+        // Gọi API ngầm
         const result = await createBulkSchedule({
           classId: isFreelance ? null : classId,
-          teacherId: assignedTeacherId, // Lấy ID giáo viên đã được trích xuất tự động
+          teacherId: assignedTeacherId,
           roomId,
           patterns: selectedPatterns,
           startDate,
           endDate,
         });
 
-        setIsLoading(false);
-
         if (result.success) {
-          toast.success("Tạo lịch dạy định kỳ thành công!");
-          setIsOpen(false);
-          setSelectedPatterns([]);
-          window.location.reload(); // Ép reload để refetch data lịch mới nhất
+          toast.success("Tạo lịch dạy định kỳ thành công!", { id: toastId });
+          // Cần refresh lại data để lấy ID thật từ DB thay vì tempId
+          window.location.reload(); 
         } else {
-          toast.error(result.error || "Đã xảy ra lỗi khi tạo lịch.");
+          toast.error(result.error || "Đã xảy ra lỗi khi tạo lịch.", { id: toastId });
+          if (onRevertSubmit) {
+            onRevertSubmit(tempIds);
+          }
         }
       }
     });

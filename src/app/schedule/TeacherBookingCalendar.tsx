@@ -247,7 +247,9 @@ export default function TeacherBookingCalendar({
                 </select>
                 {isPending && <Loader2 className="w-4 h-4 animate-spin text-blue-600" />}
               </div>
+            </div>
 
+            <div className="flex items-center justify-between xl:justify-end gap-3 mt-3 xl:mt-0 w-full xl:w-auto border-t xl:border-0 pt-3 xl:pt-0 border-slate-100">
               {/* NÚT CHUYỂN TUẦN */}
               <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-lg border border-slate-200 shadow-sm">
                 <button onClick={() => handleNavigate('PREV')} className="p-1 hover:bg-white hover:shadow-sm rounded transition-all text-slate-700 hover:text-blue-600">

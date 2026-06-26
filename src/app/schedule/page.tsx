@@ -32,7 +32,10 @@ export default async function SchedulePage({
 
     // Nếu chưa chọn phòng thì có thể hiện form chọn phòng, 
     // Hoặc lấy lịch của phòng đã chọn.
-    const schedule = roomId ? await getSchedule(roomId) : [];
+    const [schedule, teacherSchedule] = await Promise.all([
+      roomId ? getSchedule(roomId) : Promise.resolve([]),
+      getSchedule(undefined, userId)
+    ]);
 
     return (
       <div className="max-w-7xl mx-auto p-4 md:p-8">
@@ -78,6 +81,7 @@ export default async function SchedulePage({
             classes={classes}
             teachers={teachers}
             selectedRoomId={roomId}
+            teacherSchedule={teacherSchedule}
           />
         )}
       </div>

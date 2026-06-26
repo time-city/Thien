@@ -1,6 +1,7 @@
 import { getRooms, getSchedule, getAllClasses, getAllUsers } from "@/actions/queries";
 import AdminScheduleClient from "./AdminScheduleClient";
 import WeeklyCalendar from "@/components/schedule/WeeklyCalendar";
+import { auth } from "@/auth";
 
 export default async function AdminSchedulePage({
   searchParams,
@@ -8,27 +9,32 @@ export default async function AdminSchedulePage({
   searchParams: Promise<{ roomId?: string }>;
 }) {
   const { roomId } = await searchParams;
+  const session = await auth();
+  const userId = session?.user?.id;
 
   if (!roomId) {
-    const [rooms, schedule] = await Promise.all([
+    const [rooms, schedule, teacherSchedule] = await Promise.all([
       getRooms(),
-      getSchedule(roomId)
+      getSchedule(roomId),
+      userId ? getSchedule(undefined, userId) : Promise.resolve([])
     ]);
 
     return (
       <AdminScheduleClient 
         rooms={rooms} 
         initialSchedule={schedule} 
+        teacherSchedule={teacherSchedule}
         selectedRoomId="" 
       />
     );
   }
 
-  const [rooms, schedule, classes, teachers] = await Promise.all([
+  const [rooms, schedule, classes, teachers, teacherSchedule] = await Promise.all([
     getRooms(),
     getSchedule(roomId),
     getAllClasses(),
-    getAllUsers()
+    getAllUsers(),
+    userId ? getSchedule(undefined, userId) : Promise.resolve([])
   ]);
 
   return (
@@ -52,6 +58,7 @@ export default async function AdminSchedulePage({
       classes={classes}
       teachers={teachers}
       selectedRoomId={roomId}
+      teacherSchedule={teacherSchedule}
     />
   );
 }

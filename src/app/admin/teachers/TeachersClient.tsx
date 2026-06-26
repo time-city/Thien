@@ -22,6 +22,7 @@ import {
   banTeacher,
   getTeacherDeletionImpact,
   getTeacherBanImpact,
+  adminResetUserPassword,
 } from "@/actions/mutations";
 
 import { TeacherData as BaseTeacherData } from "@/actions/queries";
@@ -73,6 +74,7 @@ export default function TeachersClient({
 
   const [isActive, setIsActive] = useState(true);
   const [password, setPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -104,6 +106,7 @@ export default function TeachersClient({
 
     setIsActive(t.isActive);
     setPassword("");
+    setNewPassword("");
     setIsModalOpen(true);
   };
 
@@ -131,6 +134,15 @@ export default function TeachersClient({
         });
 
         if (res?.success) {
+          // Xử lý đổi mật khẩu nếu có nhập
+          if (newPassword.trim()) {
+            const passRes = await adminResetUserPassword(editingTeacher.id, newPassword);
+            if (!passRes.success) {
+              toast.error(passRes.error || "Lỗi khi đổi mật khẩu.");
+              setLoading(false);
+              return;
+            }
+          }
           toast.success("Cập nhật giáo viên thành công");
           router.refresh(); 
         } else {
@@ -481,7 +493,7 @@ export default function TeachersClient({
             </div>
 
             <form onSubmit={submit} className="p-6 space-y-4">
-              {!editingTeacher && (
+              {!editingTeacher ? (
                 <div className="space-y-1.5">
                   <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
                     Mật khẩu (bắt buộc)
@@ -492,6 +504,19 @@ export default function TeachersClient({
                     onChange={(e) => setPassword(e.target.value)}
                     type="password"
                     placeholder="Nhập mật khẩu"
+                    className="w-full h-10 px-3 border border-slate-200 rounded-xl bg-slate-50 text-sm font-semibold focus:ring-2 focus:ring-blue-100 outline-none transition-all"
+                  />
+                </div>
+              ) : (
+                <div className="space-y-1.5">
+                  <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                    Đổi Mật khẩu (Bỏ trống nếu không đổi)
+                  </label>
+                  <input
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    type="password"
+                    placeholder="Nhập mật khẩu mới"
                     className="w-full h-10 px-3 border border-slate-200 rounded-xl bg-slate-50 text-sm font-semibold focus:ring-2 focus:ring-blue-100 outline-none transition-all"
                   />
                 </div>

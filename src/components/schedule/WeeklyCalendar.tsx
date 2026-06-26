@@ -44,6 +44,7 @@ type WeeklyCalendarProps = {
   rooms?: any[];
   classes?: any[];
   teachers?: any[];
+  teacherSchedule?: any[];
   selectedRoomId?: string;
   onSlotSelect?: (slot: { start: Date; end: Date; roomId: string }) => void;
 };
@@ -66,6 +67,7 @@ export default function WeeklyCalendar({
   rooms = [],
   classes = [],
   teachers = [],
+  teacherSchedule = [],
   selectedRoomId = ""
 }: WeeklyCalendarProps) {
   const [currentDate, setCurrentDate] = useState<Date>(() => new Date());

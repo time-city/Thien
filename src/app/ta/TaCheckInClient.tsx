@@ -8,6 +8,7 @@ import type { CheckInStudent, UISessionInfo } from "../../app/types";
 import Link from "next/link";
 import { ArrowLeft, Loader2, CheckCircle2, AlertTriangle } from "lucide-react";
 import { saveStudentEvaluation, submitAttendanceAndCalculateFinance } from "@/actions/mutations";
+import { getTodayQuickAttendance } from "@/actions/schedule";
 import { toast } from "sonner";
 
 export default function TaCheckInClient({
@@ -37,9 +38,39 @@ export default function TaCheckInClient({
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [isSubmittingFinal, setIsSubmittingFinal] = useState(false);
 
+  // Quick Attendance: Ca dạy tiếp theo và trước đó
+  const [nextSession, setNextSession] = useState<any>(null);
+  const [prevSession, setPrevSession] = useState<any>(null);
+  const [currentSession, setCurrentSession] = useState<any>(null);
+
   useEffect(() => {
     setStudentsState(students);
   }, [students]);
+
+  useEffect(() => {
+    getTodayQuickAttendance().then(sessions => {
+      // Tìm vị trí ca hiện tại trong danh sách hôm nay
+      const currentIndex = sessions.findIndex(s => s.id === sessionId);
+      
+      if (currentIndex !== -1) {
+        setCurrentSession(sessions[currentIndex]);
+      }
+      
+      // Nút "Ca tiếp theo" có thể là ca liền kề sau ca này (nếu có)
+      if (currentIndex !== -1 && currentIndex < sessions.length - 1) {
+        setNextSession(sessions[currentIndex + 1]);
+      } else if (currentIndex === -1) {
+        // Nếu ca này không nằm trong hôm nay, gợi ý ca đầu tiên chưa điểm danh của hôm nay
+        const pending = sessions.find(s => !s.isAttendanceSubmitted && s.status !== "COMPLETED");
+        if (pending) setNextSession(pending);
+      }
+
+      // Nút "Ca trước đó" là ca liền trước ca này (nếu có)
+      if (currentIndex > 0) {
+        setPrevSession(sessions[currentIndex - 1]);
+      }
+    });
+  }, [sessionId]);
 
   // Hàm lưu đánh giá nháp cho từng học sinh
   const handleSaveAssessment = async (id: string, updates: Partial<CheckInStudent>) => {
@@ -151,7 +182,7 @@ export default function TaCheckInClient({
   return (
     <div className="w-full max-w-5xl mx-auto pb-8 font-sans">
       <div className="bg-white border border-slate-200 shadow-sm rounded-xl py-3 px-4 mb-6">
-        <div className="mb-2">
+        <div className="mb-4 flex flex-col sm:flex-row gap-3 justify-between items-start sm:items-center">
           <Link
             href="/schedule"
             className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-500 hover:text-blue-600 transition-colors"
@@ -159,6 +190,32 @@ export default function TaCheckInClient({
             <ArrowLeft size={14} />
             Quay lại Lịch Dạy
           </Link>
+          
+          <div className="flex flex-col sm:flex-row flex-wrap gap-2 items-start sm:items-center">
+            {prevSession && (
+              <Link
+                href={`/ta?classId=${prevSession.classId}&sessionId=${prevSession.id}`}
+                className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-600 hover:text-slate-800 bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-full transition-colors shadow-sm"
+              >
+                ⬅️ Ca trước: {prevSession.className} ({new Date(prevSession.startTime).toLocaleTimeString('vi-VN', {hour: '2-digit', minute:'2-digit'})})
+              </Link>
+            )}
+            
+            {currentSession && (
+              <div className="inline-flex items-center gap-1.5 text-[13px] font-extrabold text-amber-700 bg-amber-100/80 border border-amber-200 px-4 py-1.5 rounded-full shadow-sm">
+                ⭐ Đang dạy: {currentSession.className} ({new Date(currentSession.startTime).toLocaleTimeString('vi-VN', {hour: '2-digit', minute:'2-digit'})} - {new Date(currentSession.endTime).toLocaleTimeString('vi-VN', {hour: '2-digit', minute:'2-digit'})})
+              </div>
+            )}
+            
+            {nextSession && (
+              <Link
+                href={`/ta?classId=${nextSession.classId}&sessionId=${nextSession.id}`}
+                className="inline-flex items-center gap-1.5 text-xs font-bold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-full transition-colors shadow-sm"
+              >
+                Ca tiếp theo: {nextSession.className} ({new Date(nextSession.startTime).toLocaleTimeString('vi-VN', {hour: '2-digit', minute:'2-digit'})}) ➡️
+              </Link>
+            )}
+          </div>
         </div>
         <div className="flex flex-col lg:flex-row gap-3 items-start lg:items-center justify-between">
           <div>

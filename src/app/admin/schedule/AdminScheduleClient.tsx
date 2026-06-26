@@ -37,6 +37,7 @@ export default function AdminScheduleClient({
   rooms: RoomData[];
   initialSchedule: BaseScheduleItemData[];
   selectedRoomId: string;
+  teacherSchedule?: BaseScheduleItemData[];
 }) {
   const router = useRouter();
   // Optimistic UI State

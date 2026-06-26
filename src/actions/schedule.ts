@@ -268,6 +268,46 @@ export async function deleteSchedule(
   return { success: true };
 }
 
+export async function getTodayQuickAttendance() {
+  const session = await auth();
+  if (!session?.user?.id) return [];
+
+  const userId = session.user.id;
+  
+  // Lấy ngày hôm nay
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const tomorrow = new Date(today);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+
+  const sessions = await prisma.classSession.findMany({
+    where: {
+      teacherId: userId,
+      date: {
+        gte: today,
+        lt: tomorrow
+      },
+      status: { not: "CANCELLED" },
+      classId: { not: null } // Bỏ qua freelance
+    },
+    include: { class: true, room: true },
+    orderBy: { startTime: "asc" }
+  });
+
+  return (sessions as any[]).map(s => ({
+    id: s.id,
+    classId: s.classId,
+    className: s.class?.name || "",
+    roomId: s.roomId,
+    roomName: s.room?.name || "",
+    date: s.date,
+    startTime: s.startTime,
+    endTime: s.endTime,
+    status: s.status,
+    isAttendanceSubmitted: s.isAttendanceSubmitted
+  }));
+}
+
 // Hàm quét phòng trống bị xóa vì đổi sang time picker. Mọi xử lý sẽ được check ở createBulkSchedule.
 // xoá nhiều lịch cùng lúc (dành cho SUPER_ADMIN)
 

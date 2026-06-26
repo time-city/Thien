@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 
 import { getPendingSessionsCount } from "@/actions/mutations";
+import QuickAttendancePanel from "../schedule/QuickAttendancePanel";
 
 type MenuItem = {
   title: string;
@@ -232,6 +233,11 @@ export default function Sidebar({ userRole, userName, isOpen, onClose }: Sidebar
 
         {/* Navigation */}
         <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
+          {/* NÚT ĐIỂM DANH NHANH NẰM CỐ ĐỊNH Ở ĐẦU SIDEBAR */}
+          <div className="mb-4">
+            <QuickAttendancePanel inSidebar={true} onClose={onClose} />
+          </div>
+
           {filteredNav.map((item, index) => {
             const previous = filteredNav[index - 1];
             const showSection = !previous || previous.section !== item.section;

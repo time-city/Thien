@@ -1222,6 +1222,35 @@ export async function updateTeacherProfile(
   }
 }
 
+export async function adminResetUserPassword(
+  teacherId: string,
+  newPassword: string
+) {
+  try {
+    await checkSuperAdmin();
+
+    if (!newPassword || newPassword.trim().length < 6) {
+      return { success: false, error: "Mật khẩu mới phải có ít nhất 6 ký tự." };
+    }
+
+    const bcrypt = await import("bcryptjs");
+    const hashed = await bcrypt.hash(newPassword, 10);
+
+    await prisma.user.update({
+      where: { id: teacherId },
+      data: {
+        passwordHash: hashed,
+      },
+    });
+
+    revalidatePath("/admin/teachers");
+    return { success: true };
+  } catch (error) {
+    console.error("adminResetUserPassword error:", error);
+    return { success: false, error: "Lỗi khi reset mật khẩu giáo viên." };
+  }
+}
+
 // ==========================================
 // 7. GIA HẠN / THU HỌC PHÍ HỌC SINH
 // ==========================================

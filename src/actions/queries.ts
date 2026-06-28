@@ -730,7 +730,14 @@ export type TeacherFinanceViewData = {
   totalEarned: number;
 };
 
-export async function getTeachersForFinance(): Promise<TeacherFinanceViewData[]> {
+export async function getTeachersForFinance(month?: number, year?: number): Promise<TeacherFinanceViewData[]> {
+  const currentDate = new Date();
+  const targetMonth = month !== undefined ? month : currentDate.getMonth() + 1;
+  const targetYear = year !== undefined ? year : currentDate.getFullYear();
+
+  const startDate = new Date(targetYear, targetMonth - 1, 1);
+  const endDate = new Date(targetYear, targetMonth, 0, 23, 59, 59, 999);
+
   const teachers = await prisma.user.findMany({
     where: { role: "TEACHER" },
     select: {
@@ -745,20 +752,49 @@ export async function getTeachersForFinance(): Promise<TeacherFinanceViewData[]>
 
   const result = await Promise.all(
     teachers.map(async (t) => {
-      // Tính tổng phí phòng HIỆN TẠI CHƯA THANH TOÁN
+      // 1. Tổng phí phòng CHƯA THANH TOÁN TRONG THÁNG
       const roomFeeAggr = await prisma.roomRentalLog.aggregate({
-        where: { teacherId: t.id, status: "PENDING" },
+        where: { 
+          teacherId: t.id, 
+          status: "PENDING",
+          classSession: { date: { gte: startDate, lte: endDate } }
+        },
         _sum: { feeCalculated: true }
       });
       const totalRoomFee = roomFeeAggr._sum.feeCalculated || 0;
 
-      // Tính tổng thu nhập HIỆN TẠI CHƯA THANH TOÁN
-      // Vì salaryBalance = Thu nhập chưa thanh toán - Phí phòng chưa thanh toán
-      // Suy ra: Thu nhập chưa thanh toán = salaryBalance + Phí phòng chưa thanh toán
-      const totalEarned = t.salaryBalance + totalRoomFee;
+      // 2. Tổng thu nhập CHƯA THANH TOÁN TRONG THÁNG
+      const unpaidSessions = await prisma.classSession.findMany({
+        where: {
+          teacherId: t.id,
+          status: "COMPLETED",
+          isPaid: false,
+          date: { gte: startDate, lte: endDate }
+        },
+        include: {
+          class: {
+            include: {
+              teachers: {
+                where: { teacherId: t.id }
+              }
+            }
+          }
+        }
+      });
+
+      let totalEarned = 0;
+      for (const session of unpaidSessions) {
+        if (session.class && session.class.teachers.length > 0) {
+          totalEarned += session.class.teachers[0].salaryPerSession;
+        }
+      }
+
+      // 3. Thực nhận của tháng = Thu nhập trong tháng - Phí phòng trong tháng
+      const monthlyBalance = totalEarned - totalRoomFee;
 
       return {
         ...t,
+        salaryBalance: monthlyBalance, // Trả về monthlyBalance vào property này để UI dễ dàng dùng tiếp
         totalRoomFee,
         totalEarned
       };

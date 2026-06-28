@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useMemo, useEffect, useOptimistic, startTransition } from "react";
+import { useState, useMemo, useEffect, useOptimistic, startTransition, useRef } from "react";
 import Papa from "papaparse";
-import { Plus, Edit2, Trash2, X, Search, User as UserIcon, Phone, CheckSquare, Square, Loader2, Eye, Filter, ChevronLeft, ChevronRight, BookOpen, Upload, Calendar, School, Download, AlertCircle } from "lucide-react";
+import { Plus, Edit2, Trash2, X, Search, User as UserIcon, Phone, CheckSquare, Square, Loader2, Eye, Filter, ChevronLeft, ChevronRight, BookOpen, Upload, Calendar, School, Download, AlertCircle, Send } from "lucide-react";
 import { createStudent, updateStudent, deleteStudent, deleteStudents, getStudentDeletionImpact, importStudentsCsv } from "@/actions/mutations";
 import { StudentData as BaseStudentData, ClassData } from "@/actions/queries";
 export type StudentData = BaseStudentData & { pending?: boolean };
@@ -35,6 +35,7 @@ export default function StudentsClient({
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingStudent, setEditingStudent] = useState<StudentData | null>(null);
+  const submitActionRef = useRef<"SAVE" | "SAVE_AND_REPORT">("SAVE");
   
   // Optimistic UI State
   const [optimisticStudents, addOptimisticStudent] = useOptimistic(
@@ -88,7 +89,8 @@ export default function StudentsClient({
 
   // States for Course Report Export
   const [reportModalOpen, setReportModalOpen] = useState(false);
-  const [reportData, setReportData] = useState<{ studentId: string; studentName: string; classId: string; className: string } | null>(null);
+  const [reportData, setReportData] = useState<{ studentId: string; studentName: string; classId?: string; className?: string } | null>(null);
+  const [autoSendReport, setAutoSendReport] = useState(false);
 
   useEffect(() => {
     setCurrentPage(1);
@@ -278,6 +280,11 @@ export default function StudentsClient({
         if (res?.success) {
           toast.success("Cập nhật học sinh thành công!");
           router.refresh();
+          if (submitActionRef.current === "SAVE_AND_REPORT") {
+            setReportData({ studentId: editingStudent.id, studentName: fullName });
+            setAutoSendReport(true);
+            setReportModalOpen(true);
+          }
         } else {
           toast.error(res?.error || "Lỗi cập nhật");
         }
@@ -301,7 +308,8 @@ export default function StudentsClient({
               status: "ACTIVE",
               teachers: [],
               remainingSessions: selectedClasses.find(sc => sc.classId === c.id)?.feeStatus === "PAID" ? c.sessionsPerPackage : 0,
-              feeStatus: selectedClasses.find(sc => sc.classId === c.id)?.feeStatus || "UNPAID"
+              feeStatus: selectedClasses.find(sc => sc.classId === c.id)?.feeStatus || "UNPAID",
+              voucherNumber: 1
             })),
           gender: (gender as "MALE" | "FEMALE" | "OTHER") || null,
           phone: phoneStudent || null,
@@ -317,6 +325,11 @@ export default function StudentsClient({
         if (res?.success) {
           toast.success("Thêm học sinh thành công!");
           router.refresh();
+          if (submitActionRef.current === "SAVE_AND_REPORT" && res.data?.id) {
+            setReportData({ studentId: res.data.id, studentName: fullName });
+            setAutoSendReport(true);
+            setReportModalOpen(true);
+          }
         } else {
           toast.error(res?.error || "Lỗi tạo mới");
         }
@@ -713,11 +726,17 @@ export default function StudentsClient({
                 </div>
               </div>
 
-              <div className="mt-6 pt-4 flex justify-end gap-3 border-t border-slate-100">
+              <div className="mt-6 pt-4 flex justify-end gap-3 border-t border-slate-100 flex-wrap">
                 <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2 text-sm font-bold text-slate-600 hover:bg-slate-200 bg-slate-100 rounded-lg transition-colors">Hủy</button>
-                <button type="submit" disabled={loading} className="px-5 py-2 min-w-[100px] text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-sm transition-all disabled:opacity-70 flex justify-center items-center">
+                <button type="submit" onClick={() => submitActionRef.current = "SAVE"} disabled={loading} className="px-5 py-2 min-w-[100px] text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-sm transition-all disabled:opacity-70 flex justify-center items-center">
                   {loading ? "Đang lưu..." : "Lưu Học Sinh"}
                 </button>
+                {selectedClasses.some(c => c.feeStatus === "UNPAID") && (
+                  <button type="submit" onClick={() => submitActionRef.current = "SAVE_AND_REPORT"} disabled={loading} className="px-5 py-2 text-sm font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg shadow-sm transition-all disabled:opacity-70 flex justify-center items-center gap-2">
+                    {loading ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
+                    Lưu & Nhắc Phí
+                  </button>
+                )}
               </div>
             </form>
           </div>
@@ -776,7 +795,9 @@ export default function StudentsClient({
                             </span>
                           </div>
                           <div className="text-xs text-slate-500 flex justify-between mt-1">
-                            <span className={c.feeStatus === "PAID" ? "text-emerald-600 font-bold" : "text-rose-600 font-bold"}>{c.feeStatus === "PAID" ? "Đã nộp học phí" : "Chưa nộp"}</span>
+                            <span className={c.feeStatus === "PAID" ? "text-emerald-600 font-bold" : "text-rose-600 font-bold"}>
+                              {c.feeStatus === "PAID" ? `Đã nộp học phí (Phiếu số ${c.voucherNumber ?? 1})` : `Chưa nộp (Phiếu số ${c.voucherNumber ?? 1})`}
+                            </span>
                           </div>
                           <div className="text-xs text-slate-500 mt-0.5">Giáo viên: <b>{c.teachers?.join(", ") || "Chưa phân công"}</b></div>
                           
@@ -829,9 +850,15 @@ export default function StudentsClient({
       {reportData && (
         <CourseReportModal
           isOpen={reportModalOpen}
-          onClose={() => setReportModalOpen(false)}
+          onClose={() => {
+            setReportModalOpen(false);
+            setAutoSendReport(false);
+          }}
           studentId={reportData.studentId}
           studentName={reportData.studentName}
+          classId={reportData.classId}
+          className={reportData.className}
+          autoSend={autoSendReport}
         />
       )}
     </div>

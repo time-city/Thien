@@ -75,7 +75,7 @@ export async function createStudent(data: {
       });
     }
 
-    await prisma.student.create({
+    const newStudent = await prisma.student.create({
       data: {
         fullName: data.fullName,
         phoneStudent: data.phoneStudent,
@@ -90,7 +90,7 @@ export async function createStudent(data: {
       }
     });
     revalidatePath("/admin/students");
-    return { success: true };
+    return { success: true, data: { id: newStudent.id } };
   } catch (error) {
     return { success: false, error: "Lỗi tạo học sinh" };
   }

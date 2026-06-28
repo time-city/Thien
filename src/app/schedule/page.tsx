@@ -95,7 +95,7 @@ export default async function SchedulePage({
     const [rooms, classes, schedule, teacherSchedule] = await Promise.all([
       getRooms(),
       getAllClasses(),
-      roomId ? getSchedule(roomId) : Promise.resolve([]), // Lịch của phòng đang chọn
+      roomId ? getSchedule(roomId) : getSchedule(undefined, userId), // Lịch của phòng đang chọn HOẶC Lịch của cá nhân GV
       getSchedule(undefined, userId) // Lịch của toàn bộ giáo viên này (để biết bị trùng phòng khác)
     ]);
 

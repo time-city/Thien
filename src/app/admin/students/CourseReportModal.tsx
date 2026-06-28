@@ -35,7 +35,8 @@ export default function CourseReportModal({
   studentName,
   classId,
   className,
-  onSuccess
+  onSuccess,
+  autoSend
 }: {
   isOpen: boolean;
   onClose: () => void;
@@ -44,6 +45,7 @@ export default function CourseReportModal({
   classId?: string;
   className?: string;
   onSuccess?: () => void;
+  autoSend?: boolean;
 }) {
   const [report, setReport] = useState<StudentCombinedReport | null>(null);
   const [loading, setLoading] = useState(false);
@@ -113,6 +115,21 @@ export default function CourseReportModal({
     return () => clearInterval(interval);
   }, [isOpen, studentId, initialDebt, onClose]);
 
+  // Tự động gửi Zalo nếu có cờ autoSend
+  useEffect(() => {
+    if (autoSend && report && !sendingZalo && !exporting) {
+      if (!report.phoneParent) {
+        toast.error("Không thể gửi tự động vì chưa có Số điện thoại Phụ huynh!");
+        return;
+      }
+      toast.loading("Đang tự động xuất ảnh và gửi Zalo...", { id: "auto-send" });
+      const timer = setTimeout(() => {
+        handleSendZalo();
+      }, 2500);
+      return () => clearTimeout(timer);
+    }
+  }, [autoSend, report]);
+
   if (!isOpen) return null;
 
   const handleExportPng = async () => {
@@ -174,24 +191,33 @@ export default function CourseReportModal({
     setSendingZalo(true);
     const styleTag = injectGlobalCSS(element1);
     try {
-      const blob1 = await toBlob(element1, {
+      const dataUrl1 = await toPng(element1, {
+        cacheBust: true,
         pixelRatio: 2,
         backgroundColor: "#ffffff",
         style: { transform: "scale(1)", transformOrigin: "top left" }
       });
-      const blob2 = await toBlob(element2, {
+      const dataUrl2 = await toPng(element2, {
+        cacheBust: true,
         pixelRatio: 2,
         backgroundColor: "#ffffff",
         style: { transform: "scale(1)", transformOrigin: "top left" }
       });
 
-      if (!blob1 || !blob2) throw new Error("Lỗi khi tạo ảnh (Blob rỗng)");
+      const res1 = await fetch(dataUrl1);
+      const blob1 = await res1.blob();
+      
+      const res2 = await fetch(dataUrl2);
+      const blob2 = await res2.blob();
 
       const file1 = new File([blob1], `BaoCao_HocTap_${studentName.replace(/\s+/g, "_")}.png`, { type: "image/png" });
       const file2 = new File([blob2], `BaoCao_HocPhi_${studentName.replace(/\s+/g, "_")}.png`, { type: "image/png" });
 
+      const targetPhone = report.phoneParent.trim();
+
       let dateStr = "";
-      if (report.logs && report.logs.length > 0) {
+      const hasLogs = report.logs && report.logs.length > 0;
+      if (hasLogs) {
         const dates = report.logs.map(l => new Date(l.date));
         const minDate = new Date(Math.min(...dates.map(d => d.getTime())));
         const maxDate = new Date(Math.max(...dates.map(d => d.getTime())));
@@ -204,8 +230,10 @@ export default function CourseReportModal({
       const formattedPrice = finalPrice.toLocaleString('vi-VN');
       const descStr = report?.phoneParent ? `HT${report.phoneParent}` : `HT${studentId}`;
 
+      const headerTitle = hasLogs ? `Báo cáo học tập${dateStr}.` : "Thông báo đóng học phí.";
+
       const message = `
-Nông trại Khoa học tự nhiên kính gửi quý phụ huynh: **Báo cáo học tập${dateStr}.**
+Nông trại Khoa học tự nhiên kính gửi quý phụ huynh: **${headerTitle}**
 • Học sinh: **${studentName}**
 • Lớp đang học: **${classNames}**
 
@@ -215,24 +243,26 @@ Phụ huynh thanh toán học phí (mã QR hoặc tiền mặt):
 
 _Tin nhắn được thông báo tự động, phụ huynh có thể trao đổi thêm qua Zalo._`.trim();
 
-      // Send Image 1
-      const formData1 = new FormData();
-      formData1.append("target", report.phoneParent);
-      formData1.append("image", file1);
-      const imageRes1 = await fetch("/api/zalobot/send-image", {
-        method: "POST",
-        headers: { "x-api-key": process.env.NEXT_PUBLIC_ZALO_BOT_API_KEY || "" },
-        body: formData1,
-      });
+      // Send Image 1 (Chỉ gửi nếu có dữ liệu học tập)
+      if (hasLogs) {
+        const formData1 = new FormData();
+        formData1.append("target", targetPhone);
+        formData1.append("image", file1);
+        const imageRes1 = await fetch("/api/zalobot/send-image", {
+          method: "POST",
+          headers: { "x-api-key": process.env.NEXT_PUBLIC_ZALO_BOT_API_KEY || "" },
+          body: formData1,
+        });
 
-      if (!imageRes1.ok) {
-        throw new Error(`Lỗi gửi ảnh 1 (${imageRes1.status})`);
+        if (!imageRes1.ok) {
+          throw new Error(`Lỗi gửi ảnh 1 (${imageRes1.status})`);
+        }
       }
 
       // Send Image 2
       await new Promise(r => setTimeout(r, 1000));
       const formData2 = new FormData();
-      formData2.append("target", report.phoneParent);
+      formData2.append("target", targetPhone);
       formData2.append("image", file2);
       const imageRes2 = await fetch("/api/zalobot/send-image", {
         method: "POST",
@@ -241,7 +271,9 @@ _Tin nhắn được thông báo tự động, phụ huynh có thể trao đổi
       });
 
       if (!imageRes2.ok) {
-        throw new Error(`Lỗi gửi ảnh 2 (${imageRes2.status})`);
+        const errText = await imageRes2.text().catch(() => "No text");
+        console.error("Zalo Bot Image 2 Error:", imageRes2.status, errText);
+        throw new Error(`Lỗi gửi ảnh 2 (${imageRes2.status}): ${errText.substring(0, 100)}`);
       }
 
       // 2. Nghỉ 1s rồi gửi text để đảm bảo thứ tự
@@ -254,7 +286,7 @@ _Tin nhắn được thông báo tự động, phụ huynh có thể trao đổi
           "x-api-key": process.env.NEXT_PUBLIC_ZALO_BOT_API_KEY || ""
         },
         body: JSON.stringify({
-          target: report.phoneParent,
+          target: targetPhone,
           message: message
         }),
       });
@@ -265,18 +297,30 @@ _Tin nhắn được thông báo tự động, phụ huynh có thể trao đổi
         }
 
         toast.success("Đã gửi báo cáo qua Zalo thành công!");
+        toast.dismiss("auto-send");
         setConfirmSendOpen(false);
         // Tự động load lại báo cáo để những log vừa gửi biến mất
         await fetchReport();
         onSuccess?.();
+        if (autoSend) {
+          onClose();
+        }
       } else {
         const errText = await textRes.text().catch(() => "Không thể đọc lỗi");
         console.error("LỖI GỬI TEXT TỪ ZALO BOT SERVER:", textRes.status, errText);
-        toast.error(`Lỗi gửi tin nhắn văn bản (${textRes.status}): Vui lòng kiểm tra Console F12`);
+        throw new Error(`Text API Failed: ${textRes.status}`);
       }
     } catch (error: any) {
       console.error("CHI TIẾT LỖI ZALO:", error);
-      toast.error(`Lỗi hệ thống: ${error?.message || "Vui lòng kiểm tra lại Zalo Bot."}`);
+      const msg = error?.message || "";
+      
+      // Nếu là lỗi từ Zalo API trả về
+      if (msg.includes("500") || msg.includes("400") || msg.includes("API Failed") || msg.includes("Lỗi gửi ảnh")) {
+        toast.error(`Không thể gửi Zalo: Số điện thoại ${report?.phoneParent} chưa đăng ký Zalo hoặc chặn tin nhắn từ người lạ.`, { duration: 6000 });
+      } else {
+        toast.error(`Lỗi hệ thống: ${msg || "Vui lòng kiểm tra lại Zalo Bot."}`);
+      }
+      toast.dismiss("auto-send");
     } finally {
       styleTag.remove();
       setSendingZalo(false);
@@ -477,20 +521,20 @@ _Phụ huynh đã nộp nhưng hệ thống chưa cập nhật, vui lòng nhắn
             {report?.logs && report.logs.length > 0 ? (
               <button
                 onClick={() => setConfirmSendOpen(true)}
-                disabled={loading || !report}
-                className="w-full h-8 md:h-12 mb-1.5 md:mb-3 bg-green-600 hover:bg-green-700 text-white rounded-md md:rounded-xl font-bold text-[11px] md:text-sm transition-all shadow-sm flex items-center justify-center gap-1.5 md:gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={loading || !report || !report.phoneParent}
+                className={`w-full h-8 md:h-12 mb-1.5 md:mb-3 text-white rounded-md md:rounded-xl font-bold text-[11px] md:text-sm transition-all shadow-sm flex items-center justify-center gap-1.5 md:gap-2 disabled:opacity-50 disabled:cursor-not-allowed ${!report?.phoneParent ? 'bg-slate-400' : 'bg-green-600 hover:bg-green-700'}`}
               >
                 <Send className="w-3.5 h-3.5 md:w-[18px] md:h-[18px]" />
-                Gửi báo cáo qua Zalo
+                {!report?.phoneParent ? "Cập nhật SĐT Phụ huynh để gửi Zalo" : "Gửi báo cáo qua Zalo"}
               </button>
             ) : (
               <button
                 onClick={handleSendReminder}
-                disabled={loading || !report || sendingZalo}
-                className="w-full h-8 md:h-12 mb-1.5 md:mb-3 bg-orange-500 hover:bg-orange-600 text-white rounded-md md:rounded-xl font-bold text-[11px] md:text-sm transition-all shadow-sm flex items-center justify-center gap-1.5 md:gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={loading || !report || sendingZalo || !report.phoneParent}
+                className={`w-full h-8 md:h-12 mb-1.5 md:mb-3 text-white rounded-md md:rounded-xl font-bold text-[11px] md:text-sm transition-all shadow-sm flex items-center justify-center gap-1.5 md:gap-2 disabled:opacity-50 disabled:cursor-not-allowed ${!report?.phoneParent ? 'bg-slate-400' : 'bg-orange-500 hover:bg-orange-600'}`}
               >
                 {sendingZalo ? <Loader2 size={14} className="animate-spin md:w-4 md:h-4" /> : <Send className="w-3.5 h-3.5 md:w-[18px] md:h-[18px]" />}
-                Nhắc lại phụ huynh (Zalo)
+                {!report?.phoneParent ? "Cập nhật SĐT Phụ huynh để gửi Zalo" : "Nhắc lại phụ huynh (Zalo)"}
               </button>
             )}
             <button
@@ -615,7 +659,7 @@ _Phụ huynh đã nộp nhưng hệ thống chưa cập nhật, vui lòng nhắn
                           <div key={idx} className="flex justify-between items-center p-3 border border-slate-100 rounded-lg bg-slate-50/50">
                             <div>
                               <p className="font-bold text-slate-800 text-sm">
-                                {item.type === "TUITION" ? `Học phí lớp: ${item.className}` : "Thanh toán nợ cũ (Kỳ trước)"}
+                                {item.type === "TUITION" ? `Học phí lớp: ${item.className} (Phiếu ${item.voucherNumber})` : "Thanh toán nợ cũ (Kỳ trước)"}
                               </p>
                               {item.type === "TUITION" && (
                                 <p className="text-xs text-slate-500 mt-0.5">Gia hạn thêm {item.sessionsPerPackage} buổi học</p>

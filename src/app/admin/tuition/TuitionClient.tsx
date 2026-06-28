@@ -5,9 +5,10 @@ import { useAuth } from "@/lib/AuthContext";
 import { QRCodeSVG } from "qrcode.react";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
-import { Loader2, TrendingUp, CreditCard, Wallet, CheckCircle2, Send, MessageCircle } from "lucide-react";
+import { Loader2, TrendingUp, CreditCard, Wallet, CheckCircle2, Send, MessageCircle, Download } from "lucide-react";
 import type { TuitionStudentData } from "@/actions/queries";
-import { payTeacherSalary, processStudentTuitionPayment, markMultipleReportsAsSent, collectTeacherDebtManual } from "@/actions/mutations";
+import { processStudentTuitionPayment, markMultipleReportsAsSent } from "@/actions/mutations";
+import { settleTeacherBalance, fetchTeachersFinance, getTeacherSalaryDetails } from "@/actions/teacher";
 import { getStudentCombinedReport, StudentCombinedReport } from "@/actions/report";
 import { toPng } from "html-to-image";
 import CourseReportModal from "../students/CourseReportModal";
@@ -62,6 +63,20 @@ export default function TuitionClient({
   // States
   const [selectedTeacher, setSelectedTeacher] = useState<TeacherFinanceViewData | null>(null);
   const [isPayingSalary, setIsPayingSalary] = useState(false);
+
+  // Thêm state cho Tháng và Năm
+  const currentDate = new Date();
+  const [selectedMonth, setSelectedMonth] = useState<number>(currentDate.getMonth() + 1);
+  const [selectedYear, setSelectedYear] = useState<number>(currentDate.getFullYear());
+
+  // Trigger load lại dữ liệu giáo viên khi thay đổi Tháng/Năm
+  useEffect(() => {
+    startTransition(() => {
+      fetchTeachersFinance(selectedMonth, selectedYear).then((data) => {
+        setTeachers(data);
+      });
+    });
+  }, [selectedMonth, selectedYear]);
   const studentsWithLowSessions = useMemo(() => {
     return students.filter((s) =>
       s.enrolledCourses.some((c) => c.remainingSessions <= 2 || c.pendingInvoices.length > 0) ||
@@ -129,33 +144,43 @@ export default function TuitionClient({
         const element1 = document.getElementById("hidden-report-export-area-1");
         const element2 = document.getElementById("hidden-report-export-area-2");
         if (element1 && element2) {
-          // ẢNH 1
-          const dataUrl1 = await toPng(element1, {
-            cacheBust: true,
-            pixelRatio: 2,
-            backgroundColor: "#ffffff",
-            style: { transform: "scale(1)", transformOrigin: "top left" }
-          });
-          const res1 = await fetch(dataUrl1);
-          const blob1 = await res1.blob();
-          const file1 = new File([blob1], `BaoCao_HocTap_${data.studentName.replace(/\s+/g, "_")}.png`, { type: "image/png" });
+          // ẢNH 1 (Chỉ gửi nếu có dữ liệu học tập)
+          const hasLogs = data.logs && data.logs.length > 0;
+          if (hasLogs) {
+            const dataUrl1 = await toPng(element1, {
+              cacheBust: true,
+              pixelRatio: 2,
+              backgroundColor: "#ffffff",
+              style: { transform: "scale(1)", transformOrigin: "top left" }
+            });
+            const res1 = await fetch(dataUrl1);
+            const blob1 = await res1.blob();
+            const file1 = new File([blob1], `BaoCao_HocTap_${data.studentName.replace(/\s+/g, "_")}.png`, { type: "image/png" });
 
-          const formData1 = new FormData();
-          formData1.append("target", data.phoneParent);
-          formData1.append("image", file1);
+            const targetPhone = data.phoneParent.trim();
+            const formData1 = new FormData();
+            formData1.append("target", targetPhone);
+            formData1.append("image", file1);
 
-          const imageRes1 = await fetch("/api/zalobot/send-image", {
-            method: "POST",
-            headers: {
-              "x-api-key": process.env.NEXT_PUBLIC_ZALO_BOT_API_KEY || ""
-            },
-            body: formData1
-          });
+            const imageRes1 = await fetch("/api/zalobot/send-image", {
+              method: "POST",
+              headers: {
+                "x-api-key": process.env.NEXT_PUBLIC_ZALO_BOT_API_KEY || ""
+              },
+              body: formData1
+            });
 
-          if (!imageRes1.ok) {
-            toast.error(`Lỗi gửi ảnh học tập cho ${data.studentName}`);
-            count++;
-            continue;
+            if (!imageRes1.ok) {
+              const errText = await imageRes1.text().catch(() => "No text");
+              console.error("Zalo Bot Image 1 Error:", imageRes1.status, errText);
+              if (errText.includes("500") || errText.includes("400")) {
+                toast.error(`Lỗi gửi ảnh học tập: Số điện thoại ${targetPhone} chưa đăng ký Zalo hoặc chặn tin nhắn.`, { duration: 6000 });
+              } else {
+                toast.error(`Lỗi gửi ảnh học tập cho ${data.studentName}`);
+              }
+              count++;
+              continue;
+            }
           }
 
           // ẢNH 2
@@ -170,8 +195,9 @@ export default function TuitionClient({
           const blob2 = await res2.blob();
           const file2 = new File([blob2], `BaoCao_HocPhi_${data.studentName.replace(/\s+/g, "_")}.png`, { type: "image/png" });
 
+          const targetPhone = data.phoneParent.trim();
           const formData2 = new FormData();
-          formData2.append("target", data.phoneParent);
+          formData2.append("target", targetPhone);
           formData2.append("image", file2);
 
           const imageRes2 = await fetch("/api/zalobot/send-image", {
@@ -183,14 +209,20 @@ export default function TuitionClient({
           });
 
           if (!imageRes2.ok) {
-            toast.error(`Lỗi gửi ảnh học phí cho ${data.studentName}`);
+            const errText = await imageRes2.text().catch(() => "No text");
+            console.error("Zalo Bot Image 2 Error:", imageRes2.status, errText);
+            if (errText.includes("500") || errText.includes("400") || imageRes2.status === 500) {
+              toast.error(`Lỗi gửi ảnh học phí: Số điện thoại ${targetPhone} chưa đăng ký Zalo hoặc chặn tin nhắn.`, { duration: 6000 });
+            } else {
+              toast.error(`Lỗi gửi ảnh học phí cho ${data.studentName}`);
+            }
             count++;
             continue;
           }
 
           // Generate message format
           let dateStr = "";
-          if (data.logs && data.logs.length > 0) {
+          if (hasLogs) {
             const dates = data.logs.map((l: any) => new Date(l.date));
             const minDate = new Date(Math.min(...dates.map(d => d.getTime())));
             const maxDate = new Date(Math.max(...dates.map(d => d.getTime())));
@@ -201,8 +233,10 @@ export default function TuitionClient({
           const formattedPrice = data.totalExpectedAmount.toLocaleString('vi-VN');
           const descStr = data.phoneParent ? `HT${data.phoneParent}` : `HT${studentId}`;
 
+          const headerTitle = hasLogs ? `Báo cáo học tập${dateStr}.` : "Thông báo đóng học phí.";
+
           const message = `
-Nông trại Khoa học tự nhiên kính gửi quý phụ huynh: **Báo cáo học tập${dateStr}.**
+Nông trại Khoa học tự nhiên kính gửi quý phụ huynh: **${headerTitle}**
 • Học sinh: **${data.studentName}**
 • Lớp đang học: **${classNames}**
 
@@ -221,13 +255,17 @@ _Tin nhắn được thông báo tự động, phụ huynh có thể trao đổi
               "x-api-key": process.env.NEXT_PUBLIC_ZALO_BOT_API_KEY || ""
             },
             body: JSON.stringify({
-              target: data.phoneParent,
+              target: targetPhone,
               message: message
             }),
           });
 
           if (!textRes.ok) {
+            const errText = await textRes.text().catch(() => "No text");
+            console.error("Zalo Bot Text Error:", textRes.status, errText);
             toast.error(`Lỗi gửi tin nhắn văn bản cho ${data.studentName}`);
+            count++;
+            continue;
           } else {
             const logIds = data.logs.map((l: any) => l.id).filter(Boolean);
             if (logIds.length > 0) {
@@ -265,12 +303,14 @@ _Tin nhắn được thông báo tự động, phụ huynh có thể trao đổi
     startTransition(async () => {
       addOptimisticTeacherUpdate(teacherId);
       try {
-        const res = await payTeacherSalary(teacherId, amount);
-        if (res.success) {
-          toast.success(`Đã thanh toán ${formatCurrency(amount)} cho ${currentName}`);
-          router.refresh();
+        const res = await settleTeacherBalance(teacherId, amount, "PAYOUT_SALARY", undefined, selectedMonth, selectedYear);
+        if (res?.success === false) {
+          toast.error(res.message || "Lỗi thanh toán lương");
         } else {
-          toast.error(res.error || "Lỗi thanh toán lương");
+          toast.success(`Đã thanh toán ${formatCurrency(amount)} cho ${currentName}`);
+          // Refresh from server action
+          fetchTeachersFinance(selectedMonth, selectedYear).then(setTeachers);
+          router.refresh();
         }
       } catch (error) {
         toast.error("Lỗi hệ thống");
@@ -280,6 +320,43 @@ _Tin nhắn được thông báo tự động, phụ huynh có thể trao đổi
 
   const [isSendingZaloDebt, setIsSendingZaloDebt] = useState(false);
   const [teacherZaloPhone, setTeacherZaloPhone] = useState("");
+  const [roomRentals, setRoomRentals] = useState<any[]>([]);
+  const [teachingSessions, setTeachingSessions] = useState<any[]>([]);
+  const [isLoadingRentalDetails, setIsLoadingRentalDetails] = useState(false);
+
+  // Load chi tiết hóa đơn khi chọn giáo viên
+  useEffect(() => {
+    if (selectedTeacher) {
+      setIsLoadingRentalDetails(true);
+      getTeacherSalaryDetails(selectedTeacher.id, selectedMonth, selectedYear).then(data => {
+        setRoomRentals(data.roomRentals);
+        setTeachingSessions(data.teachingSessions);
+        setIsLoadingRentalDetails(false);
+      }).catch(() => {
+        setIsLoadingRentalDetails(false);
+        toast.error("Không thể tải chi tiết hóa đơn");
+      });
+    } else {
+      setRoomRentals([]);
+      setTeachingSessions([]);
+    }
+  }, [selectedTeacher, selectedMonth, selectedYear]);
+
+  const handleDownloadRentalBill = async () => {
+    const el = document.getElementById("hidden-room-rental-bill");
+    if (!el) return;
+    try {
+      const dataUrl = await toPng(el, { cacheBust: true, backgroundColor: "#ffffff", pixelRatio: 2 });
+      const a = document.createElement("a");
+      a.href = dataUrl;
+      const prefix = selectedTeacher?.salaryBalance && selectedTeacher.salaryBalance < 0 ? "HoaDon_Phong" : "Phieu_Luong";
+      a.download = `${prefix}_${selectedTeacher?.fullName.replace(/\s+/g, "_")}_T${selectedMonth}.png`;
+      a.click();
+      toast.success("Đã tải xuống hóa đơn");
+    } catch (err) {
+      toast.error("Lỗi khi tải hóa đơn");
+    }
+  };
 
   const handleCollectDebtManual = () => {
     if (!selectedTeacher || selectedTeacher.salaryBalance >= 0) return;
@@ -293,12 +370,13 @@ _Tin nhắn được thông báo tự động, phụ huynh có thể trao đổi
     startTransition(async () => {
       addOptimisticTeacherUpdate(teacherId);
       try {
-        const res = await collectTeacherDebtManual(teacherId, amount);
-        if (res.success) {
-          toast.success(`Đã thu ${formatCurrency(amount)} tiền mặt từ ${currentName}`);
-          router.refresh();
+        const res = await settleTeacherBalance(teacherId, amount, "COLLECT_RENTAL", undefined, selectedMonth, selectedYear);
+        if (res?.success === false) {
+          toast.error(res.message || "Lỗi thu tiền");
         } else {
-          toast.error(res.error || "Lỗi thu tiền");
+          toast.success(`Đã thu ${formatCurrency(amount)} tiền mặt từ ${currentName}`);
+          fetchTeachersFinance(selectedMonth, selectedYear).then(setTeachers);
+          router.refresh();
         }
       } catch (error) {
         toast.error("Lỗi hệ thống");
@@ -306,12 +384,16 @@ _Tin nhắn được thông báo tự động, phụ huynh có thể trao đổi
     });
   };
 
-  const handleSendZaloDebt = async () => {
+  const handleSendZaloTeacher = async () => {
     if (!selectedTeacher || !teacherZaloPhone) return;
     setIsSendingZaloDebt(true);
     try {
       await new Promise(r => setTimeout(r, 1000)); // Cần 1 giây để load QR Code VietQR
-      const element = document.getElementById("hidden-teacher-qr");
+      
+      const isNegative = selectedTeacher.salaryBalance < 0;
+      const elementId = "hidden-room-rental-bill";
+      const element = document.getElementById(elementId);
+      
       if (element) {
         const dataUrl = await toPng(element, {
           cacheBust: true,
@@ -322,12 +404,20 @@ _Tin nhắn được thông báo tự động, phụ huynh có thể trao đổi
 
         const res = await fetch(dataUrl);
         const blob = await res.blob();
-        const file = new File([blob], `ThuTien_${selectedTeacher.username}.png`, { type: "image/png" });
+        const prefix = isNegative ? "ThuTien" : "PhieuLuong";
+        const file = new File([blob], `${prefix}_${selectedTeacher.username}.png`, { type: "image/png" });
 
         const formData = new FormData();
         formData.append("target", teacherZaloPhone);
         formData.append("image", file);
-        formData.append("message", `Trung tâm gửi mã thanh toán cấn trừ tiền phòng / lương bị âm. Bạn vui lòng quét mã này để thanh toán.\nSố tiền: ${new Intl.NumberFormat("vi-VN").format(Math.abs(selectedTeacher.salaryBalance))}đ\nNội dung CK: HT ${selectedTeacher.phone || teacherZaloPhone || selectedTeacher.username}`);
+        
+        let msg = "";
+        if (isNegative) {
+          msg = `Trung tâm gửi mã thanh toán cấn trừ tiền phòng / lương bị âm. Bạn vui lòng quét mã này để thanh toán.\nSố tiền: ${new Intl.NumberFormat("vi-VN").format(Math.abs(selectedTeacher.salaryBalance))}đ\nNội dung CK: HT ${selectedTeacher.phone || teacherZaloPhone || selectedTeacher.username}`;
+        } else {
+          msg = `Trung tâm thanh toán lương tháng ${selectedMonth} năm ${selectedYear} cho giáo viên. Kèm theo Bảng kê chi tiết. Xin cảm ơn bạn đã đồng hành!`;
+        }
+        formData.append("message", msg);
 
         const response = await fetch("/api/zalobot/send-image", {
           method: "POST",
@@ -336,10 +426,19 @@ _Tin nhắn được thông báo tự động, phụ huynh có thể trao đổi
           },
           body: formData
         });
+        
         if (!response.ok) {
-          toast.error(`Lỗi gửi Zalo cho ${selectedTeacher.fullName}`);
+          const errText = await response.text().catch(() => "No text");
+          if (errText.includes("500") || errText.includes("400")) {
+            toast.error(`Lỗi: Số điện thoại ${teacherZaloPhone} chưa đăng ký Zalo hoặc chặn tin nhắn.`, { duration: 6000 });
+          } else {
+            toast.error(`Lỗi gửi Zalo cho ${selectedTeacher.fullName}`);
+          }
         } else {
-          toast.success(`Đã gửi Zalo mã thu tiền cho: ${teacherZaloPhone}`);
+          toast.success(`Đã gửi Zalo ${isNegative ? "mã thu tiền" : "báo cáo lương"} cho: ${teacherZaloPhone}`);
+          if (!isNegative) {
+            handlePaySalary(); // Tự động xác nhận đã chuyển sau khi gửi Zalo báo cáo
+          }
         }
       }
     } catch (err) {
@@ -404,7 +503,9 @@ _Tin nhắn được thông báo tự động, phụ huynh có thể trao đổi
               <div className="text-[10px] md:text-xs text-slate-500 mt-0.5">SĐT: {student.phoneParent || <span className="italic text-rose-400">Trống</span>}</div>
             </td>
             <td className="py-2 px-2 md:py-3 md:px-4 hidden sm:table-cell text-[13px] md:text-sm">
-              {student.enrolledCourses[0]?.className ?? (student.allPendingInvoices?.length ? (student.allPendingInvoices[0].isDebt ? "Nợ Cũ" : "Hóa đơn") : "-")}
+              {student.enrolledCourses.length > 0
+                ? student.enrolledCourses.map((c) => c.className).join(", ")
+                : (student.allPendingInvoices?.length ? (student.allPendingInvoices[0].isDebt ? "Nợ Cũ" : "Hóa đơn") : "-")}
             </td>
             <td className="py-2 px-2 md:py-3 md:px-4">
               <div className="flex flex-wrap gap-1 md:gap-1.5 flex-col">
@@ -530,6 +631,34 @@ _Tin nhắn được thông báo tự động, phụ huynh có thể trao đổi
       {/* TAB 2: THANH TOÁN LƯƠNG GIÁO VIÊN (DẠNG LIST) */}
       {activeTab === "TEACHER_SALARY" && (
         <div className="flex flex-col gap-4">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-white p-4 rounded-2xl border border-slate-200 shadow-sm gap-4">
+            <h2 className="text-lg font-bold text-slate-800">Lương Giáo Viên</h2>
+            <div className="flex items-center gap-2">
+              <select
+                value={selectedMonth}
+                onChange={(e) => setSelectedMonth(Number(e.target.value))}
+                className="bg-slate-50 border border-slate-200 text-slate-800 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-2 font-semibold"
+              >
+                {Array.from({ length: 12 }).map((_, i) => (
+                  <option key={i + 1} value={i + 1}>
+                    Tháng {i + 1}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={selectedYear}
+                onChange={(e) => setSelectedYear(Number(e.target.value))}
+                className="bg-slate-50 border border-slate-200 text-slate-800 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-2 font-semibold"
+              >
+                {[currentDate.getFullYear() - 1, currentDate.getFullYear(), currentDate.getFullYear() + 1].map((y) => (
+                  <option key={y} value={y}>
+                    Năm {y}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
           {optimisticTeachers.map((teacher) => {
             const hasBalance = teacher.salaryBalance > 0;
             const initial = teacher.fullName.charAt(0).toUpperCase();
@@ -641,35 +770,48 @@ _Tin nhắn được thông báo tự động, phụ huynh có thể trao đổi
                 </div>
               </div>
 
-              {selectedTeacher.salaryBalance < 0 ? (
-                <div className="w-full mt-4 text-left">
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Gửi Zalo (Bắt buộc nhập SĐT)</label>
-                  {!selectedTeacher.phone && (
-                    <div className="text-[11px] text-amber-600 bg-amber-50 p-2 rounded-lg border border-amber-200 mb-2 font-medium">
-                      ⚠️ Giáo viên này chưa cập nhật SĐT. Vui lòng nhập SĐT bằng số để tiếp tục gửi Zalo.
-                    </div>
-                  )}
-                  <div className="flex gap-2">
-                    <input
-                      type="tel"
-                      value={teacherZaloPhone}
-                      onChange={e => setTeacherZaloPhone(e.target.value.replace(/\D/g, ''))}
-                      placeholder="Nhập SĐT Zalo GV..."
-                      className={`flex-1 text-sm border rounded px-2 py-1.5 focus:outline-none focus:border-blue-500 ${!selectedTeacher.phone && !teacherZaloPhone ? "border-rose-300 bg-rose-50" : "border-slate-200 bg-white"}`}
-                    />
-                    <button
-                      onClick={handleSendZaloDebt}
-                      disabled={isSendingZaloDebt || !teacherZaloPhone}
-                      className="bg-[#0068FF] hover:bg-blue-700 text-white px-3 py-1.5 rounded font-bold text-xs flex items-center gap-1 disabled:opacity-50 transition-colors shrink-0"
-                    >
-                      {isSendingZaloDebt ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />} Gửi Zalo
-                    </button>
+              <div className="w-full mt-4 text-left">
+                <label className="block text-xs font-bold text-slate-700 mb-1">Gửi Zalo (Bắt buộc nhập SĐT)</label>
+                {!selectedTeacher.phone && (
+                  <div className="text-[11px] text-amber-600 bg-amber-50 p-2 rounded-lg border border-amber-200 mb-2 font-medium">
+                    ⚠️ Giáo viên này chưa cập nhật SĐT. Vui lòng nhập SĐT bằng số để tiếp tục gửi Zalo.
                   </div>
-                  <p className="text-[10px] text-slate-400 mt-1 italic">* Tin nhắn Zalo sẽ chứa mã QR VietQR tự động khớp thanh toán qua Webhook.</p>
+                )}
+                <div className="flex gap-2">
+                  <input
+                    type="tel"
+                    value={teacherZaloPhone}
+                    onChange={e => setTeacherZaloPhone(e.target.value.replace(/\D/g, ''))}
+                    placeholder="Nhập SĐT Zalo GV..."
+                    className={`flex-1 text-sm border rounded px-2 py-1.5 focus:outline-none focus:border-blue-500 ${!selectedTeacher.phone && !teacherZaloPhone ? "border-rose-300 bg-rose-50" : "border-slate-200 bg-white"}`}
+                  />
+                  <button
+                    onClick={handleSendZaloTeacher}
+                    disabled={isSendingZaloDebt || !teacherZaloPhone}
+                    className="bg-[#0068FF] hover:bg-blue-700 text-white px-3 py-1.5 rounded font-bold text-xs flex items-center gap-1 disabled:opacity-50 transition-colors shrink-0"
+                  >
+                    {isSendingZaloDebt ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />} 
+                    {selectedTeacher.salaryBalance < 0 ? "Gửi Zalo" : "Gửi Báo Cáo Zalo"}
+                  </button>
                 </div>
-              ) : (
-                <p className="text-xs text-slate-400 mt-4 text-center italic">* Bấm xác nhận bên dưới sau khi bạn đã chi trả thành công để đưa số dư ví giáo viên về 0đ.</p>
-              )}
+                {selectedTeacher.salaryBalance < 0 ? (
+                  <p className="text-[10px] text-slate-400 mt-1 italic">* Tin nhắn Zalo sẽ chứa mã QR VietQR tự động khớp thanh toán qua Webhook.</p>
+                ) : (
+                  <p className="text-[10px] text-slate-400 mt-1 italic">* Tin nhắn Zalo sẽ gửi kèm Bảng Kê Lương chi tiết và tự động chốt lương thành công.</p>
+                )}
+              </div>
+              
+              {/* Nút Xuất Hóa Đơn luôn hiện cho Giáo viên, bất kể âm dương để in Bảng Kê Lương / Phí */}
+              <div className="mt-6 flex flex-col items-center w-full">
+                <button 
+                  onClick={handleDownloadRentalBill}
+                  disabled={isLoadingRentalDetails || (roomRentals.length === 0 && teachingSessions.length === 0)}
+                  className="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-2 rounded-lg font-bold text-xs flex items-center justify-center gap-2 transition-colors border border-slate-300 disabled:opacity-50"
+                >
+                  {isLoadingRentalDetails ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
+                  Xuất Bảng Kê Chi Tiết (Tải Ảnh)
+                </button>
+              </div>
             </div>
             <div className="p-4 border-t border-slate-100 flex justify-end gap-3 bg-white">
               <button onClick={() => setSelectedTeacher(null)} className="px-5 py-2.5 rounded-xl font-bold text-sm text-slate-600 hover:bg-slate-100 border border-slate-200 transition-colors w-full sm:w-auto">Hủy</button>
@@ -683,6 +825,136 @@ _Tin nhắn được thông báo tự động, phụ huynh có thể trao đổi
                   Xác Nhận Đã Chuyển
                 </button>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ẨN: HÓA ĐƠN TIỀN PHÒNG / BẢNG KÊ LƯƠNG ĐỂ RENDER IMAGE */}
+      {selectedTeacher && (roomRentals.length > 0 || teachingSessions.length > 0) && (
+        <div style={{ position: "fixed", top: "-9999px", left: "-9999px", zIndex: -9999 }}>
+          <div id="hidden-room-rental-bill" className="bg-white p-6 w-[700px] border border-slate-200" style={{ fontFamily: "sans-serif" }}>
+            <div className="text-center mb-6 border-b pb-4 border-slate-200 text-slate-800">
+              <h1 className={`text-2xl font-black uppercase mb-1 ${selectedTeacher.salaryBalance < 0 ? "text-rose-600" : "text-blue-600"}`}>
+                {selectedTeacher.salaryBalance < 0 ? "Phiếu Thu Tiền Phòng" : "Bảng Kê Lương & Phí"}
+              </h1>
+              <p className="text-sm font-semibold">Tháng {selectedMonth} năm {selectedYear}</p>
+            </div>
+            <div className="mb-4 text-sm text-slate-800 flex justify-between">
+              <div>
+                <p><strong>Giáo viên:</strong> {selectedTeacher.fullName}</p>
+                <p><strong>Số điện thoại:</strong> {selectedTeacher.phone || "Không có"}</p>
+              </div>
+            </div>
+
+            {/* BẢNG CA DẠY */}
+            {teachingSessions.length > 0 && (
+              <div className="mb-6">
+                <h3 className="text-sm font-bold text-slate-800 mb-2 uppercase tracking-wider border-l-4 border-blue-500 pl-2">Chi tiết ca dạy</h3>
+                <table className="w-full text-left text-xs border-collapse border border-slate-300">
+                  <thead>
+                    <tr className="bg-slate-100 text-slate-700">
+                      <th className="border border-slate-300 p-2">Ngày</th>
+                      <th className="border border-slate-300 p-2">Lớp học</th>
+                      <th className="border border-slate-300 p-2 text-center">Giờ</th>
+                      <th className="border border-slate-300 p-2 text-right">Lương/ca</th>
+                    </tr>
+                  </thead>
+                  <tbody className="text-slate-800 font-medium">
+                    {teachingSessions.map((item, idx) => (
+                      <tr key={idx} className="border-b border-slate-300">
+                        <td className="border border-slate-300 p-2">{new Date(item.date).toLocaleDateString('vi-VN')}</td>
+                        <td className="border border-slate-300 p-2">{item.className}</td>
+                        <td className="border border-slate-300 p-2 text-center">
+                          {new Date(item.startTime).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })} - {new Date(item.endTime).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
+                        </td>
+                        <td className="border border-slate-300 p-2 text-right text-blue-600">{item.salaryPerSession.toLocaleString('vi-VN')}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr className="font-bold bg-blue-50 text-blue-700">
+                      <td colSpan={3} className="border border-slate-300 p-2 text-right uppercase">Tổng Lương Dạy:</td>
+                      <td className="border border-slate-300 p-2 text-right text-sm">{teachingSessions.reduce((sum, s) => sum + s.salaryPerSession, 0).toLocaleString('vi-VN')}đ</td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            )}
+
+            {/* BẢNG PHÍ PHÒNG */}
+            {roomRentals.length > 0 && (
+              <div className="mb-6">
+                <h3 className="text-sm font-bold text-slate-800 mb-2 uppercase tracking-wider border-l-4 border-rose-500 pl-2">Chi tiết phí thuê phòng</h3>
+                <table className="w-full text-left text-xs border-collapse border border-slate-300">
+                  <thead>
+                    <tr className="bg-slate-100 text-slate-700">
+                      <th className="border border-slate-300 p-2">Ngày</th>
+                      <th className="border border-slate-300 p-2">Phòng</th>
+                      <th className="border border-slate-300 p-2 text-center">Giờ</th>
+                      <th className="border border-slate-300 p-2 text-center">Số giờ</th>
+                      <th className="border border-slate-300 p-2 text-right">Đơn giá</th>
+                      <th className="border border-slate-300 p-2 text-right">Thành tiền</th>
+                    </tr>
+                  </thead>
+                  <tbody className="text-slate-800 font-medium">
+                    {roomRentals.map((item, idx) => (
+                      <tr key={idx} className="border-b border-slate-300">
+                        <td className="border border-slate-300 p-2">{new Date(item.date).toLocaleDateString('vi-VN')}</td>
+                        <td className="border border-slate-300 p-2">{item.roomName}</td>
+                        <td className="border border-slate-300 p-2 text-center">
+                          {new Date(item.startTime).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })} - {new Date(item.endTime).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
+                        </td>
+                        <td className="border border-slate-300 p-2 text-center">{item.durationHours}h</td>
+                        <td className="border border-slate-300 p-2 text-right">{item.unitPrice.toLocaleString('vi-VN')}</td>
+                        <td className="border border-slate-300 p-2 text-right text-rose-600">{item.feeCalculated.toLocaleString('vi-VN')}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr className="font-bold bg-rose-50 text-rose-700">
+                      <td colSpan={5} className="border border-slate-300 p-2 text-right uppercase">Tổng Phí Phòng:</td>
+                      <td className="border border-slate-300 p-2 text-right text-sm">{roomRentals.reduce((sum, r) => sum + r.feeCalculated, 0).toLocaleString('vi-VN')}đ</td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            )}
+
+            <div className={`p-4 mt-4 text-right rounded-lg border ${selectedTeacher.salaryBalance < 0 ? "bg-rose-50 border-rose-200" : "bg-emerald-50 border-emerald-200"}`}>
+              <span className="font-bold text-slate-700 uppercase mr-4">
+                {selectedTeacher.salaryBalance < 0 ? "Số tiền giáo viên cần đóng:" : "Thực nhận của giáo viên:"}
+              </span>
+              <span className={`text-xl font-black ${selectedTeacher.salaryBalance < 0 ? "text-rose-600" : "text-emerald-600"}`}>
+                {Math.abs(selectedTeacher.salaryBalance).toLocaleString('vi-VN')}đ
+              </span>
+            </div>
+
+            {selectedTeacher.salaryBalance < 0 && (
+              <div className="mt-6 pt-6 border-t border-slate-200">
+                <div className="flex flex-col items-center">
+                  <h3 className="font-bold text-slate-800 mb-3 uppercase tracking-wider text-sm">Quét mã thanh toán tiền phòng</h3>
+                  <div className="p-2 bg-white rounded-xl shadow-sm border border-slate-200 mb-3">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={`https://qr.sepay.vn/img?bank=MBBank&acc=0700107189999&amount=${Math.abs(selectedTeacher.salaryBalance)}&des=${encodeURIComponent(`HT ${selectedTeacher.phone || teacherZaloPhone || selectedTeacher.username}`)}&template=`}
+                      alt="QR Code"
+                      crossOrigin="anonymous"
+                      className="w-40 h-40 object-contain"
+                    />
+                  </div>
+                  <div className="text-center w-full">
+                    <p className="text-xs text-slate-500 mb-1">Nội dung chuyển khoản (bắt buộc):</p>
+                    <p className="text-lg font-bold text-slate-900 tracking-widest bg-slate-50 border border-slate-100 py-2 rounded-lg">
+                      HT {selectedTeacher.phone || teacherZaloPhone || selectedTeacher.username}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div className="text-center text-xs italic text-slate-500 mt-6 pt-4 border-t border-slate-100">
+              Cảm ơn giáo viên đã đồng hành cùng Nông trại Khoa học tự nhiên!
             </div>
           </div>
         </div>
@@ -858,7 +1130,7 @@ _Tin nhắn được thông báo tự động, phụ huynh có thể trao đổi
                     <div key={idx} className="flex justify-between items-center p-3 border border-slate-100 rounded-lg bg-slate-50/50">
                       <div>
                         <p className="font-bold text-slate-800 text-sm">
-                          {item.type === "TUITION" ? `Học phí lớp: ${item.className}` : "Thanh toán nợ cũ (Kỳ trước)"}
+                          {item.type === "TUITION" ? `Học phí lớp: ${item.className} (Phiếu ${item.voucherNumber})` : "Thanh toán nợ cũ (Kỳ trước)"}
                         </p>
                         {item.type === "TUITION" && (
                           <p className="text-xs text-slate-500 mt-0.5">Gia hạn thêm {item.sessionsPerPackage} buổi học</p>
@@ -905,58 +1177,6 @@ _Tin nhắn được thông báo tự động, phụ huynh có thể trao đổi
         </div>
       )}
 
-      {/* INVISIBLE REPORT RENDERER FOR TEACHER DEBT */}
-      {selectedTeacher && selectedTeacher.salaryBalance < 0 && (
-        <div className="fixed -left-[9999px] -top-[9999px] opacity-0 pointer-events-none">
-          <div id="hidden-teacher-qr" className="bg-white w-[800px] overflow-hidden border border-slate-200" style={{ fontFamily: "sans-serif" }}>
-            <div className="bg-rose-600 p-6 text-white text-center">
-              <h1 className="text-2xl font-black uppercase tracking-wider mb-1">Farm Edu</h1>
-              <p className="text-rose-100 text-sm font-medium">THANH TOÁN TIỀN PHÒNG / TRỪ LƯƠNG ÂM</p>
-            </div>
-            <div className="p-6 border-b border-slate-100">
-              <div className="grid grid-cols-2 gap-4 text-sm">
-                <div>
-                  <p className="text-slate-500 mb-1 text-xs uppercase font-bold tracking-wider">Giáo viên</p>
-                  <p className="font-extrabold text-slate-800 text-lg">{selectedTeacher.fullName}</p>
-                </div>
-                <div>
-                  <p className="text-slate-500 mb-1 text-xs uppercase font-bold tracking-wider">Mã Giáo Viên (Username)</p>
-                  <p className="font-extrabold text-slate-800 text-lg">{selectedTeacher.username}</p>
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-slate-50 p-6 flex items-center justify-between border-t border-slate-100">
-              <div className="flex items-center gap-4">
-                <div className="p-1 bg-white rounded-xl shadow-sm border border-slate-200">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={`https://qr.sepay.vn/img?bank=MBBank&acc=0700107189999&amount=${Math.abs(selectedTeacher.salaryBalance)}&des=${encodeURIComponent(`HT ${selectedTeacher.phone || teacherZaloPhone || selectedTeacher.username}`)}&template=`}
-                    alt="QR Code"
-                    crossOrigin="anonymous"
-                    className="w-24 h-24 object-contain"
-                  />
-                </div>
-                <div>
-                  <p className="font-bold text-slate-800 flex items-center gap-2">
-                    Quét mã thanh toán
-                    <span className="bg-emerald-100 text-emerald-700 text-[10px] uppercase font-black px-2 py-0.5 rounded-full">
-                      VietQR
-                    </span>
-                  </p>
-                  <p className="text-sm text-slate-500 mt-1 mb-2">Số tiền cần thanh toán: <span className="font-bold text-rose-600">{Math.abs(selectedTeacher.salaryBalance).toLocaleString("vi-VN")} đ</span></p>
-                </div>
-              </div>
-            </div>
-            <div className="p-6">
-              <h3 className="text-sm font-bold text-slate-800 mb-4 uppercase tracking-wider border-l-4 border-rose-500 pl-3">Nội dung chuyển khoản</h3>
-              <div className="flex justify-between items-center p-3 border border-slate-100 rounded-lg bg-slate-50/50 text-xl font-bold text-slate-900 tracking-widest text-center w-full block">
-                HT {selectedTeacher.phone || teacherZaloPhone || selectedTeacher.username}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

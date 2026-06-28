@@ -195,12 +195,20 @@ export default function TeacherBookingCalendar({
         toast.warning("Ca học này đã có người đăng ký.");
         return;
       }
-      if (s.status === "PENDING" || (s.status === "SCHEDULED" && !s.isCancelRequested)) {
-        setCancelSession(s);
-        setCancelReason("");
+      
+      if (s.status === "PENDING") {
+        toast.info("Ca này đang chờ duyệt, chưa thể thao tác.");
+        return;
+      }
+
+      if (s.classId) {
+        // Nếu là lớp học chính thức -> Đi đến trang điểm danh
+        if (s.status === "SCHEDULED") {
+          router.push(`/ta?classId=${s.classId}&sessionId=${s.id}`);
+        }
       } else {
-        // Nếu đã duyệt và không xin huỷ, redirect qua trang điểm danh
-        router.push(`/ta?classId=${s.classId}&sessionId=${s.id}`);
+        // Thuê phòng tự do
+        toast.info("Ca thuê phòng tự do không có tính năng điểm danh.");
       }
     },
     [teacherId, router]
@@ -228,7 +236,9 @@ export default function TeacherBookingCalendar({
           <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-3">
 
             <div className="flex flex-wrap items-center gap-3 md:gap-4">
-              <h2 className="text-sm md:text-base font-extrabold text-slate-900 hidden sm:block">Đăng Ký Phòng</h2>
+              <h2 className="text-sm md:text-base font-extrabold text-slate-900 hidden sm:block">
+                {!selectedRoomId ? "Lịch Dạy Của Tôi" : "Đăng Ký Phòng"}
+              </h2>
 
               {/* SELECT ROOM (Tích hợp lên Header cho gọn) */}
               <div className="flex items-center gap-2">
@@ -280,13 +290,6 @@ export default function TeacherBookingCalendar({
         </div>
 
         {/* NỘI DUNG LỊCH (Bọc class scroll tuỳ chỉnh) */}
-        {!selectedRoomId ? (
-          <div className="flex-1 flex flex-col items-center justify-center p-8 bg-slate-50/50">
-            <MapPin size={48} className="text-slate-300 mb-4 animate-bounce" />
-            <h3 className="text-lg font-bold text-slate-700 mb-2">Vui lòng chọn phòng</h3>
-            <p className="text-slate-500 text-sm">Chọn một phòng ở menu phía trên để xem lịch trống và kéo thả đăng ký nhé!</p>
-          </div>
-        ) : (
           <div className="flex-1 p-2 min-h-0 relative">
             <div className="w-full h-full border border-slate-200 rounded-xl overflow-x-auto overflow-y-hidden rbc-custom-scroll-wrapper">
               <div className="h-full min-w-[700px] md:min-w-full">
@@ -325,10 +328,12 @@ export default function TeacherBookingCalendar({
                     return (
                       <div className="w-full h-full flex flex-col relative group pr-4 select-none break-words text-left">
                         <div className="font-semibold leading-tight text-[11px]">{isMine ? s.className : "Đã có người đặt"}</div>
-                        <div className="text-[9px] opacity-80 leading-normal mt-0.5">{isMine ? "Lớp của bạn" : "Không thể thao tác"}</div>
+                        <div className="text-[9px] opacity-80 leading-normal mt-0.5">
+                          {!selectedRoomId ? (s.roomName || "Không xác định") : (isMine ? "Lớp của bạn" : "Không thể thao tác")}
+                        </div>
 
-                        {/* Hiện icon Dấu X để xin huỷ ca học CỦA MÌNH */}
-                        {isMine && s.status !== "CANCELLED" && s.status !== "REJECTED" && !s.isCancelRequested && (
+                        {/* Hiện icon Dấu X để xin huỷ ca học CỦA MÌNH (Chỉ áp dụng cho thuê phòng tự do) */}
+                        {isMine && !s.classId && s.status !== "CANCELLED" && s.status !== "REJECTED" && !s.isCancelRequested && (
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
@@ -388,7 +393,6 @@ export default function TeacherBookingCalendar({
               </div>
             </div>
           </div>
-        )}
       </div>
 
       {/* MODAL: Đăng ký phòng (Hiện khi quét chuột (Select Slot) vào giờ trống) */}

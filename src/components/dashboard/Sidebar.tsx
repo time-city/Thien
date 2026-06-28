@@ -43,13 +43,6 @@ const menuItems: MenuItem[] = [
     section: "Dùng chung",
   },
   {
-    title: "Lịch dạy của tôi",
-    href: "/schedule/my-schedule",
-    icon: Calendar,
-    roles: ["TEACHER"],
-    section: "Cá nhân",
-  },
-  {
     title: "Lớp học của tôi",
     href: "/myClass",
     icon: BookOpen,

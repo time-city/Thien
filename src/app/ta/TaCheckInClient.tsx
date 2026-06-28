@@ -73,6 +73,29 @@ export default function TaCheckInClient({
   }, [sessionId]);
 
   // Hàm lưu đánh giá nháp cho từng học sinh
+  const handleQuickUpdate = async (id: string, field: 'attendance' | 'homework', value: string) => {
+    const student = studentsState.find(s => s.id === id);
+    if (!student) return;
+    
+    // Bấm lại giá trị cũ -> Hủy chọn
+    const newValue = student[field] === value ? null : value;
+    
+    // Cập nhật giao diện ngay lập tức
+    setStudentsState(prev => prev.map(st => st.id === id ? { ...st, [field]: newValue } : st));
+    
+    try {
+      await saveStudentEvaluation({
+        classSessionId: sessionId,
+        studentId: id,
+        attendanceStatus: field === 'attendance' ? (newValue as any) : (student.attendance as any),
+        homeworkStatus: field === 'homework' ? (newValue as any) : (student.homework as any),
+        note: student.note,
+      });
+    } catch (err) {
+      toast.error("Lỗi khi cập nhật nhanh");
+    }
+  };
+
   const handleSaveAssessment = async (id: string, updates: Partial<CheckInStudent>) => {
     try {
       const res = await saveStudentEvaluation({
@@ -307,9 +330,9 @@ export default function TaCheckInClient({
               <tr className="bg-slate-50 border-b border-slate-200 text-[10px] sm:text-[11px] uppercase tracking-widest font-extrabold text-slate-500">
                 <th className="py-2 px-2 sm:px-3 w-10 sm:w-12 text-center hidden sm:table-cell">STT</th>
                 <th className="py-2 px-2 sm:px-3">Học sinh</th>
-                <th className="py-2 px-2 sm:px-3 w-20 sm:w-28">Điểm danh</th>
-                <th className="py-2 px-2 sm:px-3 w-20 sm:w-28 hidden md:table-cell">Bài tập</th>
-                <th className="py-2 px-2 sm:px-3 w-20 sm:w-24 text-center">Hành động</th>
+                <th className="py-2 px-2 sm:px-3 text-center">Điểm danh</th>
+                <th className="py-2 px-2 sm:px-3 text-center hidden md:table-cell">Bài tập</th>
+                <th className="py-2 px-2 sm:px-3 w-16 sm:w-20 text-center">Khác</th>
               </tr>
             </thead>
             <tbody>
@@ -346,42 +369,80 @@ export default function TaCheckInClient({
                       </div>
                     </td>
                     <td className="py-2 px-2 sm:px-3">
-                      {student.attendance ? (
-                        <div className="flex items-center gap-1 sm:gap-1.5 text-[11px] sm:text-xs font-bold text-slate-600">
-                          <div className={`w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full flex-shrink-0 ${getAttendanceColor(student.attendance)}`}></div>
-                          <span>
-                            {student.attendance === "PRESENT" && "Có mặt"}
-                            {student.attendance === "LATE" && "Trễ"}
-                            {student.attendance === "EXCUSED" && "Phép"}
-                            {student.attendance === "UNEXCUSED" && "Vắng"}
-                          </span>
-                        </div>
-                      ) : (
-                        <span className="text-xs font-semibold text-slate-300">-</span>
-                      )}
+                      <div className="flex items-center justify-center gap-1">
+                        <button
+                          onClick={() => handleQuickUpdate(student.id, 'attendance', 'PRESENT')}
+                          className={`px-2 py-1 rounded-[6px] text-[10px] font-bold border transition-colors ${
+                            student.attendance === 'PRESENT' ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-slate-500 border-slate-200 hover:border-emerald-400 hover:text-emerald-600'
+                          }`}
+                        >
+                          Có mặt
+                        </button>
+                        <button
+                          onClick={() => handleQuickUpdate(student.id, 'attendance', 'LATE')}
+                          className={`px-2 py-1 rounded-[6px] text-[10px] font-bold border transition-colors ${
+                            student.attendance === 'LATE' ? 'bg-amber-500 text-white border-amber-500' : 'bg-white text-slate-500 border-slate-200 hover:border-amber-400 hover:text-amber-600'
+                          }`}
+                        >
+                          Trễ
+                        </button>
+                        <button
+                          onClick={() => handleQuickUpdate(student.id, 'attendance', 'EXCUSED')}
+                          className={`px-2 py-1 rounded-[6px] text-[10px] font-bold border transition-colors ${
+                            student.attendance === 'EXCUSED' ? 'bg-blue-500 text-white border-blue-500' : 'bg-white text-slate-500 border-slate-200 hover:border-blue-400 hover:text-blue-600'
+                          }`}
+                        >
+                          Phép
+                        </button>
+                        <button
+                          onClick={() => handleQuickUpdate(student.id, 'attendance', 'UNEXCUSED')}
+                          className={`px-2 py-1 rounded-[6px] text-[10px] font-bold border transition-colors ${
+                            student.attendance === 'UNEXCUSED' ? 'bg-rose-500 text-white border-rose-500' : 'bg-white text-slate-500 border-slate-200 hover:border-rose-400 hover:text-rose-600'
+                          }`}
+                        >
+                          Vắng
+                        </button>
+                      </div>
                     </td>
                     <td className="py-2 px-2 sm:px-3 hidden md:table-cell">
-                      {student.homework ? (
-                        <div className="flex items-center gap-1.5 text-xs font-bold text-slate-600">
-                          <div className={`w-2.5 h-2.5 rounded-full ${getHomeworkColor(student.homework)}`}></div>
-                          {student.homework === "GOOD" && "Tốt"}
-                          {student.homework === "DONE" && "Đủ"}
-                          {student.homework === "NOT_DONE" && "Không làm"}
-                        </div>
-                      ) : (
-                        <span className="text-xs font-semibold text-slate-300">-</span>
-                      )}
+                      <div className="flex items-center justify-center gap-1">
+                        <button
+                          onClick={() => handleQuickUpdate(student.id, 'homework', 'GOOD')}
+                          className={`px-2 py-1 rounded-[6px] text-[10px] font-bold border transition-colors ${
+                            student.homework === 'GOOD' ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-slate-500 border-slate-200 hover:border-emerald-400 hover:text-emerald-600'
+                          }`}
+                        >
+                          Tốt
+                        </button>
+                        <button
+                          onClick={() => handleQuickUpdate(student.id, 'homework', 'DONE')}
+                          className={`px-2 py-1 rounded-[6px] text-[10px] font-bold border transition-colors ${
+                            student.homework === 'DONE' ? 'bg-amber-500 text-white border-amber-500' : 'bg-white text-slate-500 border-slate-200 hover:border-amber-400 hover:text-amber-600'
+                          }`}
+                        >
+                          Đạt
+                        </button>
+                        <button
+                          onClick={() => handleQuickUpdate(student.id, 'homework', 'NOT_DONE')}
+                          className={`px-2 py-1 rounded-[6px] text-[10px] font-bold border transition-colors ${
+                            student.homework === 'NOT_DONE' ? 'bg-slate-600 text-white border-slate-600' : 'bg-white text-slate-500 border-slate-200 hover:border-slate-400 hover:text-slate-600'
+                          }`}
+                        >
+                          Không
+                        </button>
+                      </div>
                     </td>
                     <td className="py-2 px-2 sm:px-3 text-center">
                       <button
                         onClick={() => setSelectedStudent(student)}
                         className={`px-2 py-1 sm:px-3 sm:py-1 border rounded-[6px] text-[10px] sm:text-[11px] font-bold shadow-sm transition-all outline-none whitespace-nowrap ${
-                          isAssessed
-                            ? "bg-transparent border-slate-200 text-slate-600 hover:border-blue-400 hover:text-blue-600 hover:bg-blue-50"
-                            : "bg-transparent border-blue-200 text-blue-600 hover:bg-blue-50 hover:border-blue-300"
+                          student.note
+                            ? "bg-blue-50 border-blue-200 text-blue-600 hover:bg-blue-100"
+                            : "bg-transparent border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50"
                         }`}
+                        title="Thêm nhận xét / đánh giá chi tiết"
                       >
-                        {isAssessed ? "Sửa" : "Đánh giá"}
+                        {student.note ? "Sửa" : "Ghi chú"}
                       </button>
                     </td>
                   </tr>

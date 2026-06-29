@@ -333,6 +333,12 @@ _Tin nhắn được thông báo tự động, phụ huynh có thể trao đổi
       return;
     }
 
+    const element2 = document.getElementById("report-export-area-2");
+    if (!element2) {
+      toast.error("Không tìm thấy mã QR để xuất.");
+      return;
+    }
+
     const classNamesArray = report.items.filter(i => i.type === "TUITION").map(i => i.className);
     const classNames = classNamesArray.length > 0 ? classNamesArray.join("; ") : "Tổng hợp";
 
@@ -342,8 +348,39 @@ Lớp: **${classNames}**
 
 _Phụ huynh đã nộp nhưng hệ thống chưa cập nhật, vui lòng nhắn tin xác nhận để được kiểm tra lại tình trạng học phí._`;
 
+    const styleTag = injectGlobalCSS(element2);
     try {
       setSendingZalo(true);
+      
+      // Chụp ảnh phiếu thu (có mã QR)
+      const dataUrl2 = await toPng(element2, {
+        cacheBust: true,
+        pixelRatio: 2,
+        backgroundColor: "#ffffff",
+        style: { transform: "scale(1)", transformOrigin: "top left" }
+      });
+      
+      const res2 = await fetch(dataUrl2);
+      const blob2 = await res2.blob();
+      const file2 = new File([blob2], `BaoCao_HocPhi_${studentName.replace(/\s+/g, "_")}.png`, { type: "image/png" });
+      
+      const formData2 = new FormData();
+      formData2.append("target", report.phoneParent);
+      formData2.append("image", file2);
+      
+      // Gửi ảnh QR trước
+      const imageRes2 = await fetch("/api/zalobot/send-image", {
+        method: "POST",
+        headers: { "x-api-key": process.env.NEXT_PUBLIC_ZALO_BOT_API_KEY || "" },
+        body: formData2,
+      });
+
+      if (!imageRes2.ok) {
+        throw new Error("Lỗi khi gửi ảnh QR Zalo");
+      }
+      
+      await new Promise(r => setTimeout(r, 1000)); // Nghỉ 1s
+
       const textRes = await fetch("/api/zalobot/send", {
         method: "POST",
         headers: {
@@ -357,13 +394,14 @@ _Phụ huynh đã nộp nhưng hệ thống chưa cập nhật, vui lòng nhắn
       });
 
       if (textRes.ok) {
-        toast.success("Đã gửi tin nhắn nhắc nợ thành công!");
+        toast.success("Đã gửi tin nhắn nhắc nợ và mã QR thành công!");
       } else {
-        toast.error("Lỗi khi gửi Zalo nhắc nợ");
+        toast.error("Lỗi khi gửi Text Zalo nhắc nợ");
       }
     } catch (e: any) {
-      toast.error("Lỗi kết nối Zalo");
+      toast.error(e.message || "Lỗi kết nối Zalo");
     } finally {
+      styleTag.remove();
       setSendingZalo(false);
     }
   };
@@ -518,24 +556,33 @@ _Phụ huynh đã nộp nhưng hệ thống chưa cập nhật, vui lòng nhắn
           </div>
 
           <div className="mt-2.5 md:mt-6 pt-2.5 md:pt-4 border-t border-slate-200">
-            {report?.logs && report.logs.length > 0 ? (
+            {!report?.phoneParent ? (
               <button
-                onClick={() => setConfirmSendOpen(true)}
-                disabled={loading || !report || !report.phoneParent}
-                className={`w-full h-8 md:h-12 mb-1.5 md:mb-3 text-white rounded-md md:rounded-xl font-bold text-[11px] md:text-sm transition-all shadow-sm flex items-center justify-center gap-1.5 md:gap-2 disabled:opacity-50 disabled:cursor-not-allowed ${!report?.phoneParent ? 'bg-slate-400' : 'bg-green-600 hover:bg-green-700'}`}
+                disabled
+                className="w-full h-8 md:h-12 mb-1.5 md:mb-3 text-white rounded-md md:rounded-xl font-bold text-[11px] md:text-sm transition-all shadow-sm flex items-center justify-center gap-1.5 md:gap-2 bg-slate-400 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Send className="w-3.5 h-3.5 md:w-[18px] md:h-[18px]" />
-                {!report?.phoneParent ? "Cập nhật SĐT Phụ huynh để gửi Zalo" : "Gửi báo cáo qua Zalo"}
+                Cập nhật SĐT Phụ huynh để gửi Zalo
               </button>
             ) : (
-              <button
-                onClick={handleSendReminder}
-                disabled={loading || !report || sendingZalo || !report.phoneParent}
-                className={`w-full h-8 md:h-12 mb-1.5 md:mb-3 text-white rounded-md md:rounded-xl font-bold text-[11px] md:text-sm transition-all shadow-sm flex items-center justify-center gap-1.5 md:gap-2 disabled:opacity-50 disabled:cursor-not-allowed ${!report?.phoneParent ? 'bg-slate-400' : 'bg-orange-500 hover:bg-orange-600'}`}
-              >
-                {sendingZalo ? <Loader2 size={14} className="animate-spin md:w-4 md:h-4" /> : <Send className="w-3.5 h-3.5 md:w-[18px] md:h-[18px]" />}
-                {!report?.phoneParent ? "Cập nhật SĐT Phụ huynh để gửi Zalo" : "Nhắc lại phụ huynh (Zalo)"}
-              </button>
+              <>
+                <button
+                  onClick={() => setConfirmSendOpen(true)}
+                  disabled={loading || !report}
+                  className="w-full h-8 md:h-12 mb-1.5 md:mb-3 text-white rounded-md md:rounded-xl font-bold text-[11px] md:text-sm transition-all shadow-sm flex items-center justify-center gap-1.5 md:gap-2 disabled:opacity-50 disabled:cursor-not-allowed bg-green-600 hover:bg-green-700"
+                >
+                  <Send className="w-3.5 h-3.5 md:w-[18px] md:h-[18px]" />
+                  Gửi báo cáo qua Zalo
+                </button>
+                <button
+                  onClick={handleSendReminder}
+                  disabled={loading || !report || sendingZalo}
+                  className="w-full h-8 md:h-12 mb-1.5 md:mb-3 text-white rounded-md md:rounded-xl font-bold text-[11px] md:text-sm transition-all shadow-sm flex items-center justify-center gap-1.5 md:gap-2 disabled:opacity-50 disabled:cursor-not-allowed bg-orange-500 hover:bg-orange-600"
+                >
+                  {sendingZalo ? <Loader2 size={14} className="animate-spin md:w-4 md:h-4" /> : <Send className="w-3.5 h-3.5 md:w-[18px] md:h-[18px]" />}
+                  Nhắc lại phụ huynh (Zalo)
+                </button>
+              </>
             )}
             <button
               onClick={handleExportPng}

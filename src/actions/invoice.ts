@@ -119,7 +119,7 @@ export async function processStudentPayment(
                 paymentMethod,
                 status: "SUCCESS",
                 transactionCode: `${tRef}-${itemIndex++}`,
-                voucherRef: trEnrollment.currentVoucher + 1 // Tham chiếu phiếu thu
+                voucherRef: trEnrollment.currentVoucher // Tham chiếu phiếu thu
               }
             });
 

@@ -144,13 +144,6 @@ export async function getStudentCombinedReport(studentId: string): Promise<Stude
     where: { studentId, status: "PENDING" }
   });
 
-  const paidCounts = await prisma.invoice.groupBy({
-    by: ["enrollmentId"],
-    where: { studentId, isDebt: false, status: "PAID", enrollmentId: { not: null } },
-    _count: { id: true }
-  });
-  const countMap = Object.fromEntries(paidCounts.map(c => [c.enrollmentId, c._count.id]));
-
   const items: StudentCombinedReport["items"] = [];
   let totalExpectedAmount = 0;
 
@@ -167,7 +160,7 @@ export async function getStudentCombinedReport(studentId: string): Promise<Stude
       amount: amount,
       sessionsPerPackage: enr.class.sessionsPerPackage,
       pendingInvoiceId: inv?.id,
-      voucherNumber: (countMap[enr.id] || 0) + 1
+      voucherNumber: enr.currentVoucher
     });
     totalExpectedAmount += amount;
   }

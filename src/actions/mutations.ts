@@ -1282,7 +1282,7 @@ export async function processStudentTuitionPayment(
             amount: classInfo.pricePerSession, // Giá nguyên 1 gói học
             paymentMethod: paymentMethod,
             status: "SUCCESS",
-            // Nếu muốn, ông có thể gán voucherRef = enrollment.currentVoucher + 1 ở đây
+            voucherRef: enrollment.currentVoucher // Tham chiếu phiếu thu
           },
         });
 

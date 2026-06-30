@@ -392,6 +392,7 @@ export type EnrolledCourseData = {
   feeStatus: string;
   status: string;
   teachers: string[];
+  voucherNumber: number;
 };
 
 export type StudentData = {
@@ -451,6 +452,7 @@ export async function getStudentsDetailed(): Promise<StudentData[]> {
       feeStatus: e.feeStatus,
       status: e.status,
       teachers: e.class.teachers.map((t) => t.teacher.fullName),
+      voucherNumber: e.currentVoucher,
     })),
     logs: s.attendanceLogs.map((log) => ({
       id: log.id,

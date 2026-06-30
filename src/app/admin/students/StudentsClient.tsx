@@ -588,7 +588,7 @@ export default function StudentsClient({
                             <span key={i} className={`text-xs font-semibold px-2 py-1 rounded-md border flex items-center gap-1.5 whitespace-nowrap ${isLow ? "bg-rose-50 text-rose-700 border-rose-200" : "bg-blue-50 text-blue-700 border-blue-100"}`}>
                               <BookOpen size={12} /> {c.className}
                               <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold border ${isLow ? "bg-white text-rose-600 border-rose-100" : "bg-white text-blue-600 border-blue-100"}`}>
-                                {c.remainingSessions ?? 0} buổi
+                                Phiếu {c.voucherNumber ?? 1} • {c.remainingSessions ?? 0} buổi
                               </span>
                             </span>
                           );

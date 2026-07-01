@@ -228,7 +228,12 @@ export default function CourseReportModal({
       const classNames = classNamesArray.length > 0 ? classNamesArray.join("; ") : "Các lớp";
 
       const formattedPrice = finalPrice.toLocaleString('vi-VN');
-      const descStr = report?.phoneParent ? `HT${report.phoneParent}` : `HT${studentId}`;
+      let descStr = `HT${studentId}`;
+      if (report?.phoneParent) {
+        const cleanPhone = report.phoneParent.replace(/\s+/g, '');
+        const suffix = studentId.slice(-3).toUpperCase();
+        descStr = `HT${cleanPhone}${suffix}`;
+      }
 
       const headerTitle = hasLogs ? `Báo cáo học tập${dateStr}.` : "Thông báo đóng học phí.";
 
@@ -413,7 +418,12 @@ _Phụ huynh đã nộp nhưng hệ thống chưa cập nhật, vui lòng nhắn
   const finalPrice = Math.max(0, originalPrice - discountAmount);
 
   // Generate VietQR URL sử dụng phoneParent thay vì studentId/invoiceId
-  const descString = report?.phoneParent ? `HT${report.phoneParent.replace(/\s+/g, '')}` : `HT${studentId}`;
+  let descString = `HT${studentId}`;
+  if (report?.phoneParent) {
+    const cleanPhone = report.phoneParent.replace(/\s+/g, '');
+    const suffix = studentId.slice(-3).toUpperCase();
+    descString = `HT${cleanPhone}${suffix}`;
+  }
   const qrUrl = `https://qr.sepay.vn/img?bank=MBBank&acc=0700107189999&amount=${finalPrice}&des=${encodeURIComponent(descString)}&template=`;
 
   // Log ra console để tiện việc test Webhook

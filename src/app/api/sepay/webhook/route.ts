@@ -63,11 +63,14 @@ export async function POST(request: Request) {
     }
 
     // 4. CHỐNG TRÙNG LẶP (IDEMPOTENCY)
-    const existingPayment = await prisma.paymentHistory.findUnique({
-      where: { transactionCode: sepayId },
+    const existingPayment = await prisma.paymentHistory.findFirst({
+      where: { transactionCode: { startsWith: `${sepayId}-` } },
+    });
+    const existingSalaryPayment = await prisma.salaryPayment.findFirst({
+      where: { note: { contains: `SePay: ${sepayId}` } },
     });
 
-    if (existingPayment) {
+    if (existingPayment || existingSalaryPayment) {
       return NextResponse.json({ success: true, reason: "Already processed" });
     }
 
@@ -89,7 +92,27 @@ export async function POST(request: Request) {
         if (student) studentId = student.id;
       }
 
-      // 2. Fallback: Tìm theo SĐT hoặc QRCodeId
+      // 2. Fallback 1: Tìm theo SĐT + 3 ký tự cuối của ID (Hỗ trợ anh em ruột: HT0901234567A1B)
+      if (!studentId && studentPhoneMatch.length > 5) {
+        const phonePart = studentPhoneMatch.slice(0, -3);
+        const suffixPart = studentPhoneMatch.slice(-3).toLowerCase();
+
+        // Lấy tất cả học sinh có SĐT khớp, sau đó lọc theo hậu tố ID bằng JS
+        const candidates = await prisma.student.findMany({
+          where: {
+            OR: [
+              { phoneStudent: { contains: phonePart } },
+              { phoneParent: { contains: phonePart } },
+            ]
+          },
+          select: { id: true }
+        });
+
+        const matched = candidates.find(s => s.id.toLowerCase().endsWith(suffixPart));
+        if (matched) studentId = matched.id;
+      }
+
+      // 3. Fallback 2: Tìm theo SĐT đơn thuần hoặc QRCodeId
       if (!studentId) {
         const student = await prisma.student.findFirst({
           where: {

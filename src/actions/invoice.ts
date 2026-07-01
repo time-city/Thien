@@ -168,8 +168,14 @@ export async function processStudentPayment(
       }
     });
 
-    revalidatePath("/admin/tuition");
-    revalidatePath("/admin/history/tuition");
+    // revalidatePath chỉ hoạt động trong Next.js request context (Server Action/Route Handler)
+    // Khi gọi từ Webhook hay script, sẽ bị bỏ qua thay vì throw lỗi
+    try {
+      revalidatePath("/admin/tuition");
+      revalidatePath("/admin/history/tuition");
+    } catch {
+      // Bỏ qua nếu không có Next.js request context (VD: gọi từ Webhook)
+    }
 
     // Gửi thông báo Zalo sau khi thanh toán hoàn tất
     try {

@@ -139,7 +139,9 @@ export default function TuitionClient({
 
         // Tải trước QR Code thành Base64 để tránh lỗi html-to-image bắt nhầm QR của học sinh trước
         const cleanPhone = data.phoneParent.replace(/\s+/g, '');
-        const qrUrl = `https://qr.sepay.vn/img?bank=MBBank&acc=0700107189999&amount=${data.totalExpectedAmount}&des=${encodeURIComponent(`HT${cleanPhone}`)}&template=`;
+        const idSuffix = studentId.slice(-3).toUpperCase();
+        const qrDescCode = data.phoneParent ? `HT${cleanPhone}${idSuffix}` : `HT${studentId}`;
+        const qrUrl = `https://qr.sepay.vn/img?bank=MBBank&acc=0700107189999&amount=${data.totalExpectedAmount}&des=${encodeURIComponent(qrDescCode)}&template=`;
         try {
           const qrRes = await fetch(qrUrl);
           const qrBlob = await qrRes.blob();
@@ -222,8 +224,12 @@ export default function TuitionClient({
           const classNamesArray = data.items.filter((i: any) => i.type === "TUITION").map((i: any) => i.className);
           const classNames = classNamesArray.length > 0 ? classNamesArray.join("; ") : "Các lớp";
           const formattedPrice = data.totalExpectedAmount.toLocaleString('vi-VN');
-          const cleanPhoneMessage = data.phoneParent ? data.phoneParent.replace(/\s+/g, '') : studentId;
-          const descStr = `HT${cleanPhoneMessage}`;
+          let descStr = `HT${studentId}`;
+          if (data.phoneParent) {
+            const cleanPhone = data.phoneParent.replace(/\s+/g, '');
+            const suffix = studentId.slice(-3).toUpperCase();
+            descStr = `HT${cleanPhone}${suffix}`;
+          }
 
           const headerTitle = hasLogs ? `Báo cáo học tập${dateStr}.` : "Thông báo đóng học phí.";
 
@@ -1171,7 +1177,7 @@ _Tin nhắn được thông báo tự động, phụ huynh có thể trao đổi
                 <div className="p-2 bg-white rounded-xl shadow-sm border border-slate-200 mb-3">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
-                    src={hiddenReportData.qrBase64 || `https://qr.sepay.vn/img?bank=MBBank&acc=0700107189999&amount=${hiddenReportData.totalExpectedAmount}&des=${encodeURIComponent(`HT${hiddenReportData.phoneParent.replace(/\s+/g, '')}`)}&template=`}
+                    src={hiddenReportData.qrBase64 || `https://qr.sepay.vn/img?bank=MBBank&acc=0700107189999&amount=${hiddenReportData.totalExpectedAmount}&des=${encodeURIComponent(hiddenReportData.phoneParent ? `HT${hiddenReportData.phoneParent.replace(/\s+/g, '')}${hiddenReportData.studentId.slice(-3).toUpperCase()}` : `HT${hiddenReportData.studentId}`)}&template=`}
                     alt="QR Code"
                     crossOrigin="anonymous"
                     className="w-40 h-40 object-contain"
@@ -1184,7 +1190,8 @@ _Tin nhắn được thông báo tự động, phụ huynh có thể trao đổi
                     VietQR
                   </span>
                 </p>
-                <p className="text-sm text-slate-500 mt-1 mb-2">Học sinh: <span className="font-mono">{hiddenReportData.studentName}</span></p>
+                <p className="text-sm text-slate-500 mt-1 mb-1">Học sinh: <span className="font-mono">{hiddenReportData.studentName}</span></p>
+                <p className="text-xs text-slate-400 mb-2">Nội dung CK: <span className="font-mono font-bold text-slate-600">{hiddenReportData.phoneParent ? `HT${hiddenReportData.phoneParent.replace(/\s+/g, '')}${hiddenReportData.studentId.slice(-3).toUpperCase()}` : `HT${hiddenReportData.studentId}`}</span></p>
               </div>
             </div>
 

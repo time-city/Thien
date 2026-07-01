@@ -7,7 +7,7 @@ import StudentEvaluationModal from "./StudentEvaluationModal";
 import type { CheckInStudent, UISessionInfo } from "../../app/types";
 import Link from "next/link";
 import { ArrowLeft, Loader2, CheckCircle2, AlertTriangle } from "lucide-react";
-import { saveStudentEvaluation, submitAttendanceAndCalculateFinance } from "@/actions/mutations";
+import { saveStudentEvaluation, submitAttendanceAndCalculateFinance, markAllHomeworkGoodAction, markAllAttendancePresentAction } from "@/actions/mutations";
 import { getTodayQuickAttendance } from "@/actions/schedule";
 import { toast } from "sonner";
 
@@ -37,6 +37,8 @@ export default function TaCheckInClient({
   // State xử lý loading và hiển thị Modal Chốt ca
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [isSubmittingFinal, setIsSubmittingFinal] = useState(false);
+  const [isMarkingAllHomework, setIsMarkingAllHomework] = useState(false);
+  const [isMarkingAllAttendance, setIsMarkingAllAttendance] = useState(false);
 
   // Quick Attendance: Ca dạy tiếp theo và trước đó
   const [nextSession, setNextSession] = useState<any>(null);
@@ -117,14 +119,55 @@ export default function TaCheckInClient({
     }
   };
 
+  const handleMarkAllAttendancePresent = async () => {
+    setIsMarkingAllAttendance(true);
+    try {
+      const res = await markAllAttendancePresentAction(classId, sessionId);
+      if (res.success) {
+        setStudentsState(prev => prev.map(st => ({ 
+          ...st, 
+          attendance: 'PRESENT'
+        })));
+        toast.success("Đã điểm danh Có mặt cho tất cả học sinh trong lớp.");
+      } else {
+        toast.error(res.error || "Có lỗi xảy ra khi điểm danh hàng loạt.");
+      }
+    } catch (err) {
+      toast.error("Có lỗi xảy ra khi điểm danh hàng loạt.");
+    } finally {
+      setIsMarkingAllAttendance(false);
+    }
+  };
+
+  const handleMarkAllHomeworkGood = async () => {
+    setIsMarkingAllHomework(true);
+    try {
+      const res = await markAllHomeworkGoodAction(classId, sessionId);
+      if (res.success) {
+        setStudentsState(prev => prev.map(st => ({ 
+          ...st, 
+          homework: 'GOOD',
+          attendance: st.attendance || 'PRESENT' // Do server action tự đánh 'PRESENT' nếu chưa có log
+        })));
+        toast.success("Đã đánh giá Đạt bài tập cho tất cả học sinh trong lớp.");
+      } else {
+        toast.error(res.error || "Có lỗi xảy ra khi đánh giá hàng loạt.");
+      }
+    } catch (err) {
+      toast.error("Có lỗi xảy ra khi đánh giá hàng loạt.");
+    } finally {
+      setIsMarkingAllHomework(false);
+    }
+  };
+
   // ==========================================
   // HÀM MỞ MODAL XÁC NHẬN CHỐT CA
   // ==========================================
   const handleFinalizeSession = () => {
-    // Bắt buộc giáo viên phải điểm danh đủ 100% học sinh mới cho chốt
-    const unassessed = studentsState.filter((s) => !s.attendance);
+    // Bắt buộc giáo viên phải điểm danh và đánh giá bài tập đủ 100% học sinh mới cho chốt
+    const unassessed = studentsState.filter((s) => !s.attendance || !s.homework);
     if (unassessed.length > 0) {
-      toast.error(`Vui lòng điểm danh toàn bộ học sinh trước khi chốt ca! (Còn ${unassessed.length} bạn chưa đánh giá)`);
+      toast.error(`Vui lòng điểm danh và đánh giá bài tập toàn bộ học sinh trước khi chốt ca! (Còn ${unassessed.length} bạn chưa đánh giá xong)`);
       return;
     }
 
@@ -197,8 +240,8 @@ export default function TaCheckInClient({
     router.push(`${pathname}?classId=${classId}&sessionId=${sessionId}&page=${newPage}`);
   };
 
-  // Kiểm tra xem đã điểm danh đủ 100% học sinh trên màn hình này chưa
-  const allAssessed = studentsState.length > 0 && studentsState.every((s) => s.attendance);
+  // Kiểm tra xem đã điểm danh và đánh giá bài tập đủ 100% học sinh trên màn hình này chưa
+  const allAssessed = studentsState.length > 0 && studentsState.every((s) => s.attendance && s.homework);
 
   return (
     <div className="w-full max-w-5xl mx-auto pb-8 font-sans">
@@ -250,29 +293,50 @@ export default function TaCheckInClient({
             </p>
           </div>
 
-          <div className="w-full lg:w-auto flex items-center gap-3">
+          <div className="w-full lg:w-auto flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
             <input
               type="text"
               placeholder="Tìm theo tên học sinh..."
-              className="w-full lg:w-64 bg-slate-50 border border-slate-200 rounded-lg h-9 px-3 text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-100"
+              className="w-full lg:w-64 bg-slate-50 border border-slate-200 rounded-lg h-9 px-3 text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-100 shrink-0"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
             
-            {/* NÚT MỞ MODAL CHỐT CA */}
-            <button
-              onClick={handleFinalizeSession}
-              disabled={isSubmittingFinal || !allAssessed}
-              className={`h-9 px-4 flex items-center justify-center gap-2 text-white text-xs font-bold rounded-lg shadow-sm transition-all whitespace-nowrap ${
-                allAssessed 
-                  ? "bg-emerald-600 hover:bg-emerald-700" 
-                  : "bg-slate-300 cursor-not-allowed"
-              }`}
-              title={!allAssessed ? "Vui lòng điểm danh đủ học sinh để chốt ca" : "Chốt ca học và nhận lương"}
-            >
-              <CheckCircle2 size={16} />
-              Chốt Ca Học
-            </button>
+            <div className="grid grid-cols-2 sm:flex sm:flex-row gap-2 w-full sm:w-auto">
+              <button
+                onClick={handleMarkAllAttendancePresent}
+                disabled={isMarkingAllAttendance}
+                className={`h-9 px-2 sm:px-3 flex items-center justify-center gap-1 sm:gap-1.5 text-slate-700 text-[11px] sm:text-xs font-bold rounded-lg border border-slate-300 shadow-sm transition-all whitespace-nowrap bg-white hover:bg-slate-50 disabled:opacity-50 w-full`}
+                title="Điểm danh Có mặt cho tất cả học sinh"
+              >
+                {isMarkingAllAttendance ? <Loader2 size={14} className="animate-spin shrink-0" /> : <CheckCircle2 size={14} className="text-emerald-600 shrink-0" />}
+                Tất cả Có mặt
+              </button>
+              <button
+                onClick={handleMarkAllHomeworkGood}
+                disabled={isMarkingAllHomework}
+                className={`h-9 px-2 sm:px-3 flex items-center justify-center gap-1 sm:gap-1.5 text-slate-700 text-[11px] sm:text-xs font-bold rounded-lg border border-slate-300 shadow-sm transition-all whitespace-nowrap bg-white hover:bg-slate-50 disabled:opacity-50 w-full`}
+                title="Đánh giá tất cả học sinh đều Đạt bài tập"
+              >
+                {isMarkingAllHomework ? <Loader2 size={14} className="animate-spin shrink-0" /> : <CheckCircle2 size={14} className="text-emerald-600 shrink-0" />}
+                Tất cả Đạt (BT)
+              </button>
+              
+              {/* NÚT MỞ MODAL CHỐT CA */}
+              <button
+                onClick={handleFinalizeSession}
+                disabled={isSubmittingFinal || !allAssessed}
+                className={`col-span-2 sm:col-span-1 h-9 px-3 sm:px-4 flex items-center justify-center gap-2 text-white text-[11px] sm:text-xs font-bold rounded-lg shadow-sm transition-all whitespace-nowrap w-full ${
+                  allAssessed 
+                    ? "bg-emerald-600 hover:bg-emerald-700" 
+                    : "bg-slate-300 cursor-not-allowed"
+                }`}
+                title={!allAssessed ? "Vui lòng điểm danh và đánh giá bài tập đủ học sinh để chốt ca" : "Chốt ca học và nhận lương"}
+              >
+                <CheckCircle2 size={16} className="shrink-0" />
+                Chốt Ca Học
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -328,8 +392,7 @@ export default function TaCheckInClient({
               <tr className="bg-slate-50 border-b border-slate-200 text-[10px] sm:text-[11px] uppercase tracking-widest font-extrabold text-slate-500">
                 <th className="py-2 px-2 sm:px-3 w-10 sm:w-12 text-center hidden sm:table-cell">STT</th>
                 <th className="py-2 px-2 sm:px-3">Học sinh</th>
-                <th className="py-2 px-2 sm:px-3 text-center">Điểm danh</th>
-                <th className="py-2 px-2 sm:px-3 text-center hidden md:table-cell">Bài tập</th>
+                <th className="py-2 px-2 sm:px-3">Đánh giá</th>
                 <th className="py-2 px-2 sm:px-3 w-16 sm:w-20 text-center">Khác</th>
               </tr>
             </thead>
@@ -367,67 +430,67 @@ export default function TaCheckInClient({
                       </div>
                     </td>
                     <td className="py-2 px-2 sm:px-3">
-                      <div className="flex items-center justify-center gap-1">
-                        <button
-                          onClick={() => handleQuickUpdate(student.id, 'attendance', 'PRESENT')}
-                          className={`px-2 py-1 rounded-[6px] text-[10px] font-bold border transition-colors ${
-                            student.attendance === 'PRESENT' ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-slate-500 border-slate-200 hover:border-emerald-400 hover:text-emerald-600'
-                          }`}
-                        >
-                          Có mặt
-                        </button>
-                        <button
-                          onClick={() => handleQuickUpdate(student.id, 'attendance', 'LATE')}
-                          className={`px-2 py-1 rounded-[6px] text-[10px] font-bold border transition-colors ${
-                            student.attendance === 'LATE' ? 'bg-amber-500 text-white border-amber-500' : 'bg-white text-slate-500 border-slate-200 hover:border-amber-400 hover:text-amber-600'
-                          }`}
-                        >
-                          Trễ
-                        </button>
-                        <button
-                          onClick={() => handleQuickUpdate(student.id, 'attendance', 'EXCUSED')}
-                          className={`px-2 py-1 rounded-[6px] text-[10px] font-bold border transition-colors ${
-                            student.attendance === 'EXCUSED' ? 'bg-blue-500 text-white border-blue-500' : 'bg-white text-slate-500 border-slate-200 hover:border-blue-400 hover:text-blue-600'
-                          }`}
-                        >
-                          Phép
-                        </button>
-                        <button
-                          onClick={() => handleQuickUpdate(student.id, 'attendance', 'UNEXCUSED')}
-                          className={`px-2 py-1 rounded-[6px] text-[10px] font-bold border transition-colors ${
-                            student.attendance === 'UNEXCUSED' ? 'bg-rose-500 text-white border-rose-500' : 'bg-white text-slate-500 border-slate-200 hover:border-rose-400 hover:text-rose-600'
-                          }`}
-                        >
-                          Vắng
-                        </button>
-                      </div>
-                    </td>
-                    <td className="py-2 px-2 sm:px-3 hidden md:table-cell">
-                      <div className="flex items-center justify-center gap-1">
-                        <button
-                          onClick={() => handleQuickUpdate(student.id, 'homework', 'GOOD')}
-                          className={`px-2 py-1 rounded-[6px] text-[10px] font-bold border transition-colors ${
-                            student.homework === 'GOOD' ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-slate-500 border-slate-200 hover:border-emerald-400 hover:text-emerald-600'
-                          }`}
-                        >
-                          Đạt
-                        </button>
-                        <button
-                          onClick={() => handleQuickUpdate(student.id, 'homework', 'DONE')}
-                          className={`px-2 py-1 rounded-[6px] text-[10px] font-bold border transition-colors ${
-                            student.homework === 'DONE' ? 'bg-amber-500 text-white border-amber-500' : 'bg-white text-slate-500 border-slate-200 hover:border-amber-400 hover:text-amber-600'
-                          }`}
-                        >
-                          Không đạt
-                        </button>
-                        <button
-                          onClick={() => handleQuickUpdate(student.id, 'homework', 'NOT_DONE')}
-                          className={`px-2 py-1 rounded-[6px] text-[10px] font-bold border transition-colors ${
-                            student.homework === 'NOT_DONE' ? 'bg-rose-600 text-white border-rose-600' : 'bg-white text-slate-500 border-slate-200 hover:border-rose-400 hover:text-rose-600'
-                          }`}
-                        >
-                          Không làm
-                        </button>
+                      <div className="flex flex-col gap-1.5 sm:gap-2">
+                        <div className="flex flex-wrap items-center gap-1">
+                          <button
+                            onClick={() => handleQuickUpdate(student.id, 'attendance', 'PRESENT')}
+                            className={`px-2 py-1 rounded-[6px] text-[10px] font-bold border transition-colors ${
+                              student.attendance === 'PRESENT' ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-slate-500 border-slate-200 hover:border-emerald-400 hover:text-emerald-600'
+                            }`}
+                          >
+                            Có mặt
+                          </button>
+                          <button
+                            onClick={() => handleQuickUpdate(student.id, 'attendance', 'LATE')}
+                            className={`px-2 py-1 rounded-[6px] text-[10px] font-bold border transition-colors ${
+                              student.attendance === 'LATE' ? 'bg-amber-500 text-white border-amber-500' : 'bg-white text-slate-500 border-slate-200 hover:border-amber-400 hover:text-amber-600'
+                            }`}
+                          >
+                            Trễ
+                          </button>
+                          <button
+                            onClick={() => handleQuickUpdate(student.id, 'attendance', 'EXCUSED')}
+                            className={`px-2 py-1 rounded-[6px] text-[10px] font-bold border transition-colors ${
+                              student.attendance === 'EXCUSED' ? 'bg-blue-500 text-white border-blue-500' : 'bg-white text-slate-500 border-slate-200 hover:border-blue-400 hover:text-blue-600'
+                            }`}
+                          >
+                            Phép
+                          </button>
+                          <button
+                            onClick={() => handleQuickUpdate(student.id, 'attendance', 'UNEXCUSED')}
+                            className={`px-2 py-1 rounded-[6px] text-[10px] font-bold border transition-colors ${
+                              student.attendance === 'UNEXCUSED' ? 'bg-rose-500 text-white border-rose-500' : 'bg-white text-slate-500 border-slate-200 hover:border-rose-400 hover:text-rose-600'
+                            }`}
+                          >
+                            Vắng
+                          </button>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-1">
+                          <button
+                            onClick={() => handleQuickUpdate(student.id, 'homework', 'GOOD')}
+                            className={`px-2 py-1 rounded-[6px] text-[10px] font-bold border transition-colors ${
+                              student.homework === 'GOOD' ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-slate-500 border-slate-200 hover:border-emerald-400 hover:text-emerald-600'
+                            }`}
+                          >
+                            Đạt
+                          </button>
+                          <button
+                            onClick={() => handleQuickUpdate(student.id, 'homework', 'DONE')}
+                            className={`px-2 py-1 rounded-[6px] text-[10px] font-bold border transition-colors ${
+                              student.homework === 'DONE' ? 'bg-amber-500 text-white border-amber-500' : 'bg-white text-slate-500 border-slate-200 hover:border-amber-400 hover:text-amber-600'
+                            }`}
+                          >
+                            Không đạt
+                          </button>
+                          <button
+                            onClick={() => handleQuickUpdate(student.id, 'homework', 'NOT_DONE')}
+                            className={`px-2 py-1 rounded-[6px] text-[10px] font-bold border transition-colors ${
+                              student.homework === 'NOT_DONE' ? 'bg-rose-600 text-white border-rose-600' : 'bg-white text-slate-500 border-slate-200 hover:border-rose-400 hover:text-rose-600'
+                            }`}
+                          >
+                            Không làm
+                          </button>
+                        </div>
                       </div>
                     </td>
                     <td className="py-2 px-2 sm:px-3 text-center">

@@ -638,10 +638,124 @@ export async function saveStudentEvaluation(data: {
 
     return { success: true };
   } catch (error) {
-    console.error("Save evaluation error:", error);
-    return { success: false, error: "Lỗi khi lưu đánh giá học sinh" };
+    console.error("saveStudentEvaluation error:", error);
+    return { success: false, error: "Lỗi hệ thống" };
   }
 }
+
+export async function markAllAttendancePresentAction(classId: string, sessionId: string) {
+  const session = await auth();
+  if (!session?.user) return { success: false, error: "Unauthorized" };
+
+  try {
+    const isFreelance = classId === "freelance";
+    let studentIds: string[] = [];
+    if (!isFreelance) {
+      const enrollments = await prisma.enrollment.findMany({
+        where: { classId, status: "ACTIVE" },
+        select: { studentId: true }
+      });
+      studentIds = enrollments.map(e => e.studentId);
+    } else {
+      const existingLogs = await prisma.attendanceLog.findMany({
+        where: { classSessionId: sessionId },
+        select: { studentId: true }
+      });
+      studentIds = existingLogs.map(l => l.studentId);
+    }
+
+    if (studentIds.length === 0) return { success: true };
+
+    const existingLogs = await prisma.attendanceLog.findMany({
+      where: { classSessionId: sessionId, studentId: { in: studentIds } }
+    });
+
+    const toUpdateIds = existingLogs.filter(log => log.attendanceStatus !== "PRESENT").map(log => log.id);
+    const existingStudentIds = existingLogs.map(log => log.studentId);
+    const toCreateIds = studentIds.filter(id => !existingStudentIds.includes(id));
+
+    if (toUpdateIds.length > 0) {
+      await prisma.attendanceLog.updateMany({
+        where: { id: { in: toUpdateIds } },
+        data: { attendanceStatus: "PRESENT" }
+      });
+    }
+
+    if (toCreateIds.length > 0) {
+      await prisma.attendanceLog.createMany({
+        data: toCreateIds.map(id => ({
+          classSessionId: sessionId,
+          studentId: id,
+          attendanceStatus: "PRESENT",
+        }))
+      });
+    }
+
+    revalidatePath("/ta");
+    return { success: true };
+  } catch (err) {
+    console.error("markAllAttendancePresentAction error:", err);
+    return { success: false, error: "Lỗi hệ thống" };
+  }
+}
+
+export async function markAllHomeworkGoodAction(classId: string, sessionId: string) {
+  const session = await auth();
+  if (!session?.user) return { success: false, error: "Unauthorized" };
+
+  try {
+    const isFreelance = classId === "freelance";
+    let studentIds: string[] = [];
+    if (!isFreelance) {
+      const enrollments = await prisma.enrollment.findMany({
+        where: { classId, status: "ACTIVE" },
+        select: { studentId: true }
+      });
+      studentIds = enrollments.map(e => e.studentId);
+    } else {
+      const existingLogs = await prisma.attendanceLog.findMany({
+        where: { classSessionId: sessionId },
+        select: { studentId: true }
+      });
+      studentIds = existingLogs.map(l => l.studentId);
+    }
+
+    if (studentIds.length === 0) return { success: true };
+
+    const existingLogs = await prisma.attendanceLog.findMany({
+      where: { classSessionId: sessionId, studentId: { in: studentIds } }
+    });
+
+    const toUpdateIds = existingLogs.filter(log => log.homeworkStatus !== "GOOD").map(log => log.id);
+    const existingStudentIds = existingLogs.map(log => log.studentId);
+    const toCreateIds = studentIds.filter(id => !existingStudentIds.includes(id));
+
+    if (toUpdateIds.length > 0) {
+      await prisma.attendanceLog.updateMany({
+        where: { id: { in: toUpdateIds } },
+        data: { homeworkStatus: "GOOD" }
+      });
+    }
+
+    if (toCreateIds.length > 0) {
+      await prisma.attendanceLog.createMany({
+        data: toCreateIds.map(id => ({
+          classSessionId: sessionId,
+          studentId: id,
+          attendanceStatus: "PRESENT",
+          homeworkStatus: "GOOD"
+        }))
+      });
+    }
+
+    revalidatePath("/ta");
+    return { success: true };
+  } catch (err) {
+    console.error("markAllHomeworkGoodAction error:", err);
+    return { success: false, error: "Lỗi hệ thống" };
+  }
+}
+
 
 // ==========================================
 // 3. ACTIONS CHO GIÁO VIÊN (TEACHERS)

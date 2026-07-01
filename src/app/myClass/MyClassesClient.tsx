@@ -448,8 +448,8 @@ export default function MyClassesClient({
                           </div>
                           <div className="flex items-center gap-1.5">
                             <span className="text-slate-500">Bài tập:</span>
-                            <span className={`font-bold ${log.homeworkStatus === "COMPLETED" ? "text-emerald-600" : log.homeworkStatus === "INCOMPLETE" ? "text-rose-600" : "text-amber-600"}`}>
-                              {!log.homeworkStatus ? "Chưa chấm" : log.homeworkStatus === "COMPLETED" ? "Hoàn thành" : log.homeworkStatus === "INCOMPLETE" ? "Chưa xong" : "Chưa hoàn thành"}
+                            <span className={`font-bold ${log.homeworkStatus === "GOOD" ? "text-emerald-600" : log.homeworkStatus === "NOT_DONE" ? "text-rose-600" : "text-amber-600"}`}>
+                              {!log.homeworkStatus ? "Chưa chấm" : log.homeworkStatus === "GOOD" ? "Đạt" : log.homeworkStatus === "NOT_DONE" ? "Không làm" : "Không đạt"}
                             </span>
                           </div>
                         </div>

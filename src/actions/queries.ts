@@ -93,6 +93,7 @@ export type TuitionStudentData = {
   fullName: string;
   phoneStudent: string | null;
   phoneParent: string | null;
+  parentName: string | null;
   enrolledCourses: {
     enrollmentId: string;
     classId: string;
@@ -143,6 +144,7 @@ export async function getTuitionData(): Promise<TuitionStudentData[]> {
     fullName: s.fullName,
     phoneStudent: s.phoneStudent,
     phoneParent: s.phoneParent,
+    parentName: s.parentName,
     allPendingInvoices: s.invoices.map(inv => ({
       id: inv.id,
       status: inv.status,

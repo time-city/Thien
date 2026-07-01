@@ -141,11 +141,13 @@ export async function getStudentCombinedReport(studentId: string): Promise<Stude
   });
 
   const pendingInvoices = await prisma.invoice.findMany({
-    where: { studentId, status: "PENDING" }
+    where: { studentId, status: "PENDING" },
+    include: { enrollment: { include: { class: true } } }
   });
 
   const items: StudentCombinedReport["items"] = [];
   let totalExpectedAmount = 0;
+  const processedInvoiceIds = new Set<string>();
 
   // Process enrollments
   for (const enr of enrollments) {
@@ -153,6 +155,10 @@ export async function getStudentCombinedReport(studentId: string): Promise<Stude
     const inv = pendingInvoices.find(i => !i.isDebt && i.enrollmentId === enr.id);
     const amount = inv ? inv.expectedAmount : enr.class.pricePerSession;
     
+    if (inv) {
+      processedInvoiceIds.add(inv.id);
+    }
+
     items.push({
       type: "TUITION",
       enrollmentId: enr.id,
@@ -163,6 +169,23 @@ export async function getStudentCombinedReport(studentId: string): Promise<Stude
       voucherNumber: enr.currentVoucher
     });
     totalExpectedAmount += amount;
+  }
+
+  // Process any other PENDING invoices that weren't caught above
+  for (const inv of pendingInvoices) {
+    if (!processedInvoiceIds.has(inv.id)) {
+      const debt = inv.expectedAmount - inv.amountPaid;
+      items.push({
+        type: inv.isDebt ? "DEBT" : "TUITION",
+        enrollmentId: inv.enrollmentId || undefined,
+        className: inv.enrollment?.class?.name || "Hóa đơn tổng hợp",
+        amount: debt,
+        sessionsPerPackage: inv.enrollment?.class?.sessionsPerPackage,
+        pendingInvoiceId: inv.id,
+        voucherNumber: inv.enrollment?.currentVoucher
+      });
+      totalExpectedAmount += debt;
+    }
   }
 
   // Process rollover debts

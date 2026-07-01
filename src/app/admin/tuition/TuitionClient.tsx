@@ -78,6 +78,63 @@ export default function TuitionClient({
       });
     });
   }, [selectedMonth, selectedYear]);
+
+  const availableClasses = useMemo(() => {
+    const classSet = new Set<string>();
+    students.forEach(s => {
+      s.enrolledCourses.forEach(c => {
+        if (c.className) classSet.add(c.className);
+      });
+    });
+    return Array.from(classSet).sort();
+  }, [students]);
+
+  const [searchTerm, setSearchTerm] = useState("");
+  const [filterClass, setFilterClass] = useState("ALL");
+  const [sortOption, setSortOption] = useState("DEFAULT");
+
+  const processStudents = (studentList: TuitionStudentData[]) => {
+    let processed = [...studentList];
+
+    if (filterClass !== "ALL") {
+      processed = processed.filter(s => 
+        s.enrolledCourses.some(c => c.className === filterClass)
+      );
+    }
+
+    if (searchTerm) {
+      const lowerTerm = searchTerm.toLowerCase();
+      processed = processed.filter(s => 
+        (s.fullName && s.fullName.toLowerCase().includes(lowerTerm)) ||
+        (s.parentName && s.parentName.toLowerCase().includes(lowerTerm)) ||
+        (s.phoneStudent && s.phoneStudent.includes(searchTerm)) ||
+        (s.phoneParent && s.phoneParent.includes(searchTerm))
+      );
+    }
+
+    if (sortOption !== "DEFAULT") {
+      processed.sort((a, b) => {
+        if (sortOption === "FEE_ASC" || sortOption === "FEE_DESC") {
+          const getFee = (s: TuitionStudentData) => {
+            let total = 0;
+            s.enrolledCourses.forEach(c => {
+               total += c.pendingInvoices.reduce((acc, inv) => acc + (inv.expectedAmount - inv.amountPaid), 0);
+            });
+            if (s.allPendingInvoices) {
+               total += s.allPendingInvoices.reduce((acc, inv) => acc + (inv.expectedAmount - inv.amountPaid), 0);
+            }
+            return total;
+          };
+          const feeA = getFee(a);
+          const feeB = getFee(b);
+          return sortOption === "FEE_ASC" ? feeA - feeB : feeB - feeA;
+        }
+        return 0;
+      });
+    }
+
+    return processed;
+  };
   const studentsWithLowSessions = useMemo(() => {
     return students.filter((s) =>
       s.enrolledCourses.some((c) => c.remainingSessions <= 2 || c.pendingInvoices.length > 0) ||
@@ -85,15 +142,18 @@ export default function TuitionClient({
     );
   }, [students]);
 
-  const paidStudents = useMemo(() => {
+  const rawPaidStudents = useMemo(() => {
     return students.filter((s) =>
       !s.enrolledCourses.some((c) => c.remainingSessions <= 2 || c.pendingInvoices.length > 0) &&
       (!s.allPendingInvoices || s.allPendingInvoices.length === 0)
     );
   }, [students]);
 
-  const studentsNotSent = useMemo(() => studentsWithLowSessions.filter(s => !(s.hasLogs && s.hasUnsentReports === false)), [studentsWithLowSessions]);
-  const studentsSent = useMemo(() => studentsWithLowSessions.filter(s => s.hasLogs && s.hasUnsentReports === false), [studentsWithLowSessions]);
+  const processedLowSessions = useMemo(() => processStudents(studentsWithLowSessions), [studentsWithLowSessions, searchTerm, sortOption, filterClass]);
+  const paidStudents = useMemo(() => processStudents(rawPaidStudents), [rawPaidStudents, searchTerm, sortOption, filterClass]);
+
+  const studentsNotSent = useMemo(() => processedLowSessions.filter(s => !(s.hasLogs && s.hasUnsentReports === false)), [processedLowSessions]);
+  const studentsSent = useMemo(() => processedLowSessions.filter(s => s.hasLogs && s.hasUnsentReports === false), [processedLowSessions]);
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND" }).format(amount);
@@ -546,32 +606,16 @@ _Tin nhắn được thông báo tự động, phụ huynh có thể trao đổi
                 {type === "WARNING" ? (
                   <>
                     {student.enrolledCourses
-                      .filter((c) => c.remainingSessions <= 2 || c.pendingInvoices.length > 0)
+                      .filter((c) => c.remainingSessions <= 2)
                       .map((c) => (
                         <div key={c.enrollmentId} className="flex gap-1 flex-wrap">
-                          {c.remainingSessions <= 2 && (
-                            <span
-                              className="bg-rose-50 text-rose-700 font-bold px-1.5 md:px-2 py-0.5 rounded text-[10px] md:text-[11px] border border-rose-100 whitespace-nowrap"
-                            >
-                              {c.className} ({c.remainingSessions} buổi)
-                            </span>
-                          )}
-                          {c.pendingInvoices.length > 0 && c.pendingInvoices.map(inv => (
-                            <span key={inv.id} className={`${inv.status === "UNDERPAID" ? "bg-rose-100 text-rose-700 border-rose-200" : "bg-amber-100 text-amber-700 border-amber-200"} font-bold px-1.5 md:px-2 py-0.5 rounded text-[10px] md:text-[11px] border whitespace-nowrap`}>
-                              {inv.status === "UNDERPAID" ? "THIẾU TIỀN" : "CHỜ T.TOÁN"}
-                            </span>
-                          ))}
+                          <span
+                            className="bg-rose-50 text-rose-700 font-bold px-1.5 md:px-2 py-0.5 rounded text-[10px] md:text-[11px] border border-rose-100 whitespace-nowrap"
+                          >
+                            {c.className} ({c.remainingSessions} buổi)
+                          </span>
                         </div>
                       ))}
-
-                    {/* Hiển thị các hóa đơn nợ/tổng hợp (không dính trực tiếp với 1 enrollment) */}
-                    {student.allPendingInvoices?.map(inv => (
-                      <div key={inv.id} className="flex gap-1 flex-wrap">
-                        <span className="bg-orange-100 text-orange-700 border-orange-200 font-bold px-1.5 md:px-2 py-0.5 rounded text-[10px] md:text-[11px] border whitespace-nowrap">
-                          {inv.isDebt ? "Nợ cũ" : "Hóa đơn"}: {new Intl.NumberFormat("vi-VN").format(inv.expectedAmount - inv.amountPaid)}đ
-                        </span>
-                      </div>
-                    ))}
                   </>
                 ) : (
                   <>
@@ -653,8 +697,38 @@ _Tin nhắn được thông báo tự động, phụ huynh có thể trao đổi
               onClick={() => setTuitionSubTab("PAID")}
               className={`py-2 border-b-2 font-bold text-sm transition-colors whitespace-nowrap ${tuitionSubTab === "PAID" ? "border-emerald-500 text-emerald-700" : "border-transparent text-slate-500 hover:text-slate-800"}`}
             >
-              Học sinh đã thanh toán / An toàn ({paidStudents.length})
+              Học sinh đã thanh toán / An toàn ({rawPaidStudents.length})
             </button>
+          </div>
+
+          {/* Thanh Filter & Sort */}
+          <div className="flex flex-col sm:flex-row gap-3 px-2 md:px-0 mb-4 items-center">
+            <input
+              type="text"
+              placeholder="Tìm kiếm Tên HS, Phụ huynh, SĐT..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full sm:flex-1 p-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            />
+            <select
+              value={filterClass}
+              onChange={(e) => setFilterClass(e.target.value)}
+              className="w-full sm:w-auto p-2 border border-slate-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            >
+              <option value="ALL">Tất cả lớp</option>
+              {availableClasses.map(cls => (
+                <option key={cls} value={cls}>{cls}</option>
+              ))}
+            </select>
+            <select
+              value={sortOption}
+              onChange={(e) => setSortOption(e.target.value)}
+              className="w-full sm:w-auto p-2 border border-slate-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            >
+              <option value="DEFAULT">Sắp xếp mặc định</option>
+              <option value="FEE_DESC">Thu phí (Cao đến Thấp)</option>
+              <option value="FEE_ASC">Thu phí (Thấp đến Cao)</option>
+            </select>
           </div>
 
           {tuitionSubTab === "WARNING" && (
@@ -1166,10 +1240,10 @@ _Tin nhắn được thông báo tự động, phụ huynh có thể trao đổi
                           </td>
                           <td className="py-2 px-4 text-center whitespace-nowrap align-top">
                             {log.homeworkStatus ? (
-                              <span className={`text-[10px] font-bold px-2 py-1 rounded-md uppercase ${log.homeworkStatus === "GOOD" ? "bg-blue-100 text-blue-700" :
-                                log.homeworkStatus === "DONE" ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700"
+                              <span className={`text-[10px] font-bold px-2 py-1 rounded-md uppercase ${log.homeworkStatus === "GOOD" ? "bg-emerald-100 text-emerald-700" :
+                                log.homeworkStatus === "DONE" ? "bg-amber-100 text-amber-700" : "bg-rose-100 text-rose-700"
                                 }`}>
-                                {log.homeworkStatus === "GOOD" ? "Tốt" : log.homeworkStatus === "DONE" ? "Đã làm" : "Chưa làm"}
+                                {log.homeworkStatus === "GOOD" ? "Đạt" : log.homeworkStatus === "DONE" ? "Không đạt" : "Không làm"}
                               </span>
                             ) : (
                               <span className="text-slate-400 text-xs">-</span>

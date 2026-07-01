@@ -721,10 +721,10 @@ _Phụ huynh đã nộp nhưng hệ thống chưa cập nhật, vui lòng nhắn
                               </td>
                               <td className="py-2 px-4 text-center whitespace-nowrap align-top">
                                 {log.homeworkStatus ? (
-                                  <span className={`text-[10px] font-bold px-2 py-1 rounded-md uppercase ${log.homeworkStatus === "GOOD" ? "bg-blue-100 text-blue-700" :
-                                    log.homeworkStatus === "DONE" ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700"
+                                  <span className={`text-[10px] font-bold px-2 py-1 rounded-md uppercase ${log.homeworkStatus === "GOOD" ? "bg-emerald-100 text-emerald-700" :
+                                    log.homeworkStatus === "DONE" ? "bg-amber-100 text-amber-700" : "bg-rose-100 text-rose-700"
                                     }`}>
-                                    {log.homeworkStatus === "GOOD" ? "Tốt" : log.homeworkStatus === "DONE" ? "Đã làm" : "Chưa làm"}
+                                    {log.homeworkStatus === "GOOD" ? "Đạt" : log.homeworkStatus === "DONE" ? "Không đạt" : "Không làm"}
                                   </span>
                                 ) : (
                                   <span className="text-slate-400 text-xs">-</span>

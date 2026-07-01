@@ -186,12 +186,10 @@ export default function TaCheckInClient({
   };
 
   const getHomeworkColor = (hw?: string) => {
-    switch (hw) {
-      case "GOOD": return "bg-emerald-500";
-      case "DONE": return "bg-amber-500";
-      case "NOT_DONE": return "bg-rose-500";
-      default: return "bg-slate-200";
-    }
+    if (hw === "GOOD") return "bg-emerald-100 text-emerald-700";
+    if (hw === "DONE") return "bg-amber-100 text-amber-700";
+    if (hw === "NOT_DONE") return "bg-rose-100 text-rose-700";
+    return "bg-slate-100 text-slate-600";
   };
 
   const handlePageChange = (newPage: number) => {
@@ -412,7 +410,7 @@ export default function TaCheckInClient({
                             student.homework === 'GOOD' ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-slate-500 border-slate-200 hover:border-emerald-400 hover:text-emerald-600'
                           }`}
                         >
-                          Tốt
+                          Đạt
                         </button>
                         <button
                           onClick={() => handleQuickUpdate(student.id, 'homework', 'DONE')}
@@ -420,15 +418,15 @@ export default function TaCheckInClient({
                             student.homework === 'DONE' ? 'bg-amber-500 text-white border-amber-500' : 'bg-white text-slate-500 border-slate-200 hover:border-amber-400 hover:text-amber-600'
                           }`}
                         >
-                          Đạt
+                          Không đạt
                         </button>
                         <button
                           onClick={() => handleQuickUpdate(student.id, 'homework', 'NOT_DONE')}
                           className={`px-2 py-1 rounded-[6px] text-[10px] font-bold border transition-colors ${
-                            student.homework === 'NOT_DONE' ? 'bg-slate-600 text-white border-slate-600' : 'bg-white text-slate-500 border-slate-200 hover:border-slate-400 hover:text-slate-600'
+                            student.homework === 'NOT_DONE' ? 'bg-rose-600 text-white border-rose-600' : 'bg-white text-slate-500 border-slate-200 hover:border-rose-400 hover:text-rose-600'
                           }`}
                         >
-                          Không
+                          Không làm
                         </button>
                       </div>
                     </td>

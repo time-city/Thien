@@ -96,9 +96,9 @@ export default function StudentEvaluationModal({
   } as const;
 
   const homeworkButton = {
-    GOOD: { label: "Tốt", bg: "bg-emerald-600", border: "border-emerald-600" },
-    DONE: { label: "Đạt", bg: "bg-amber-500", border: "border-amber-500" },
-    NOT_DONE: { label: "Không", bg: "bg-rose-600", border: "border-rose-600" },
+    GOOD: { label: "Đạt", bg: "bg-emerald-600", border: "border-emerald-600" },
+    DONE: { label: "Không đạt", bg: "bg-amber-500", border: "border-amber-500" },
+    NOT_DONE: { label: "Không làm", bg: "bg-rose-600", border: "border-rose-600" },
   } as const;
 
   const DetailRow = ({

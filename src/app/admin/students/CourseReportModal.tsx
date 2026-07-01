@@ -206,7 +206,7 @@ export default function CourseReportModal({
 
       const res1 = await fetch(dataUrl1);
       const blob1 = await res1.blob();
-      
+
       const res2 = await fetch(dataUrl2);
       const blob2 = await res2.blob();
 
@@ -313,7 +313,7 @@ _Tin nhắn được thông báo tự động, phụ huynh có thể trao đổi
     } catch (error: any) {
       console.error("CHI TIẾT LỖI ZALO:", error);
       const msg = error?.message || "";
-      
+
       // Nếu là lỗi từ Zalo API trả về
       if (msg.includes("500") || msg.includes("400") || msg.includes("API Failed") || msg.includes("Lỗi gửi ảnh")) {
         toast.error(`Không thể gửi Zalo: Số điện thoại ${report?.phoneParent} chưa đăng ký Zalo hoặc chặn tin nhắn từ người lạ.`, { duration: 6000 });
@@ -351,7 +351,7 @@ _Phụ huynh đã nộp nhưng hệ thống chưa cập nhật, vui lòng nhắn
     const styleTag = injectGlobalCSS(element2);
     try {
       setSendingZalo(true);
-      
+
       // Chụp ảnh phiếu thu (có mã QR)
       const dataUrl2 = await toPng(element2, {
         cacheBust: true,
@@ -359,15 +359,15 @@ _Phụ huynh đã nộp nhưng hệ thống chưa cập nhật, vui lòng nhắn
         backgroundColor: "#ffffff",
         style: { transform: "scale(1)", transformOrigin: "top left" }
       });
-      
+
       const res2 = await fetch(dataUrl2);
       const blob2 = await res2.blob();
       const file2 = new File([blob2], `BaoCao_HocPhi_${studentName.replace(/\s+/g, "_")}.png`, { type: "image/png" });
-      
+
       const formData2 = new FormData();
       formData2.append("target", report.phoneParent);
       formData2.append("image", file2);
-      
+
       // Gửi ảnh QR trước
       const imageRes2 = await fetch("/api/zalobot/send-image", {
         method: "POST",
@@ -378,7 +378,7 @@ _Phụ huynh đã nộp nhưng hệ thống chưa cập nhật, vui lòng nhắn
       if (!imageRes2.ok) {
         throw new Error("Lỗi khi gửi ảnh QR Zalo");
       }
-      
+
       await new Promise(r => setTimeout(r, 1000)); // Nghỉ 1s
 
       const textRes = await fetch("/api/zalobot/send", {
@@ -611,197 +611,197 @@ _Phụ huynh đã nộp nhưng hệ thống chưa cập nhật, vui lòng nhắn
             </div>
           ) : (
             <div className="w-full max-w-[800px] mx-auto space-y-4">
-                {/* Ảnh 1: Thông tin và Lịch sử học tập */}
-                <div id="report-export-area-1" className="bg-white w-full shadow-sm rounded-lg overflow-hidden border border-slate-200">
-                  {/* Header Bill */}
-                  <div className="bg-blue-600 p-6 text-white text-center">
-                    <h1 className="text-2xl font-black uppercase tracking-wider mb-1">Farm Edu</h1>
-                    <p className="text-blue-100 text-sm font-medium">BÁO CÁO HỌC TẬP</p>
-                  </div>
+              {/* Ảnh 1: Thông tin và Lịch sử học tập */}
+              <div id="report-export-area-1" className="bg-white w-full shadow-sm rounded-lg overflow-hidden border border-slate-200">
+                {/* Header Bill */}
+                <div className="bg-blue-600 p-6 text-white text-center">
+                  <h1 className="text-2xl font-black uppercase tracking-wider mb-1">Farm Edu</h1>
+                  <p className="text-blue-100 text-sm font-medium">BÁO CÁO HỌC TẬP</p>
+                </div>
 
-                  {/* Info Section */}
+                {/* Info Section */}
+                <div className="p-6 border-b border-slate-100">
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <p className="text-slate-500 mb-1 text-xs uppercase font-bold tracking-wider">Học sinh</p>
+                      <p className="font-extrabold text-slate-800 text-lg">{report.studentName}</p>
+                    </div>
+                    <div>
+                      <p className="text-slate-500 mb-1 text-xs uppercase font-bold tracking-wider">Mã Tra Cứu</p>
+                      <p className="font-extrabold text-slate-800 text-lg">{report.studentId.substring(0, 8)}</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Logs Section (chỉ hiện nếu có log) */}
+                {report.logs.length > 0 && (
                   <div className="p-6 border-b border-slate-100">
-                    <div className="grid grid-cols-2 gap-4 text-sm">
-                      <div>
-                        <p className="text-slate-500 mb-1 text-xs uppercase font-bold tracking-wider">Học sinh</p>
-                        <p className="font-extrabold text-slate-800 text-lg">{report.studentName}</p>
-                      </div>
-                      <div>
-                        <p className="text-slate-500 mb-1 text-xs uppercase font-bold tracking-wider">Mã Tra Cứu</p>
-                        <p className="font-extrabold text-slate-800 text-lg">{report.studentId.substring(0, 8)}</p>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Logs Section (chỉ hiện nếu có log) */}
-                  {report.logs.length > 0 && (
-                    <div className="p-6 border-b border-slate-100">
-                      <h3 className="text-sm font-bold text-slate-800 mb-4 uppercase tracking-wider border-l-4 border-emerald-500 pl-3">Tình hình học tập (Các lớp đang học)</h3>
-                      <div className="overflow-hidden border border-slate-200 rounded-xl">
-                        <table className="w-full text-left text-sm">
-                          <thead className="bg-slate-50">
-                            <tr>
-                              <th className="py-3 px-4 font-bold text-slate-600 border-b border-slate-200 whitespace-nowrap">Lớp</th>
-                              <th className="py-3 px-4 font-bold text-slate-600 border-b border-slate-200 whitespace-nowrap">Ngày</th>
-                              <th className="py-3 px-4 font-bold text-slate-600 border-b border-slate-200 text-center whitespace-nowrap">Điểm danh</th>
-                              <th className="py-3 px-4 font-bold text-slate-600 border-b border-slate-200 text-center whitespace-nowrap">Bài tập</th>
-                              <th className="py-3 pl-4 pr-8 font-bold text-slate-600 border-b border-slate-200 whitespace-nowrap text-left">Đánh giá</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-slate-100">
-                            {report.logs.map((log, i) => (
-                              <tr key={i} className="hover:bg-slate-50/50">
-                                <td className="py-2 px-4 text-slate-700 font-medium text-xs align-top">
-                                  <div className="line-clamp-1">{log.className}</div>
-                                </td>
-                                <td className="py-2 px-4 text-slate-500 text-xs whitespace-nowrap align-top">
-                                  {new Date(log.date).toLocaleDateString("vi-VN")}
-                                </td>
-                                <td className="py-2 px-4 text-center whitespace-nowrap align-top">
-                                  <span className={`text-[10px] font-bold px-2 py-1 rounded-md uppercase ${log.attendanceStatus === "PRESENT" ? "bg-emerald-100 text-emerald-700" :
-                                    log.attendanceStatus === "ABSENT" ? "bg-rose-100 text-rose-700" : "bg-amber-100 text-amber-700"
+                    <h3 className="text-sm font-bold text-slate-800 mb-4 uppercase tracking-wider border-l-4 border-emerald-500 pl-3">Tình hình học tập (Các lớp đang học)</h3>
+                    <div className="overflow-hidden border border-slate-200 rounded-xl">
+                      <table className="w-full text-left text-sm">
+                        <thead className="bg-slate-50">
+                          <tr>
+                            <th className="py-3 px-4 font-bold text-slate-600 border-b border-slate-200 whitespace-nowrap">Lớp</th>
+                            <th className="py-3 px-4 font-bold text-slate-600 border-b border-slate-200 whitespace-nowrap">Ngày</th>
+                            <th className="py-3 px-4 font-bold text-slate-600 border-b border-slate-200 text-center whitespace-nowrap">Điểm danh</th>
+                            <th className="py-3 px-4 font-bold text-slate-600 border-b border-slate-200 text-center whitespace-nowrap">Bài tập</th>
+                            <th className="py-3 pl-4 pr-8 font-bold text-slate-600 border-b border-slate-200 whitespace-nowrap text-left">Đánh giá</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {report.logs.map((log, i) => (
+                            <tr key={i} className="hover:bg-slate-50/50">
+                              <td className="py-2 px-4 text-slate-700 font-medium text-xs align-top">
+                                <div className="line-clamp-1">{log.className}</div>
+                              </td>
+                              <td className="py-2 px-4 text-slate-500 text-xs whitespace-nowrap align-top">
+                                {new Date(log.date).toLocaleDateString("vi-VN")}
+                              </td>
+                              <td className="py-2 px-4 text-center whitespace-nowrap align-top">
+                                <span className={`text-[10px] font-bold px-2 py-1 rounded-md uppercase ${log.attendanceStatus === "PRESENT" ? "bg-emerald-100 text-emerald-700" :
+                                  log.attendanceStatus === "ABSENT" ? "bg-rose-100 text-rose-700" : "bg-amber-100 text-amber-700"
+                                  }`}>
+                                  {log.attendanceStatus === "PRESENT" ? "Có mặt" : log.attendanceStatus === "ABSENT" ? "Vắng" : "Có phép"}
+                                </span>
+                              </td>
+                              <td className="py-2 px-4 text-center whitespace-nowrap align-top">
+                                {log.homeworkStatus ? (
+                                  <span className={`text-[10px] font-bold px-2 py-1 rounded-md uppercase ${log.homeworkStatus === "GOOD" ? "bg-blue-100 text-blue-700" :
+                                    log.homeworkStatus === "DONE" ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700"
                                     }`}>
-                                    {log.attendanceStatus === "PRESENT" ? "Có mặt" : log.attendanceStatus === "ABSENT" ? "Vắng" : "Có phép"}
+                                    {log.homeworkStatus === "GOOD" ? "Tốt" : log.homeworkStatus === "DONE" ? "Đã làm" : "Chưa làm"}
                                   </span>
-                                </td>
-                                <td className="py-2 px-4 text-center whitespace-nowrap align-top">
-                                  {log.homeworkStatus ? (
-                                    <span className={`text-[10px] font-bold px-2 py-1 rounded-md uppercase ${log.homeworkStatus === "GOOD" ? "bg-blue-100 text-blue-700" :
-                                      log.homeworkStatus === "DONE" ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700"
-                                      }`}>
-                                      {log.homeworkStatus === "GOOD" ? "Tốt" : log.homeworkStatus === "DONE" ? "Đã làm" : "Chưa làm"}
-                                    </span>
-                                  ) : (
-                                    <span className="text-slate-400 text-xs">-</span>
-                                  )}
-                                </td>
-                                <td className="py-2 pl-4 pr-6 text-slate-600 text-xs whitespace-pre-wrap break-all align-top">
-                                  {log.note || <span className="text-slate-400 italic">Không có</span>}
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                      <p className="text-xs text-center text-slate-500 mt-2 font-medium">
-                        Tổng số buổi chưa báo cáo: {report.logs.length} buổi
-                      </p>
+                                ) : (
+                                  <span className="text-slate-400 text-xs">-</span>
+                                )}
+                              </td>
+                              <td className="py-2 pl-4 pr-6 text-slate-600 text-xs whitespace-pre-wrap break-all align-top">
+                                {log.note || <span className="text-slate-400 italic">Không có</span>}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
                     </div>
-                  )}
-                </div>
-
-                {/* Ảnh 2: Thanh toán học phí */}
-                <div id="report-export-area-2" className="bg-white w-full shadow-sm rounded-lg overflow-hidden border border-slate-200">
-                  <div className="bg-blue-600 p-4 text-white text-center">
-                    <h2 className="text-lg font-black uppercase tracking-wider mb-1">CHI TIẾT HỌC PHÍ</h2>
-                    <p className="text-blue-100 text-xs font-medium">Học sinh: {report.studentName}</p>
+                    <p className="text-xs text-center text-slate-500 mt-2 font-medium">
+                      Tổng số buổi chưa báo cáo: {report.logs.length} buổi
+                    </p>
                   </div>
-                  {/* 2 Columns: Items & QR */}
-                  <div className="p-6 flex flex-row gap-6 items-stretch">
-                    {/* Items Section */}
-                    <div className="w-1/2">
-                      <h3 className="text-sm font-bold text-slate-800 mb-4 uppercase tracking-wider border-l-4 border-blue-500 pl-3">Các khoản thu</h3>
-                      <div className="space-y-3">
-                        {report.items.map((item, idx) => (
-                          <div key={idx} className="flex justify-between items-center p-3 border border-slate-100 rounded-lg bg-slate-50/50">
-                            <div>
-                              <p className="font-bold text-slate-800 text-sm">
-                                {item.type === "TUITION" ? `Học phí lớp: ${item.className} (Phiếu ${item.voucherNumber})` : "Thanh toán nợ cũ (Kỳ trước)"}
-                              </p>
-                              {item.type === "TUITION" && (
-                                <p className="text-xs text-slate-500 mt-0.5">Gia hạn thêm {item.sessionsPerPackage} buổi học</p>
-                              )}
-                            </div>
-                            <div className="font-extrabold text-blue-700 whitespace-nowrap ml-2">
-                              {item.amount.toLocaleString('vi-VN')} đ
-                            </div>
+                )}
+              </div>
+
+              {/* Ảnh 2: Thanh toán học phí */}
+              <div id="report-export-area-2" className="bg-white w-full shadow-sm rounded-lg overflow-hidden border border-slate-200">
+                <div className="bg-blue-600 p-4 text-white text-center">
+                  <h2 className="text-lg font-black uppercase tracking-wider mb-1">CHI TIẾT HỌC PHÍ</h2>
+                  <p className="text-blue-100 text-xs font-medium">Học sinh: {report.studentName}</p>
+                </div>
+                {/* 2 Columns: Items & QR */}
+                <div className="p-6 flex flex-row gap-6 items-stretch">
+                  {/* Items Section */}
+                  <div className="w-1/2">
+                    <h3 className="text-sm font-bold text-slate-800 mb-4 uppercase tracking-wider border-l-4 border-blue-500 pl-3">Các khoản thu</h3>
+                    <div className="space-y-3">
+                      {report.items.map((item, idx) => (
+                        <div key={idx} className="flex justify-between items-center p-3 border border-slate-100 rounded-lg bg-slate-50/50">
+                          <div>
+                            <p className="font-bold text-slate-800 text-sm">
+                              {item.type === "TUITION" ? `Học phí lớp: ${item.className} (Phiếu ${item.voucherNumber})` : "Thanh toán nợ cũ (Kỳ trước)"}
+                            </p>
+                            {item.type === "TUITION" && (
+                              <p className="text-xs text-slate-500 mt-0.5">Gia hạn thêm {item.sessionsPerPackage} buổi học</p>
+                            )}
                           </div>
-                        ))}
-                        <div className="flex justify-between items-center pt-3 border-t border-slate-200 mt-3 px-3">
-                          <span className="font-bold text-slate-800 uppercase text-sm">Tổng thu:</span>
-                          <span className="text-lg font-black text-blue-600">{finalPrice.toLocaleString('vi-VN')} đ</span>
+                          <div className="font-extrabold text-blue-700 whitespace-nowrap ml-2">
+                            {item.amount.toLocaleString('vi-VN')} đ
+                          </div>
                         </div>
-                      </div>
-                    </div>
-
-                    {/* QR Section */}
-                    <div className="w-1/2 bg-slate-50 p-6 flex flex-col items-center justify-center border border-slate-200 rounded-xl">
-                      <div className="p-2 bg-white rounded-xl shadow-sm border border-slate-200 shrink-0 mb-3">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={qrUrl} alt="QR Code" crossOrigin="anonymous" className="w-40 h-40 object-contain" />
-                      </div>
-                      <p className="font-bold text-slate-800 flex items-center gap-2">
-                        Quét mã thanh toán
-                        <span className="bg-emerald-100 text-emerald-700 text-[10px] uppercase font-black px-2 py-0.5 rounded-full">
-                          VietQR
-                        </span>
-                      </p>
-                      <p className="text-sm text-slate-500 mt-1 mb-2">Học sinh: <span className="font-mono">{studentName}</span></p>
-                      <div className="flex gap-2">
-                        <button onClick={handleDownloadQr} className="text-xs font-bold text-blue-600 hover:text-blue-800 transition-colors flex items-center gap-1">
-                          <Download size={14} /> Tải mã QR
-                        </button>
+                      ))}
+                      <div className="flex justify-between items-center pt-3 border-t border-slate-200 mt-3 px-3">
+                        <span className="font-bold text-slate-800 uppercase text-sm">Tổng thu:</span>
+                        <span className="text-lg font-black text-blue-600">{finalPrice.toLocaleString('vi-VN')} đ</span>
                       </div>
                     </div>
                   </div>
 
-                  {/* Footer text */}
-                  <div className="bg-slate-800 text-slate-300 text-xs py-3 px-6 text-center">
-                    Cảm ơn Quý phụ huynh đã đồng hành cùng Trung tâm!
+                  {/* QR Section */}
+                  <div className="w-1/2 bg-slate-50 p-6 flex flex-col items-center justify-center border border-slate-200 rounded-xl">
+                    <div className="p-2 bg-white rounded-xl shadow-sm border border-slate-200 shrink-0 mb-3">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={qrUrl} alt="QR Code" crossOrigin="anonymous" className="w-40 h-40 object-contain" />
+                    </div>
+                    <p className="font-bold text-slate-800 flex items-center gap-2">
+                      Quét mã thanh toán
+                      <span className="bg-emerald-100 text-emerald-700 text-[10px] uppercase font-black px-2 py-0.5 rounded-full">
+                        VietQR
+                      </span>
+                    </p>
+                    <p className="text-sm text-slate-500 mt-1 mb-2">Học sinh: <span className="font-mono">{studentName}</span></p>
+                    <div className="flex gap-2">
+                      <button onClick={handleDownloadQr} className="text-xs font-bold text-blue-600 hover:text-blue-800 transition-colors flex items-center gap-1">
+                        <Download size={14} /> Tải mã QR
+                      </button>
+                    </div>
                   </div>
                 </div>
+
+                {/* Footer text */}
+                <div className="bg-slate-800 text-slate-300 text-xs py-3 px-6 text-center">
+                  Cảm ơn Quý phụ huynh !
+                </div>
+              </div>
             </div>
           )}
         </div>
 
         {/* MODAL XÁC NHẬN GỬI ZALO */}
-          {confirmSendOpen && (
-            <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-              <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col animate-in zoom-in-95 duration-200">
-                <div className="p-5 flex items-center gap-4 border-b border-slate-100 bg-amber-50/50">
-                  <div className="w-10 h-10 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center shrink-0">
-                    <AlertTriangle size={20} />
-                  </div>
-                  <div>
-                    <h3 className="text-lg font-extrabold text-slate-900">Xác nhận gửi Zalo</h3>
-                    <p className="text-sm text-slate-500 font-medium mt-0.5">Học sinh: {studentName}</p>
-                    {report?.phoneParent && (
-                      <p className="text-sm text-slate-500 font-medium mt-0.5">
-                        SĐT Phụ huynh: <span className="font-bold text-slate-800 font-mono">{report.phoneParent}</span>
-                      </p>
-                    )}
-                  </div>
+        {confirmSendOpen && (
+          <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col animate-in zoom-in-95 duration-200">
+              <div className="p-5 flex items-center gap-4 border-b border-slate-100 bg-amber-50/50">
+                <div className="w-10 h-10 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center shrink-0">
+                  <AlertTriangle size={20} />
                 </div>
-                <div className="p-6">
-                  <p className="text-slate-700 font-medium mb-2 text-center text-base leading-relaxed">
-                    Bạn đã kiểm tra kĩ nội dung báo cáo và số tiền thanh toán bên phải chưa?
-                  </p>
-                  {!report?.phoneParent && (
-                    <div className="mt-4 p-3 bg-red-50 text-red-700 rounded-lg border border-red-200 text-sm font-bold flex items-center gap-2">
-                      <X size={16} /> Học sinh này chưa có số điện thoại phụ huynh!
-                    </div>
+                <div>
+                  <h3 className="text-lg font-extrabold text-slate-900">Xác nhận gửi Zalo</h3>
+                  <p className="text-sm text-slate-500 font-medium mt-0.5">Học sinh: {studentName}</p>
+                  {report?.phoneParent && (
+                    <p className="text-sm text-slate-500 font-medium mt-0.5">
+                      SĐT Phụ huynh: <span className="font-bold text-slate-800 font-mono">{report.phoneParent}</span>
+                    </p>
                   )}
                 </div>
-                <div className="p-4 border-t border-slate-100 flex justify-end gap-3 bg-slate-50">
-                  <button
-                    onClick={() => setConfirmSendOpen(false)}
-                    disabled={sendingZalo}
-                    className="px-5 py-2.5 rounded-xl font-bold text-sm text-slate-600 hover:bg-slate-200 border border-slate-300 transition-colors"
-                  >
-                    Hủy lại, để tôi xem
-                  </button>
-                  <button
-                    onClick={handleSendZalo}
-                    disabled={sendingZalo || !report?.phoneParent}
-                    className="px-5 py-2.5 rounded-xl font-bold text-sm bg-green-600 text-white hover:bg-green-700 transition-colors shadow-sm flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {sendingZalo ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
-                    {sendingZalo ? "Đang gửi..." : "Đã xem kĩ, Gửi ngay!"}
-                  </button>
-                </div>
+              </div>
+              <div className="p-6">
+                <p className="text-slate-700 font-medium mb-2 text-center text-base leading-relaxed">
+                  Bạn đã kiểm tra kĩ nội dung báo cáo và số tiền thanh toán bên phải chưa?
+                </p>
+                {!report?.phoneParent && (
+                  <div className="mt-4 p-3 bg-red-50 text-red-700 rounded-lg border border-red-200 text-sm font-bold flex items-center gap-2">
+                    <X size={16} /> Học sinh này chưa có số điện thoại phụ huynh!
+                  </div>
+                )}
+              </div>
+              <div className="p-4 border-t border-slate-100 flex justify-end gap-3 bg-slate-50">
+                <button
+                  onClick={() => setConfirmSendOpen(false)}
+                  disabled={sendingZalo}
+                  className="px-5 py-2.5 rounded-xl font-bold text-sm text-slate-600 hover:bg-slate-200 border border-slate-300 transition-colors"
+                >
+                  Hủy lại, để tôi xem
+                </button>
+                <button
+                  onClick={handleSendZalo}
+                  disabled={sendingZalo || !report?.phoneParent}
+                  className="px-5 py-2.5 rounded-xl font-bold text-sm bg-green-600 text-white hover:bg-green-700 transition-colors shadow-sm flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {sendingZalo ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
+                  {sendingZalo ? "Đang gửi..." : "Đã xem kĩ, Gửi ngay!"}
+                </button>
               </div>
             </div>
-          )}
+          </div>
+        )}
       </div>
     </div>
   );

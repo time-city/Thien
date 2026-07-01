@@ -454,8 +454,12 @@ export default function StudentsClient({
 
   const filteredStudents = useMemo(() => {
     return optimisticStudents.filter(s => {
-      const matchSearch = s.fullName.toLowerCase().includes(search.toLowerCase()) || 
-                          (s.phone && s.phone.includes(search));
+      const searchLower = search.toLowerCase();
+      const matchSearch = 
+        s.fullName.toLowerCase().includes(searchLower) || 
+        (s.phone && s.phone.includes(searchLower)) ||
+        (s.parentName && s.parentName.toLowerCase().includes(searchLower)) ||
+        (s.parentPhone && s.parentPhone.includes(searchLower));
       const matchClass = classFilter ? s.enrolledCourses?.some((c: any) => c.className === classFilter) : true;
       const matchTeacher = teacherFilter ? s.enrolledCourses?.some((c: any) => c.teachers?.includes(teacherFilter)) : true;
       return matchSearch && matchClass && matchTeacher;
@@ -499,7 +503,7 @@ export default function StudentsClient({
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-4 border-t border-slate-100">
           <div className="relative">
             <Search className="absolute left-3 top-2.5 text-slate-400" size={18} />
-            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Tìm theo tên hoặc SĐT..." className="w-full h-10 pl-10 pr-3 border border-slate-200 rounded-xl bg-slate-50 text-sm font-semibold focus:ring-2 focus:ring-blue-100 outline-none transition-all" />
+            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Tên HS, Tên/SĐT Phụ huynh..." className="w-full h-10 pl-10 pr-3 border border-slate-200 rounded-xl bg-slate-50 text-sm font-semibold focus:ring-2 focus:ring-blue-100 outline-none transition-all" />
           </div>
           <div className="relative">
             <Filter className="absolute left-3 top-2.5 text-slate-400" size={18} />

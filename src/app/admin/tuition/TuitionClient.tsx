@@ -36,6 +36,7 @@ export default function TuitionClient({
   const router = useRouter();
 
   const [activeTab, setActiveTab] = useState<"STUDENT" | "TEACHER_SALARY">("STUDENT");
+  const [tuitionSubTab, setTuitionSubTab] = useState<"WARNING" | "PAID">("WARNING");
 
   const [students, setStudents] = useState<TuitionStudentData[]>(initialStudents);
   const [teachers, setTeachers] = useState<TeacherFinanceViewData[]>(initialTeachers);
@@ -81,6 +82,13 @@ export default function TuitionClient({
     return students.filter((s) =>
       s.enrolledCourses.some((c) => c.remainingSessions <= 2 || c.pendingInvoices.length > 0) ||
       (s.allPendingInvoices && s.allPendingInvoices.length > 0)
+    );
+  }, [students]);
+
+  const paidStudents = useMemo(() => {
+    return students.filter((s) =>
+      !s.enrolledCourses.some((c) => c.remainingSessions <= 2 || c.pendingInvoices.length > 0) &&
+      (!s.allPendingInvoices || s.allPendingInvoices.length === 0)
     );
   }, [students]);
 
@@ -472,7 +480,7 @@ _Tin nhắn được thông báo tự động, phụ huynh có thể trao đổi
     }
   };
 
-  const renderStudentTable = (list: TuitionStudentData[]) => (
+  const renderStudentTable = (list: TuitionStudentData[], type: "WARNING" | "PAID") => (
     <table className="w-full text-left text-sm text-slate-700">
       <thead className="bg-slate-50 border-b border-slate-200 text-slate-900">
         <tr>
@@ -494,7 +502,9 @@ _Tin nhắn được thông báo tự động, phụ huynh có thể trao đổi
           </th>
           <th className="py-2 px-2 md:py-3 md:px-4 font-bold text-xs md:text-sm">Học sinh</th>
           <th className="py-2 px-2 md:py-3 md:px-4 font-bold hidden sm:table-cell text-xs md:text-sm">Lớp</th>
-          <th className="py-2 px-2 md:py-3 md:px-4 font-bold text-xs md:text-sm">Môn cảnh báo</th>
+          <th className="py-2 px-2 md:py-3 md:px-4 font-bold text-xs md:text-sm">
+            {type === "WARNING" ? "Môn cảnh báo" : "Thông tin thẻ học"}
+          </th>
           <th className="py-2 px-2 md:py-3 md:px-4 font-bold text-right text-xs md:text-sm">Hành động</th>
         </tr>
       </thead>
@@ -513,12 +523,12 @@ _Tin nhắn được thông báo tự động, phụ huynh có thể trao đổi
             <td className="py-2 px-2 md:py-3 md:px-4">
               <div className="font-semibold text-slate-900 flex flex-wrap items-center gap-1.5 md:gap-2 text-[13px] md:text-sm">
                 {student.fullName}
-                {student.hasLogs && student.hasUnsentReports === false && (
+                {type === "WARNING" && student.hasLogs && student.hasUnsentReports === false && (
                   <span className="bg-emerald-100 text-emerald-700 text-[9px] md:text-[10px] px-1.5 py-0.5 rounded-full font-bold flex items-center gap-1">
                     <CheckCircle2 size={10} /> Đã gửi {student.lastReportedAt ? `(${new Date(student.lastReportedAt).toLocaleString("vi-VN", { hour: "2-digit", minute: "2-digit", day: "2-digit", month: "2-digit", year: "numeric" })})` : ''}
                   </span>
                 )}
-                {!student.hasLogs && (
+                {type === "WARNING" && !student.hasLogs && (
                   <span className="bg-blue-100 text-blue-700 text-[9px] md:text-[10px] px-1.5 py-0.5 rounded-full font-bold">
                     Chỉ nhắc nợ
                   </span>
@@ -533,33 +543,47 @@ _Tin nhắn được thông báo tự động, phụ huynh có thể trao đổi
             </td>
             <td className="py-2 px-2 md:py-3 md:px-4">
               <div className="flex flex-wrap gap-1 md:gap-1.5 flex-col">
-                {student.enrolledCourses
-                  .filter((c) => c.remainingSessions <= 2 || c.pendingInvoices.length > 0)
-                  .map((c) => (
-                    <div key={c.enrollmentId} className="flex gap-1 flex-wrap">
-                      {c.remainingSessions <= 2 && (
-                        <span
-                          className="bg-rose-50 text-rose-700 font-bold px-1.5 md:px-2 py-0.5 rounded text-[10px] md:text-[11px] border border-rose-100 whitespace-nowrap"
-                        >
-                          {c.className} ({c.remainingSessions} buổi)
-                        </span>
-                      )}
-                      {c.pendingInvoices.length > 0 && c.pendingInvoices.map(inv => (
-                        <span key={inv.id} className={`${inv.status === "UNDERPAID" ? "bg-rose-100 text-rose-700 border-rose-200" : "bg-amber-100 text-amber-700 border-amber-200"} font-bold px-1.5 md:px-2 py-0.5 rounded text-[10px] md:text-[11px] border whitespace-nowrap`}>
-                          {inv.status === "UNDERPAID" ? "THIẾU TIỀN" : "CHỜ T.TOÁN"}
-                        </span>
+                {type === "WARNING" ? (
+                  <>
+                    {student.enrolledCourses
+                      .filter((c) => c.remainingSessions <= 2 || c.pendingInvoices.length > 0)
+                      .map((c) => (
+                        <div key={c.enrollmentId} className="flex gap-1 flex-wrap">
+                          {c.remainingSessions <= 2 && (
+                            <span
+                              className="bg-rose-50 text-rose-700 font-bold px-1.5 md:px-2 py-0.5 rounded text-[10px] md:text-[11px] border border-rose-100 whitespace-nowrap"
+                            >
+                              {c.className} ({c.remainingSessions} buổi)
+                            </span>
+                          )}
+                          {c.pendingInvoices.length > 0 && c.pendingInvoices.map(inv => (
+                            <span key={inv.id} className={`${inv.status === "UNDERPAID" ? "bg-rose-100 text-rose-700 border-rose-200" : "bg-amber-100 text-amber-700 border-amber-200"} font-bold px-1.5 md:px-2 py-0.5 rounded text-[10px] md:text-[11px] border whitespace-nowrap`}>
+                              {inv.status === "UNDERPAID" ? "THIẾU TIỀN" : "CHỜ T.TOÁN"}
+                            </span>
+                          ))}
+                        </div>
                       ))}
-                    </div>
-                  ))}
 
-                {/* Hiển thị các hóa đơn nợ/tổng hợp (không dính trực tiếp với 1 enrollment) */}
-                {student.allPendingInvoices?.map(inv => (
-                  <div key={inv.id} className="flex gap-1 flex-wrap">
-                    <span className="bg-orange-100 text-orange-700 border-orange-200 font-bold px-1.5 md:px-2 py-0.5 rounded text-[10px] md:text-[11px] border whitespace-nowrap">
-                      {inv.isDebt ? "Nợ cũ" : "Hóa đơn"}: {new Intl.NumberFormat("vi-VN").format(inv.expectedAmount - inv.amountPaid)}đ
-                    </span>
-                  </div>
-                ))}
+                    {/* Hiển thị các hóa đơn nợ/tổng hợp (không dính trực tiếp với 1 enrollment) */}
+                    {student.allPendingInvoices?.map(inv => (
+                      <div key={inv.id} className="flex gap-1 flex-wrap">
+                        <span className="bg-orange-100 text-orange-700 border-orange-200 font-bold px-1.5 md:px-2 py-0.5 rounded text-[10px] md:text-[11px] border whitespace-nowrap">
+                          {inv.isDebt ? "Nợ cũ" : "Hóa đơn"}: {new Intl.NumberFormat("vi-VN").format(inv.expectedAmount - inv.amountPaid)}đ
+                        </span>
+                      </div>
+                    ))}
+                  </>
+                ) : (
+                  <>
+                    {student.enrolledCourses.map((c) => (
+                      <div key={c.enrollmentId} className="flex gap-1 flex-wrap">
+                        <span className="bg-emerald-50 text-emerald-700 font-bold px-1.5 md:px-2 py-0.5 rounded text-[10px] md:text-[11px] border border-emerald-200 whitespace-nowrap">
+                          {c.className}: Còn {c.remainingSessions} phiếu
+                        </span>
+                      </div>
+                    ))}
+                  </>
+                )}
               </div>
             </td>
             <td className="py-2 px-2 md:py-3 md:px-4 text-right">
@@ -618,35 +642,63 @@ _Tin nhắn được thông báo tự động, phụ huynh có thể trao đổi
       {/* TAB 1: THU HỌC PHÍ */}
       {activeTab === "STUDENT" && (
         <div className="space-y-4">
-          <div className="flex justify-between items-center bg-blue-50 p-3 rounded-lg border border-blue-100">
-            <div className="text-sm font-medium text-blue-800">
-              Đã chọn <span className="font-bold">{selectedStudentIds.length}</span> học sinh
-            </div>
-            <button
-              onClick={handleBulkSendClick}
-              disabled={selectedStudentIds.length === 0 || isBulkSending}
-              className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 transition-colors shadow-sm"
+          <div className="flex gap-4 border-b border-slate-200 px-2 md:px-0 mb-4">
+            <button 
+              onClick={() => setTuitionSubTab("WARNING")}
+              className={`py-2 border-b-2 font-bold text-sm transition-colors whitespace-nowrap ${tuitionSubTab === "WARNING" ? "border-amber-500 text-amber-700" : "border-transparent text-slate-500 hover:text-slate-800"}`}
             >
-              {isBulkSending ? <Loader2 size={16} className="animate-spin" /> : <MessageCircle size={16} />}
-              {isBulkSending ? `Đang gửi (${bulkSendProgress.current}/${bulkSendProgress.total})` : "Gửi Báo Cáo Zalo Hàng Loạt"}
+              Cần nhắc nhở / Thu phí ({studentsWithLowSessions.length})
+            </button>
+            <button 
+              onClick={() => setTuitionSubTab("PAID")}
+              className={`py-2 border-b-2 font-bold text-sm transition-colors whitespace-nowrap ${tuitionSubTab === "PAID" ? "border-emerald-500 text-emerald-700" : "border-transparent text-slate-500 hover:text-slate-800"}`}
+            >
+              Học sinh đã thanh toán / An toàn ({paidStudents.length})
             </button>
           </div>
 
-          {/* BẢNG CHƯA GỬI */}
-          <div className="bg-white border text-center border-slate-200 rounded-xl overflow-hidden shadow-sm mb-6">
-            <div className="bg-amber-50 border-b border-amber-100 p-3 text-left font-bold text-amber-800 text-sm flex justify-between items-center">
-              <span>Cần nhắc nhở / Gửi báo cáo ({studentsNotSent.length})</span>
-            </div>
-            {renderStudentTable(studentsNotSent)}
-          </div>
-
-          {/* BẢNG ĐÃ GỬI */}
-          {studentsSent.length > 0 && (
-            <div className="bg-white border text-center border-slate-200 rounded-xl overflow-hidden shadow-sm">
-              <div className="bg-emerald-50 border-b border-emerald-100 p-3 text-left font-bold text-emerald-800 text-sm">
-                Đã gửi báo cáo gần đây ({studentsSent.length})
+          {tuitionSubTab === "WARNING" && (
+            <>
+              <div className="flex justify-between items-center bg-blue-50 p-3 rounded-lg border border-blue-100">
+                <div className="text-sm font-medium text-blue-800">
+                  Đã chọn <span className="font-bold">{selectedStudentIds.length}</span> học sinh
+                </div>
+                <button
+                  onClick={handleBulkSendClick}
+                  disabled={selectedStudentIds.length === 0 || isBulkSending}
+                  className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 transition-colors shadow-sm"
+                >
+                  {isBulkSending ? <Loader2 size={16} className="animate-spin" /> : <MessageCircle size={16} />}
+                  {isBulkSending ? `Đang gửi (${bulkSendProgress.current}/${bulkSendProgress.total})` : "Gửi Báo Cáo Zalo Hàng Loạt"}
+                </button>
               </div>
-              {renderStudentTable(studentsSent)}
+
+              {/* BẢNG CHƯA GỬI */}
+              <div className="bg-white border text-center border-slate-200 rounded-xl overflow-hidden shadow-sm mb-6">
+                <div className="bg-amber-50 border-b border-amber-100 p-3 text-left font-bold text-amber-800 text-sm flex justify-between items-center">
+                  <span>Cần nhắc nhở / Gửi báo cáo ({studentsNotSent.length})</span>
+                </div>
+                {renderStudentTable(studentsNotSent, "WARNING")}
+              </div>
+
+              {/* BẢNG ĐÃ GỬI */}
+              {studentsSent.length > 0 && (
+                <div className="bg-white border text-center border-slate-200 rounded-xl overflow-hidden shadow-sm">
+                  <div className="bg-emerald-50 border-b border-emerald-100 p-3 text-left font-bold text-emerald-800 text-sm">
+                    Đã gửi báo cáo gần đây ({studentsSent.length})
+                  </div>
+                  {renderStudentTable(studentsSent, "WARNING")}
+                </div>
+              )}
+            </>
+          )}
+
+          {tuitionSubTab === "PAID" && (
+            <div className="bg-white border text-center border-slate-200 rounded-xl overflow-hidden shadow-sm">
+              <div className="bg-emerald-50 border-b border-emerald-100 p-3 text-left font-bold text-emerald-800 text-sm flex justify-between items-center">
+                <span>Danh sách học sinh an toàn ({paidStudents.length})</span>
+              </div>
+              {renderStudentTable(paidStudents, "PAID")}
             </div>
           )}
         </div>

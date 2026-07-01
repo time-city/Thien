@@ -57,8 +57,10 @@ export default function CourseReportModal({
   const [sendingZalo, setSendingZalo] = useState(false);
 
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isProcessingTransfer, setIsProcessingTransfer] = useState(false);
   const [isApplyingDiscount, setIsApplyingDiscount] = useState(false);
   const [cashAmount, setCashAmount] = useState<string>("");
+  const [transferAmount, setTransferAmount] = useState<string>("");
   const [initialDebt, setInitialDebt] = useState<number>(0);
 
   const fetchReport = async () => {
@@ -81,6 +83,7 @@ export default function CourseReportModal({
 
     // Reset state khi mở modal cho học sinh mới
     setCashAmount("");
+    setTransferAmount("");
     setDiscountAmountStr("");
     setReport(null);
 
@@ -467,6 +470,27 @@ _Phụ huynh đã nộp nhưng hệ thống chưa cập nhật, vui lòng nhắn
     }
   };
 
+  const handlePayTransfer = async () => {
+    const amount = Number(transferAmount);
+    if (isNaN(amount) || amount <= 0) return toast.error("Số tiền không hợp lệ");
+
+    setIsProcessingTransfer(true);
+    try {
+      const res = await processStudentPayment(studentId, amount, "BANK_TRANSFER");
+      if (res.success) {
+        toast.success("Đã xác nhận chuyển khoản & cộng buổi học!");
+        await fetchReport();
+        onSuccess?.();
+      } else {
+        toast.error(res.message || "Lỗi xác nhận chuyển khoản");
+      }
+    } catch (e) {
+      toast.error("Lỗi khi xác nhận chuyển khoản");
+    } finally {
+      setIsProcessingTransfer(false);
+    }
+  };
+
   const handleApplyDiscount = async () => {
     if (discountAmount <= 0) return toast.error("Vui lòng nhập số tiền khấu hao hợp lệ");
     setIsApplyingDiscount(true);
@@ -558,6 +582,25 @@ _Phụ huynh đã nộp nhưng hệ thống chưa cập nhật, vui lòng nhắn
                   className="h-8 md:h-10 px-3 md:px-4 whitespace-nowrap w-fit bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-md md:rounded-lg font-bold text-[10px] md:text-sm transition-colors flex items-center justify-center"
                 >
                   {isProcessing ? <Loader2 size={14} className="animate-spin md:w-4 md:h-4" /> : "Xác nhận"}
+                </button>
+              </div>
+            </div>
+
+            <div className="bg-blue-50 border border-blue-200 rounded-md md:rounded-xl p-2.5 md:p-4 mt-2.5 md:mt-4">
+              <label className="text-[9px] md:text-xs font-bold text-blue-700 uppercase mb-1.5 md:mb-2 block">Xác Nhận Chuyển Khoản Thủ Công</label>
+              <div className="flex gap-2">
+                <CurrencyInput
+                  placeholder="Nhập số tiền..."
+                  value={transferAmount}
+                  onChange={(val) => setTransferAmount(val.toString())}
+                  className="flex-1 w-full h-8 md:h-10 px-2.5 md:px-3 border border-blue-200 rounded-md md:rounded-lg text-[11px] md:text-sm outline-none focus:border-blue-400"
+                />
+                <button
+                  onClick={handlePayTransfer}
+                  disabled={isProcessingTransfer || !transferAmount || loading}
+                  className="h-8 md:h-10 px-3 md:px-4 whitespace-nowrap w-fit bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-md md:rounded-lg font-bold text-[10px] md:text-sm transition-colors flex items-center justify-center"
+                >
+                  {isProcessingTransfer ? <Loader2 size={14} className="animate-spin md:w-4 md:h-4" /> : "Xác nhận"}
                 </button>
               </div>
             </div>

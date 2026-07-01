@@ -720,15 +720,6 @@ _Tin nhắn được thông báo tự động, phụ huynh có thể trao đổi
                 <option key={cls} value={cls}>{cls}</option>
               ))}
             </select>
-            <select
-              value={sortOption}
-              onChange={(e) => setSortOption(e.target.value)}
-              className="w-full sm:w-auto p-2 border border-slate-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            >
-              <option value="DEFAULT">Sắp xếp mặc định</option>
-              <option value="FEE_DESC">Thu phí (Cao đến Thấp)</option>
-              <option value="FEE_ASC">Thu phí (Thấp đến Cao)</option>
-            </select>
           </div>
 
           {tuitionSubTab === "WARNING" && (

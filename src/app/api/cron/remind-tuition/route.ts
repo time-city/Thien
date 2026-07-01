@@ -53,9 +53,9 @@ export async function GET(request: Request) {
 
         const classNameDisplay = classNames ? classNames : "Tổng hợp / Nợ cũ";
 
-        const message = `**NHẮC BÁO HỌC PHÍ**
-Nông trại Khoa học tự nhiên **CHƯA NHẬN** học phí học sinh: **${student.fullName}**
-Lớp: **${classNameDisplay}**
+        const message = `***NHẮC BÁO HỌC PHÍ***
+Nông trại Khoa học tự nhiên ***CHƯA NHẬN*** học phí học sinh: ***${student.fullName}***
+Lớp: ***${classNameDisplay}***
 
 _Phụ huynh đã nộp nhưng hệ thống chưa cập nhật, vui lòng nhắn tin xác nhận để được kiểm tra lại tình trạng học phí._`;
 

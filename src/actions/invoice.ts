@@ -194,11 +194,11 @@ export async function processStudentPayment(
         const today = new Date();
         const monthYear = `${today.getDate().toString().padStart(2, '0')}/${(today.getMonth() + 1).toString().padStart(2, '0')}/${today.getFullYear()}`;
 
-        let msg = `**XÁC NHẬN THANH TOÁN HỌC PHÍ**\n`;
-        msg += `Nông trại Khoa học tự nhiên **${debt <= 0 ? 'ĐÃ NHẬN ĐỦ' : 'ĐÃ NHẬN MỘT PHẦN'}** học phí học sinh: **${student.fullName}**\n`;
-        msg += `Phiếu thu **${monthYear}**\n`;
-        msg += `Lớp: **${classNames}**\n`;
-        msg += `Phương thức: **${methodVi}**\n`;
+        let msg = `***XÁC NHẬN THANH TOÁN HỌC PHÍ***\n`;
+        msg += `Nông trại Khoa học tự nhiên ***${debt <= 0 ? 'ĐÃ NHẬN ĐỦ' : 'ĐÃ NHẬN MỘT PHẦN'}*** học phí học sinh: ***${student.fullName}***\n`;
+        msg += `Phiếu thu ***${monthYear}***\n`;
+        msg += `Lớp: ***${classNames}***\n`;
+        msg += `Phương thức: ***${methodVi}***\n`;
         
         if (debt > 0) {
           msg += `\n_Lưu ý: Học phí của bé vẫn còn nợ ${formatMoney(debt)}._\n`;

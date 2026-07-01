@@ -137,9 +137,25 @@ export default function TuitionClient({
 
         setBulkSendProgress({ current: count, total: selectedStudentIds.length, currentName: data.studentName });
 
+        // Tải trước QR Code thành Base64 để tránh lỗi html-to-image bắt nhầm QR của học sinh trước
+        const cleanPhone = data.phoneParent.replace(/\s+/g, '');
+        const qrUrl = `https://qr.sepay.vn/img?bank=MBBank&acc=0700107189999&amount=${data.totalExpectedAmount}&des=${encodeURIComponent(`HT${cleanPhone}`)}&template=`;
+        try {
+          const qrRes = await fetch(qrUrl);
+          const qrBlob = await qrRes.blob();
+          const qrBase64 = await new Promise<string>((resolve) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(reader.result as string);
+            reader.readAsDataURL(qrBlob);
+          });
+          (data as any).qrBase64 = qrBase64;
+        } catch (e) {
+          console.error("Failed to prefetch QR code", e);
+        }
+
         // Set data and wait for DOM to render it
         setHiddenReportData(data);
-        await new Promise(r => setTimeout(r, 3000)); // Cần 3 giây để load QR Code VietQR và render Font chữ
+        await new Promise(r => setTimeout(r, 2000)); // Đợi render Font chữ và giao diện
 
         const element1 = document.getElementById("hidden-report-export-area-1");
         const element2 = document.getElementById("hidden-report-export-area-2");
@@ -195,6 +211,33 @@ export default function TuitionClient({
           const blob2 = await res2.blob();
           const file2 = new File([blob2], `BaoCao_HocPhi_${data.studentName.replace(/\s+/g, "_")}.png`, { type: "image/png" });
 
+          // Generate message format
+          let dateStr = "";
+          if (hasLogs) {
+            const dates = data.logs.map((l: any) => new Date(l.date));
+            const minDate = new Date(Math.min(...dates.map(d => d.getTime())));
+            const maxDate = new Date(Math.max(...dates.map(d => d.getTime())));
+            dateStr = ` (từ ${minDate.getDate()}/${minDate.getMonth() + 1} - ${maxDate.getDate()}/${maxDate.getMonth() + 1})`;
+          }
+          const classNamesArray = data.items.filter((i: any) => i.type === "TUITION").map((i: any) => i.className);
+          const classNames = classNamesArray.length > 0 ? classNamesArray.join("; ") : "Các lớp";
+          const formattedPrice = data.totalExpectedAmount.toLocaleString('vi-VN');
+          const cleanPhoneMessage = data.phoneParent ? data.phoneParent.replace(/\s+/g, '') : studentId;
+          const descStr = `HT${cleanPhoneMessage}`;
+
+          const headerTitle = hasLogs ? `Báo cáo học tập${dateStr}.` : "Thông báo đóng học phí.";
+
+          const message = `
+Nông trại Khoa học tự nhiên kính gửi quý phụ huynh: ***${headerTitle}***
+• Học sinh: ***${data.studentName}***
+• Lớp đang học: ***${classNames}***
+
+Phụ huynh thanh toán học phí (mã QR hoặc tiền mặt):
+• Số tiền: ***${formattedPrice} vnđ***
+• Nội dung chuyển khoản: ***${descStr}***
+
+_Tin nhắn được thông báo tự động, phụ huynh có thể trao đổi thêm qua Zalo._`.trim();
+
           const targetPhone = data.phoneParent.trim();
           const formData2 = new FormData();
           formData2.append("target", targetPhone);
@@ -220,33 +263,8 @@ export default function TuitionClient({
             continue;
           }
 
-          // Generate message format
-          let dateStr = "";
-          if (hasLogs) {
-            const dates = data.logs.map((l: any) => new Date(l.date));
-            const minDate = new Date(Math.min(...dates.map(d => d.getTime())));
-            const maxDate = new Date(Math.max(...dates.map(d => d.getTime())));
-            dateStr = ` (từ ${minDate.getDate()}/${minDate.getMonth() + 1} - ${maxDate.getDate()}/${maxDate.getMonth() + 1})`;
-          }
-          const classNamesArray = data.items.filter((i: any) => i.type === "TUITION").map((i: any) => i.className);
-          const classNames = classNamesArray.length > 0 ? classNamesArray.join("; ") : "Các lớp";
-          const formattedPrice = data.totalExpectedAmount.toLocaleString('vi-VN');
-          const descStr = data.phoneParent ? `HT${data.phoneParent}` : `HT${studentId}`;
-
-          const headerTitle = hasLogs ? `Báo cáo học tập${dateStr}.` : "Thông báo đóng học phí.";
-
-          const message = `
-Nông trại Khoa học tự nhiên kính gửi quý phụ huynh: **${headerTitle}**
-• Học sinh: **${data.studentName}**
-• Lớp đang học: **${classNames}**
-
-Phụ huynh thanh toán học phí (mã QR hoặc tiền mặt):
-• Số tiền: **${formattedPrice} vnđ**
-• Nội dung chuyển khoản: **${descStr}**
-
-_Tin nhắn được thông báo tự động, phụ huynh có thể trao đổi thêm qua Zalo._`.trim();
-
-          await new Promise(r => setTimeout(r, 1000));
+          // Nghỉ 2 giây để đảm bảo ảnh đã tới nơi rồi mới gửi text
+          await new Promise(r => setTimeout(r, 2000));
 
           const textRes = await fetch("/api/zalobot/send", {
             method: "POST",
@@ -266,11 +284,11 @@ _Tin nhắn được thông báo tự động, phụ huynh có thể trao đổi
             toast.error(`Lỗi gửi tin nhắn văn bản cho ${data.studentName}`);
             count++;
             continue;
-          } else {
-            const logIds = data.logs.map((l: any) => l.id).filter(Boolean);
-            if (logIds.length > 0) {
-              await markMultipleReportsAsSent(logIds);
-            }
+          }
+
+          const logIds = data.logs ? data.logs.map((l: any) => l.id).filter(Boolean) : [];
+          if (logIds.length > 0) {
+            await markMultipleReportsAsSent(logIds);
           }
         }
       } catch (err) {
@@ -1153,10 +1171,11 @@ _Tin nhắn được thông báo tự động, phụ huynh có thể trao đổi
                 <div className="p-2 bg-white rounded-xl shadow-sm border border-slate-200 mb-3">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
-                    src={`https://qr.sepay.vn/img?bank=MBBank&acc=0700107189999&amount=${hiddenReportData.totalExpectedAmount}&des=${encodeURIComponent(`HT${hiddenReportData.phoneParent}`)}&template=`}
+                    src={hiddenReportData.qrBase64 || `https://qr.sepay.vn/img?bank=MBBank&acc=0700107189999&amount=${hiddenReportData.totalExpectedAmount}&des=${encodeURIComponent(`HT${hiddenReportData.phoneParent.replace(/\s+/g, '')}`)}&template=`}
                     alt="QR Code"
                     crossOrigin="anonymous"
                     className="w-40 h-40 object-contain"
+                    key={hiddenReportData.studentId}
                   />
                 </div>
                 <p className="font-bold text-slate-800 flex items-center gap-2">

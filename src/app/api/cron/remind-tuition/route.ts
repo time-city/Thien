@@ -41,10 +41,13 @@ export async function GET(request: Request) {
       const lastReportedAt = student.attendanceLogs[0].reportedAt;
       if (!lastReportedAt) continue;
 
-      // Kiểm tra xem báo cáo gần nhất đã vượt qua 24 giờ chưa
-      const timeSinceLastReport = now.getTime() - lastReportedAt.getTime();
+      const lastRemindedAt = student.lastTuitionRemindAt;
+      const mostRecentContact = lastRemindedAt ? new Date(Math.max(lastReportedAt.getTime(), lastRemindedAt.getTime())) : lastReportedAt;
 
-      if (timeSinceLastReport >= twentyFourHours) {
+      // Kiểm tra xem liên hệ gần nhất (báo cáo hoặc nhắc nợ) đã vượt qua 24 giờ chưa
+      const timeSinceLastContact = now.getTime() - mostRecentContact.getTime();
+
+      if (timeSinceLastContact >= twentyFourHours) {
         // Gom danh sách các lớp đang nợ
         const classNames = student.invoices
           .map(inv => inv.enrollment?.class?.name)
@@ -78,15 +81,10 @@ _Phụ huynh đã nộp nhưng hệ thống chưa cập nhật, vui lòng nhắn
               console.log(`[Cron] Đã gửi nhắc nợ cho phụ huynh học sinh ${student.fullName} (${student.phoneParent})`);
               sentCount++;
 
-              // Cập nhật lại thời gian reportedAt thành hiện tại để 24h sau mới nhắc tiếp
-              await prisma.attendanceLog.updateMany({
-                where: {
-                  studentId: student.id,
-                  isReportSent: true
-                },
-                data: {
-                  reportedAt: now
-                }
+              // Cập nhật lại thời gian nhắc nợ cuối cùng vào bảng Student
+              await prisma.student.update({
+                where: { id: student.id },
+                data: { lastTuitionRemindAt: now }
               });
             } else {
               const errorText = await zaloResponse.text();

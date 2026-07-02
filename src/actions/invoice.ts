@@ -18,41 +18,46 @@ export async function getTotalDebt(studentId: string): Promise<number> {
 
 // Hàm phụ trợ tự động lên hóa đơn cho các Enrollment đến hạn
 async function autoCreateInvoices(studentId: string) {
-  const unbilledEnrollments = await prisma.enrollment.findMany({
-    where: { 
-      studentId, 
-      status: { not: "DROPPED" },
-      remainingSessions: { lte: 2 }
-    },
-    include: { class: true }
-  });
+  await prisma.$transaction(async (tx) => {
+    // Khóa dòng học sinh để chống Race Condition khi nhiều luồng cùng gọi getTotalDebt
+    await tx.$executeRaw`SELECT id FROM "students" WHERE id = ${studentId}::uuid FOR UPDATE`;
 
-  for (const enr of unbilledEnrollments) {
-    const existingInv = await prisma.invoice.findFirst({
-      where: { enrollmentId: enr.id, status: { in: ["PENDING", "UNDERPAID"] } }
+    const unbilledEnrollments = await tx.enrollment.findMany({
+      where: { 
+        studentId, 
+        status: { not: "DROPPED" },
+        remainingSessions: { lte: 2 }
+      },
+      include: { class: true }
     });
-    
-    const correctAmount = enr.class.pricePerSession;
 
-    if (!existingInv) {
-      await prisma.invoice.create({
-        data: {
-          enrollmentId: enr.id,
-          studentId: studentId,
-          expectedAmount: correctAmount,
-          amountPaid: 0,
-          status: "PENDING",
-          transactionCode: `AUTO-${Date.now()}`
-        }
+    for (const enr of unbilledEnrollments) {
+      const existingInv = await tx.invoice.findFirst({
+        where: { enrollmentId: enr.id, status: { in: ["PENDING", "UNDERPAID"] } }
       });
-    } else if (existingInv.status === "PENDING" && existingInv.expectedAmount !== correctAmount && !existingInv.details) {
-      // Chỉ tự động fix amount nếu hóa đơn chưa từng bị sửa tay (chưa có details)
-      await prisma.invoice.update({
-        where: { id: existingInv.id },
-        data: { expectedAmount: correctAmount }
-      });
+      
+      const correctAmount = enr.class.pricePerSession;
+
+      if (!existingInv) {
+        await tx.invoice.create({
+          data: {
+            enrollmentId: enr.id,
+            studentId: studentId,
+            expectedAmount: correctAmount,
+            amountPaid: 0,
+            status: "PENDING",
+            transactionCode: `AUTO-${Date.now()}`
+          }
+        });
+      } else if (existingInv.status === "PENDING" && existingInv.expectedAmount !== correctAmount && !existingInv.details) {
+        // Chỉ tự động fix amount nếu hóa đơn chưa từng bị sửa tay (chưa có details)
+        await tx.invoice.update({
+          where: { id: existingInv.id },
+          data: { expectedAmount: correctAmount }
+        });
+      }
     }
-  }
+  });
 }
 
 export async function processStudentPayment(
@@ -68,6 +73,9 @@ export async function processStudentPayment(
     await autoCreateInvoices(studentId);
 
     await prisma.$transaction(async (tx) => {
+      // 0. KHÓA ROW-LEVEL ĐỂ CHỐNG RACE CONDITION (Tránh trùng lặp khi click đúp thanh toán)
+      await tx.$executeRaw`SELECT id FROM "students" WHERE id = ${studentId}::uuid FOR UPDATE`;
+
       // 1. Lấy tất cả các hóa đơn cần thanh toán, ưu tiên cũ nhất trước
       const pendingInvoices = await tx.invoice.findMany({
         where: {

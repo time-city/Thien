@@ -29,6 +29,9 @@ export async function settleTeacherBalance(
     const endDate = new Date(targetYear, targetMonth, 0, 23, 59, 59, 999);
 
     await prisma.$transaction(async (tx) => {
+      // Khóa dòng Teacher để chống xử lý đồng thời (Race Condition) khi nhấp đúp
+      await tx.$executeRaw`SELECT id FROM "users" WHERE id = ${teacherId}::uuid FOR UPDATE`;
+
       if (type === "PAYOUT_SALARY") {
         // Trung tâm trả lương cứng cho GV
         await tx.user.update({

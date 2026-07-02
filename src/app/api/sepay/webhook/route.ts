@@ -150,7 +150,22 @@ export async function POST(request: Request) {
         });
 
         if (teacher && teacher.role === "TEACHER") {
+          let alreadyProcessed = false;
+
           await prisma.$transaction(async (tx) => {
+            // KHÓA DÒNG GIÁO VIÊN CHỐNG RACE CONDITION (Tránh cộng tiền 2 lần nếu SePay gọi webhook đúp)
+            await tx.$executeRaw`SELECT id FROM "users" WHERE id = ${teacher.id}::uuid FOR UPDATE`;
+
+            // KIỂM TRA LẠI IDEMPOTENCY BÊN TRONG TRANSACTION
+            const existingSalaryPaymentTx = await tx.salaryPayment.findFirst({
+              where: { note: { contains: `SePay: ${sepayId}` } },
+            });
+
+            if (existingSalaryPaymentTx) {
+              alreadyProcessed = true;
+              return; // Thoát khỏi transaction một cách an toàn
+            }
+
             await tx.user.update({
               where: { id: teacher.id },
               data: { salaryBalance: { increment: amount } }
@@ -171,7 +186,12 @@ export async function POST(request: Request) {
               data: { status: "PAID" }
             });
           });
-          console.log(`✅ Đã thu ${amount} từ GV ${teacher.username} qua Webhook`);
+
+          if (alreadyProcessed) {
+             console.log(`⚠️ Webhook SePay: ${sepayId} (Teacher) đã được xử lý từ trước (chặn đúp thành công)`);
+          } else {
+             console.log(`✅ Đã thu ${amount} từ GV ${teacher.username} qua Webhook`);
+          }
         } else {
           console.warn(`⚠️ Webhook nhận được tiền nhưng không tìm thấy học sinh hoặc giáo viên khớp với mã: ${studentPhoneMatch}`);
         }

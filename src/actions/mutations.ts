@@ -120,18 +120,31 @@ export async function updateStudent(id: string, data: any) {
         const classIdsToRemove = existingClassIds.filter(cid => !newClassIds.includes(cid));
         // Lọc ra NHỮNG LỚP ĐƯỢC THÊM MỚI HOÀN TOÀN
         const classesToAdd = classEnrollments.filter(ce => !existingClassIds.includes(ce.classId));
+        // Lọc ra NHỮNG LỚP TỪNG HỌC (DROPPED/PAUSED) VÀ ĐƯỢC TICK LẠI
+        const classesToReactivate = classEnrollments.filter(ce => existingClassIds.includes(ce.classId));
 
-        // Xóa những lớp bị bỏ tick
+        // Bỏ tick -> Chuyển thành DROPPED thay vì xóa (giữ lại lịch sử hóa đơn)
         if (classIdsToRemove.length > 0) {
-          await tx.enrollment.deleteMany({
+          await tx.enrollment.updateMany({
             where: {
               studentId: id,
               classId: { in: classIdsToRemove }
-            }
+            },
+            data: { status: "DROPPED" }
           });
         }
 
-        // Tạo ghi danh cho những lớp thêm mới (Kèm logic Paid/Unpaid)
+        // Tick lại lớp cũ -> Đổi lại thành ACTIVE
+        if (classesToReactivate.length > 0) {
+          for (const ce of classesToReactivate) {
+            await tx.enrollment.updateMany({
+              where: { studentId: id, classId: ce.classId },
+              data: { status: "ACTIVE" } // Giữ nguyên số buổi và feeStatus cũ
+            });
+          }
+        }
+
+        // Tạo ghi danh cho những lớp thêm mới hoàn toàn (Kèm logic Paid/Unpaid)
         if (classesToAdd.length > 0) {
           const classIdsToAdd = classesToAdd.map(c => c.classId);
           const classesInfo = await tx.class.findMany({ where: { id: { in: classIdsToAdd } } });
@@ -144,7 +157,8 @@ export async function updateStudent(id: string, data: any) {
                 classId: ce.classId,
                 feeStatus: ce.feeStatus,
                 // PAID thì cấp buổi, UNPAID thì 0 buổi
-                remainingSessions: ce.feeStatus === "PAID" ? (cls?.sessionsPerPackage || 0) : 0
+                remainingSessions: ce.feeStatus === "PAID" ? (cls?.sessionsPerPackage || 0) : 0,
+                status: "ACTIVE"
               };
             })
           });
@@ -516,10 +530,19 @@ export async function updateStudentByTeacher(id: string, data: any) {
       if (selectedClassIds) {
         const classIdsToRemove = teacherOwnedClassIds.filter((classId) => !selectedClassIds.includes(classId));
         const classIdsToAdd = selectedClassIds.filter((classId) => !teacherOwnedClassIds.includes(classId));
+        const classesToReactivate = selectedClassIds.filter((classId) => teacherOwnedClassIds.includes(classId));
 
         if (classIdsToRemove.length > 0) {
-          await tx.enrollment.deleteMany({
+          await tx.enrollment.updateMany({
             where: { studentId: id, classId: { in: classIdsToRemove } },
+            data: { status: "DROPPED" }
+          });
+        }
+
+        if (classesToReactivate.length > 0) {
+          await tx.enrollment.updateMany({
+            where: { studentId: id, classId: { in: classesToReactivate } },
+            data: { status: "ACTIVE" }
           });
         }
 
@@ -537,6 +560,7 @@ export async function updateStudentByTeacher(id: string, data: any) {
                 classId,
                 feeStatus: "PAID",
                 remainingSessions: classInfo?.sessionsPerPackage ?? 0,
+                status: "ACTIVE"
               };
             }),
           });
@@ -605,33 +629,26 @@ export async function saveStudentEvaluation(data: {
   }
 
   try {
-    const existingLog = await prisma.attendanceLog.findFirst({
+    await prisma.attendanceLog.upsert({
       where: {
-        classSessionId: data.classSessionId,
-        studentId: data.studentId,
-      },
-    });
-
-    if (existingLog) {
-      await prisma.attendanceLog.update({
-        where: { id: existingLog.id },
-        data: {
-          attendanceStatus: data.attendanceStatus,
-          homeworkStatus: data.homeworkStatus,
-          note: data.note,
-        },
-      });
-    } else {
-      await prisma.attendanceLog.create({
-        data: {
+        classSessionId_studentId: {
           classSessionId: data.classSessionId,
           studentId: data.studentId,
-          attendanceStatus: data.attendanceStatus,
-          homeworkStatus: data.homeworkStatus,
-          note: data.note,
-        },
-      });
-    }
+        }
+      },
+      update: {
+        attendanceStatus: data.attendanceStatus,
+        homeworkStatus: data.homeworkStatus,
+        note: data.note,
+      },
+      create: {
+        classSessionId: data.classSessionId,
+        studentId: data.studentId,
+        attendanceStatus: data.attendanceStatus,
+        homeworkStatus: data.homeworkStatus,
+        note: data.note,
+      },
+    });
 
     revalidatePath("/ta");
     revalidatePath("/schedule");
@@ -1217,14 +1234,18 @@ export async function submitAttendanceAndCalculateFinance(
         })),
       });
 
-      await tx.classSession.update({
-        where: { id: classSessionId },
+      const updatedSession = await tx.classSession.updateMany({
+        where: { id: classSessionId, isAttendanceSubmitted: false },
         data: {
           isAttendanceSubmitted: true,
           status: "COMPLETED",
           attendanceSubmittedAt: now,
         },
       });
+
+      if (updatedSession.count === 0) {
+        throw new Error("Ca học đã được chốt điểm danh (thao tác trùng lặp).");
+      }
 
       // ==========================================
       // BƯỚC 3: TÀI CHÍNH & TRỪ PHIẾU
@@ -1824,15 +1845,31 @@ export async function transferStudentClass(studentId: string, oldClassId: string
       });
 
       // 6. Tạo phiếu đăng ký mới (chuyển bảo lưu số dư/số buổi)
-      const newEnrollment = await tx.enrollment.create({
-        data: {
-          studentId,
-          classId: newClassId,
-          remainingSessions: newRemainingSessions,
-          feeStatus: oldEnrollment.feeStatus,
-          status: "ACTIVE"
-        }
+      const existingNewClassEnrollment = await tx.enrollment.findFirst({
+        where: { studentId, classId: newClassId }
       });
+
+      let newEnrollment;
+      if (existingNewClassEnrollment) {
+        newEnrollment = await tx.enrollment.update({
+          where: { id: existingNewClassEnrollment.id },
+          data: {
+            status: "ACTIVE",
+            remainingSessions: newRemainingSessions,
+            feeStatus: oldEnrollment.feeStatus
+          }
+        });
+      } else {
+        newEnrollment = await tx.enrollment.create({
+          data: {
+            studentId,
+            classId: newClassId,
+            remainingSessions: newRemainingSessions,
+            feeStatus: oldEnrollment.feeStatus,
+            status: "ACTIVE"
+          }
+        });
+      }
 
       return { success: true, data: newEnrollment };
     });

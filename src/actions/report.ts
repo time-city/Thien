@@ -126,8 +126,9 @@ export async function getStudentCombinedReport(studentId: string): Promise<Stude
 
   // 1. Fetch enrollments that need payment (remainingSessions <= 2)
   const enrollments = await prisma.enrollment.findMany({
-    where: { 
-      studentId, 
+    where: {
+
+      studentId,
       status: { not: "DROPPED" },
       remainingSessions: { lte: 2 }
     },
@@ -154,7 +155,7 @@ export async function getStudentCombinedReport(studentId: string): Promise<Stude
     // Check if there's already a pending invoice specifically for this enrollment
     const inv = pendingInvoices.find(i => !i.isDebt && i.enrollmentId === enr.id);
     const amount = inv ? inv.expectedAmount : enr.class.pricePerSession;
-    
+
     if (inv) {
       processedInvoiceIds.add(inv.id);
     }
@@ -249,7 +250,7 @@ export async function markReportAsSent(logIds: string[]) {
   try {
     await prisma.attendanceLog.updateMany({
       where: { id: { in: logIds } },
-      data: { 
+      data: {
         isReportSent: true,
         reportedAt: new Date()
       }

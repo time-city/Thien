@@ -63,56 +63,59 @@ export async function createBulkSchedule(data: {
   }
 
   try {
-    // 1. KIỂM TRA TRÙNG LỊCH CHO TỪNG KHUNG GIỜ ĐƯỢC CHỌN
-    const conflictingSessions = await prisma.classSession.findMany({
-      where: {
-        AND: [
-          { OR: [{ teacherId }, { roomId }] },
-          { status: { not: "CANCELLED" } },
-          {
-            OR: datesToCheck.map(dt => ({
-              startTime: { lt: dt.endTime },
-              endTime: { gt: dt.startTime }
-            }))
-          }
-        ]
-      },
-      include: { class: true, teacher: true, room: true }
-    });
+    let result: any = { success: true };
 
-    if (conflictingSessions.length > 0) {
-      // Gom conflict theo (date + start/end + reason) để tránh bị lặp 3 lần do cùng 1 chuỗi lịch.
-      // Đồng thời chỉ hiển thị tối đa 1 “khối” (date + time + reason) để toast không quá dài.
-      const conflictUnique = new Map<string, { date: string; time: string; reason: string }>();
-
-      for (const s of conflictingSessions) {
-        const date = s.date.toLocaleDateString('vi-VN');
-        const time = `${s.startTime.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })} - ${s.endTime.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}`;
-        const reason = s.teacherId === teacherId ? "Giáo viên bận" : "Phòng bị trùng";
-        const key = `${date}|${time}|${reason}`;
-        if (!conflictUnique.has(key)) {
-          conflictUnique.set(key, { date, time, reason });
-        }
-      }
-
-      const first = conflictUnique.values().next().value as undefined | { date: string; time: string; reason: string };
-      const count = conflictUnique.size;
-
-      if (!first) {
-        return { success: false, error: "Trùng lịch!" };
-      }
-
-      const suffix = count > 1 ? ` (còn ${count - 1} khung khác)` : "";
-      return {
-        success: false,
-        error: `Trùng lịch! Đã có lớp học tại: ${first.date} (${first.time}) - ${first.reason}${suffix}.`,
-      };
-
-
-    }
-
-    // 2. LƯU VÀO DB NẾU AN TOÀN
     await prisma.$transaction(async (tx) => {
+      // Khóa dòng Giáo viên để chống xử lý đồng thời khi nhiều người xếp lịch cùng lúc
+      await tx.$executeRaw`SELECT id FROM "users" WHERE id = ${teacherId}::uuid FOR UPDATE`;
+
+      // 1. KIỂM TRA TRÙNG LỊCH BÊN TRONG TRANSACTION
+      const conflictingSessions = await tx.classSession.findMany({
+        where: {
+          AND: [
+            { OR: [{ teacherId }, { roomId }] },
+            { status: { not: "CANCELLED" } },
+            {
+              OR: datesToCheck.map(dt => ({
+                startTime: { lt: dt.endTime },
+                endTime: { gt: dt.startTime }
+              }))
+            }
+          ]
+        },
+        include: { class: true, teacher: true, room: true }
+      });
+
+      if (conflictingSessions.length > 0) {
+        const conflictUnique = new Map<string, { date: string; time: string; reason: string }>();
+
+        for (const s of conflictingSessions) {
+          const date = s.date.toLocaleDateString('vi-VN');
+          const time = `${s.startTime.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })} - ${s.endTime.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}`;
+          const reason = s.teacherId === teacherId ? "Giáo viên bận" : "Phòng bị trùng";
+          const key = `${date}|${time}|${reason}`;
+          if (!conflictUnique.has(key)) {
+            conflictUnique.set(key, { date, time, reason });
+          }
+        }
+
+        const first = conflictUnique.values().next().value as undefined | { date: string; time: string; reason: string };
+        const count = conflictUnique.size;
+
+        if (!first) {
+          result = { success: false, error: "Trùng lịch!" };
+          throw new Error("Trùng lịch"); // Ném lỗi để rollback transaction
+        }
+
+        const suffix = count > 1 ? ` (còn ${count - 1} khung khác)` : "";
+        result = {
+          success: false,
+          error: `Trùng lịch! Đã có lớp học tại: ${first.date} (${first.time}) - ${first.reason}${suffix}.`,
+        };
+        throw new Error("Trùng lịch");
+      }
+
+      // 2. LƯU VÀO DB NẾU AN TOÀN
       // Dùng createManyAndReturn để chèn toàn bộ dữ liệu 1 lần và trả về ID
       const createdSessions = await tx.classSession.createManyAndReturn({
         data: sessionsToCreate
@@ -124,7 +127,6 @@ export async function createBulkSchedule(data: {
         const roomFeePerHour = room?.feePerHour ?? 0;
 
         if (roomFeePerHour > 0) {
-          // Tính phí dựa trên số giờ thực tế
           let totalFee = 0;
           const rentalLogs = createdSessions.map(s => {
             const sessionDurationHours = (s.endTime.getTime() - s.startTime.getTime()) / (1000 * 60 * 60);
@@ -149,6 +151,8 @@ export async function createBulkSchedule(data: {
         }
       }
     });
+
+    if (!result.success) return result;
 
     revalidatePath("/schedule");
     return { success: true };
@@ -405,38 +409,43 @@ export async function updateSessionTime(sessionId: string, newStartTime: Date, n
       return { success: false, error: "Không tìm thấy ca học." };
     }
 
-    // 3. KIỂM TRA ĐỤNG ĐỘ LỊCH (Overlap Check)
-    // Công thức: (StartA < EndB) và (EndA > StartB)
-    const conflict = await prisma.classSession.findFirst({
-      where: {
-        id: { not: sessionId }, // Bỏ qua chính ca học đang sửa
-        status: { not: "CANCELLED" }, // Bỏ qua các ca đã hủy
-        // Check trùng giáo viên HOẶC trùng phòng
-        OR: [
-          { teacherId: existingSession.teacherId },
-          ...(existingSession.roomId ? [{ roomId: existingSession.roomId }] : [])
-        ],
-        // Logic giao nhau thời gian
-        startTime: { lt: end },
-        endTime: { gt: start }
-      }
-    });
+    // 3. THỰC HIỆN CẬP NHẬT TRONG TRANSACTION
+    let result: any = { success: true };
 
-    if (conflict) {
-      // Thông báo chi tiết lỗi đụng độ
-      if (conflict.teacherId === existingSession.teacherId) {
-        return { success: false, error: "Giáo viên đã có lịch dạy trong khung giờ này!" };
-      }
-      if (existingSession.roomId && conflict.roomId === existingSession.roomId) {
-        return { success: false, error: "Phòng học đã được đặt bởi người khác trong khung giờ này!" };
-      }
-      return { success: false, error: "Khung giờ này đã bị trùng lịch!" };
-    }
-
-    // 4. THỰC HIỆN CẬP NHẬT
-    // Dùng transaction để đảm bảo Update Session và Update Rental Log diễn ra cùng lúc
     await prisma.$transaction(async (tx) => {
-      // 4.1. Cập nhật lại thời gian của ca học
+      // Khóa dòng Teacher để chống Race Condition khi đổi lịch
+      await tx.$executeRaw`SELECT id FROM "users" WHERE id = ${existingSession.teacherId}::uuid FOR UPDATE`;
+
+      // 3.1 KIỂM TRA ĐỤNG ĐỘ LỊCH (Overlap Check) BÊN TRONG TRANSACTION
+      // Công thức: (StartA < EndB) và (EndA > StartB)
+      const conflict = await tx.classSession.findFirst({
+        where: {
+          id: { not: sessionId }, // Bỏ qua chính ca học đang sửa
+          status: { not: "CANCELLED" }, // Bỏ qua các ca đã hủy
+          // Check trùng giáo viên HOẶC trùng phòng
+          OR: [
+            { teacherId: existingSession.teacherId },
+            ...(existingSession.roomId ? [{ roomId: existingSession.roomId }] : [])
+          ],
+          // Logic giao nhau thời gian
+          startTime: { lt: end },
+          endTime: { gt: start }
+        }
+      });
+
+      if (conflict) {
+        // Thông báo chi tiết lỗi đụng độ
+        if (conflict.teacherId === existingSession.teacherId) {
+          result = { success: false, error: "Giáo viên đã có lịch dạy trong khung giờ này!" };
+        } else if (existingSession.roomId && conflict.roomId === existingSession.roomId) {
+          result = { success: false, error: "Phòng học đã được đặt bởi người khác trong khung giờ này!" };
+        } else {
+          result = { success: false, error: "Khung giờ này đã bị trùng lịch!" };
+        }
+        throw new Error("Trùng lịch"); // Ném lỗi để rollback transaction
+      }
+
+      // 3.2 Cập nhật lại thời gian của ca học
       await tx.classSession.update({
         where: { id: sessionId },
         data: {
@@ -446,7 +455,7 @@ export async function updateSessionTime(sessionId: string, newStartTime: Date, n
         }
       });
 
-      // 4.2. Tính lại tiền phòng (Nếu ca này có thuê phòng)
+      // 3.3 Tính lại tiền phòng (Nếu ca này có thuê phòng)
       if (existingSession.roomId && existingSession.room) {
         // Tính số giờ thuê (chênh lệch mili-giây -> quy ra giờ)
         const durationHours = (end.getTime() - start.getTime()) / (1000 * 60 * 60);

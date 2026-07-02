@@ -203,6 +203,7 @@ model Student {
   parentName          String?
   phoneParent         String?
   qrCodeId            String?              @unique
+  lastTuitionRemindAt DateTime?
   createdAt           DateTime             @default(now())
 
   enrollments         Enrollment[]
@@ -231,6 +232,7 @@ model Enrollment {
   class             Class            @relation(fields: [classId], references: [id], onDelete: Cascade)
   invoices          Invoice[]
 
+  @@unique([studentId, classId])
   @@map("enrollments")
   @@schema("public")
 }
@@ -318,6 +320,7 @@ model AttendanceLog {
   classSession     ClassSession     @relation(fields: [classSessionId], references: [id], onDelete: Cascade)
   student          Student          @relation(fields: [studentId], references: [id], onDelete: Cascade)
 
+  @@unique([classSessionId, studentId])
   @@map("attendance_logs")
   @@schema("public")
 }

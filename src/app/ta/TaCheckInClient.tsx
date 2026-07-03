@@ -10,6 +10,7 @@ import { ArrowLeft, Loader2, CheckCircle2, AlertTriangle } from "lucide-react";
 import { saveStudentEvaluation, submitAttendanceAndCalculateFinance, markAllHomeworkGoodAction, markAllAttendancePresentAction } from "@/actions/mutations";
 import { getTodayQuickAttendance } from "@/actions/schedule";
 import { toast } from "sonner";
+import UndoFinalizeButton from "./booking-history/UndoFinalizeButton";
 
 export default function TaCheckInClient({
   sessionInfo,
@@ -164,10 +165,18 @@ export default function TaCheckInClient({
   // HÀM MỞ MODAL XÁC NHẬN CHỐT CA
   // ==========================================
   const handleFinalizeSession = () => {
-    // Bắt buộc giáo viên phải điểm danh và đánh giá bài tập đủ 100% học sinh mới cho chốt
-    const unassessed = studentsState.filter((s) => !s.attendance || !s.homework);
-    if (unassessed.length > 0) {
-      toast.error(`Vui lòng điểm danh và đánh giá bài tập toàn bộ học sinh trước khi chốt ca! (Còn ${unassessed.length} bạn chưa đánh giá xong)`);
+    if (isFinalized) {
+      toast.error("Ca này đã được chốt");
+      return;
+    }
+
+    if (!canFinalize) {
+      if (!allAssessed) {
+        const unassessed = studentsState.filter((s) => !s.attendance || !s.homework);
+        toast.error(`Vui lòng điểm danh và đánh giá bài tập toàn bộ học sinh trên trang này trước khi chốt ca! (Còn ${unassessed.length} bạn chưa đánh giá xong)`);
+      } else {
+        toast.error("Vui lòng đánh giá toàn bộ học sinh ở các trang còn lại trước khi chốt ca!");
+      }
       return;
     }
 
@@ -242,6 +251,8 @@ export default function TaCheckInClient({
 
   // Kiểm tra xem đã điểm danh và đánh giá bài tập đủ 100% học sinh trên màn hình này chưa
   const allAssessed = studentsState.length > 0 && studentsState.every((s) => s.attendance && s.homework);
+  const isFinalized = sessionInfo.isAttendanceSubmitted || sessionInfo.status === "COMPLETED";
+  const canFinalize = !!sessionInfo.canFinalize && allAssessed;
 
   return (
     <div className="w-full max-w-5xl mx-auto pb-8 font-sans">
@@ -268,6 +279,13 @@ export default function TaCheckInClient({
             {currentSession && (
               <div className="inline-flex items-center gap-1.5 text-[13px] font-extrabold text-amber-700 bg-amber-100/80 border border-amber-200 px-4 py-1.5 rounded-full shadow-sm">
                 ⭐ Đang dạy: {currentSession.className} ({new Date(currentSession.startTime).toLocaleTimeString('vi-VN', {hour: '2-digit', minute:'2-digit'})} - {new Date(currentSession.endTime).toLocaleTimeString('vi-VN', {hour: '2-digit', minute:'2-digit'})})
+              </div>
+            )}
+
+            {isFinalized && (
+              <div className="inline-flex items-center gap-2 text-[13px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-4 py-1.5 rounded-full shadow-sm">
+                <span>Đã chốt ca</span>
+                <UndoFinalizeButton sessionId={sessionId} />
               </div>
             )}
             
@@ -325,16 +343,18 @@ export default function TaCheckInClient({
               {/* NÚT MỞ MODAL CHỐT CA */}
               <button
                 onClick={handleFinalizeSession}
-                disabled={isSubmittingFinal || !allAssessed}
+                disabled={isSubmittingFinal || !canFinalize || isFinalized}
                 className={`col-span-2 sm:col-span-1 h-9 px-3 sm:px-4 flex items-center justify-center gap-2 text-white text-[11px] sm:text-xs font-bold rounded-lg shadow-sm transition-all whitespace-nowrap w-full ${
-                  allAssessed 
+                  isFinalized
+                    ? "bg-slate-300 cursor-not-allowed"
+                    : canFinalize 
                     ? "bg-emerald-600 hover:bg-emerald-700" 
                     : "bg-slate-300 cursor-not-allowed"
                 }`}
-                title={!allAssessed ? "Vui lòng điểm danh và đánh giá bài tập đủ học sinh để chốt ca" : "Chốt ca học và nhận lương"}
+                title={isFinalized ? "Ca này đã được chốt" : !canFinalize ? "Vui lòng đánh giá đủ học sinh ở tất cả các trang để chốt ca" : "Chốt ca học và nhận lương"}
               >
                 <CheckCircle2 size={16} className="shrink-0" />
-                Chốt Ca Học
+                {isFinalized ? "Đã chốt" : "Chốt Ca Học"}
               </button>
             </div>
           </div>
@@ -542,7 +562,7 @@ export default function TaCheckInClient({
               </div>
               <h3 className="text-lg font-extrabold text-slate-900 mb-2">Xác Nhận Chốt Ca</h3>
               <p className="text-[13px] text-slate-500 font-medium leading-relaxed">
-                Bạn có chắc chắn muốn chốt ca học này? Hệ thống sẽ tự động <b>trừ phiếu học sinh</b>, <b>tính lương</b> vào ví giáo viên và <b className="text-rose-600">không thể hoàn tác</b>.
+                Bạn có chắc chắn muốn chốt ca học này? Hệ thống sẽ tự động <b>trừ phiếu học sinh</b>, <b>tính lương</b> vào ví giáo viên và có thể hoàn tác sau đó nếu cần.
               </p>
             </div>
             

@@ -1195,6 +1195,17 @@ export async function submitAttendanceAndCalculateFinance(
       throw new Error("Lớp tự do (Freelance) không có danh sách học sinh để điểm danh.");
     }
 
+    const expectedStudentCount = await prisma.enrollment.count({
+      where: { classId, status: "ACTIVE" },
+    });
+
+    if (attendanceData.length !== expectedStudentCount) {
+      return {
+        success: false,
+        error: "Vui lòng đánh giá toàn bộ học sinh trong tất cả các trang trước khi chốt ca",
+      };
+    }
+
     let salaryCalculated = 0;
     let netIncome = 0;
 
@@ -1291,6 +1302,124 @@ export async function submitAttendanceAndCalculateFinance(
   } catch (error) {
     console.error("submitAttendanceAndCalculateFinance error:", error);
     return { success: false, error: "Lỗi khi chốt ca và tính lương" };
+  }
+}
+
+export async function undoAttendanceFinalization(classSessionId: string) {
+  const session = await auth();
+  if (!session?.user) {
+    return { success: false, error: "Vui lòng đăng nhập!" };
+  }
+
+  try {
+    const classSession = await prisma.classSession.findUnique({
+      where: { id: classSessionId },
+      include: {
+        attendanceLogs: true,
+        roomRentalLogs: true,
+        class: true,
+      },
+    });
+
+    if (!classSession) {
+      return { success: false, error: "Không tìm thấy ca học" };
+    }
+
+    if (classSession.teacherId !== session.user.id && session.user.role !== "SUPER_ADMIN") {
+      return { success: false, error: "Không đủ quyền hoàn tác ca học" };
+    }
+
+    if (!classSession.isAttendanceSubmitted && classSession.status !== "COMPLETED") {
+      return { success: false, error: "Ca này chưa được chốt" };
+    }
+
+    const roomFee = classSession.roomRentalLogs.reduce((total, log) => total + log.feeCalculated, 0);
+    const evaluatedStudentIds = Array.from(
+      new Set(classSession.attendanceLogs.map((log) => log.studentId))
+    );
+    let salaryAdjustment = 0;
+
+    if (classSession.classId) {
+      const classTeacher = await prisma.classTeacher.findFirst({
+        where: {
+          classId: classSession.classId,
+          teacherId: classSession.teacherId,
+        },
+      });
+
+      if (classTeacher?.salaryPerSession) {
+        salaryAdjustment = classTeacher.salaryPerSession - roomFee;
+      }
+    }
+
+    await prisma.$transaction(async (tx) => {
+      if (classSession.attendanceLogs.length > 0) {
+        await tx.attendanceLog.deleteMany({
+          where: { classSessionId },
+        });
+      }
+
+      if (classSession.classId && evaluatedStudentIds.length > 0) {
+        // Chỉ hoàn phiếu cho học sinh đã có đánh giá trong chính ca học này.
+        await tx.enrollment.updateMany({
+          where: {
+            classId: classSession.classId,
+            studentId: { in: evaluatedStudentIds },
+          },
+          data: {
+            remainingSessions: { increment: 1 },
+          },
+        });
+
+        await tx.enrollment.updateMany({
+          where: {
+            classId: classSession.classId,
+            studentId: { in: evaluatedStudentIds },
+            remainingSessions: { gt: 0 },
+          },
+          data: {
+            feeStatus: "PAID",
+          },
+        });
+      }
+
+      if (salaryAdjustment !== 0) {
+        await tx.user.update({
+          where: { id: classSession.teacherId },
+          data: {
+            salaryBalance:
+              salaryAdjustment >= 0
+                ? { decrement: salaryAdjustment }
+                : { increment: Math.abs(salaryAdjustment) },
+          },
+        });
+      }
+
+      if (classSession.roomRentalLogs.length > 0) {
+        await tx.roomRentalLog.deleteMany({
+          where: { classSessionId },
+        });
+      }
+
+      await tx.classSession.update({
+        where: { id: classSessionId },
+        data: {
+          isAttendanceSubmitted: false,
+          status: "SCHEDULED",
+          attendanceSubmittedAt: null,
+        },
+      });
+    });
+
+    revalidatePath("/ta/booking-history");
+    revalidatePath("/ta");
+    revalidatePath("/schedule");
+    revalidatePath("/ta/settings");
+
+    return { success: true };
+  } catch (error) {
+    console.error("undoAttendanceFinalization error:", error);
+    return { success: false, error: "Lỗi khi hoàn tác chốt ca" };
   }
 }
 

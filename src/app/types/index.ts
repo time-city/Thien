@@ -214,6 +214,9 @@ export interface UISessionInfo {
   className: string;
   teacherName: string;
   date: string;
+  status?: string;
+  isAttendanceSubmitted?: boolean;
+  canFinalize?: boolean;
   // slot cũ (Ca X) chưa còn dùng theo Time Range
   slot?: number;
 }

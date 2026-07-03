@@ -54,6 +54,10 @@ export default async function ClassRosterPage({
     where: { classId: classId, status: "ACTIVE" }
   });
   const totalPages = Math.ceil(totalStudents / pageSize) || 1;
+  const assessedStudentsCount = isFreelance ? 0 : await prisma.attendanceLog.count({
+    where: { classSessionId: sessionId },
+  });
+  const canFinalizeSession = isFreelance ? true : totalStudents > 0 && assessedStudentsCount === totalStudents;
 
   console.log("\n================ DEBUG PHÂN TRANG ================");
   console.log("1. Param 'page' lấy từ URL:", page);
@@ -111,6 +115,9 @@ export default async function ClassRosterPage({
         className: sessionInfo.class?.name || "Lớp Tự Do",
         teacherName: sessionInfo.teacher.fullName,
         date: sessionInfo.date.toISOString(),
+        status: sessionInfo.status,
+        isAttendanceSubmitted: sessionInfo.isAttendanceSubmitted,
+        canFinalize: canFinalizeSession,
       }}
       students={mappedStudents}
       currentPage={currentPage}

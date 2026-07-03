@@ -124,13 +124,13 @@ export async function getStudentCombinedReport(studentId: string): Promise<Stude
   });
   if (!student) return null;
 
-  // 1. Fetch enrollments that need payment (remainingSessions <= 2)
+  // 1. Fetch enrollments that need payment (remainingSessions <= 1)
   const enrollments = await prisma.enrollment.findMany({
     where: {
 
       studentId,
       status: { not: "DROPPED" },
-      remainingSessions: { lte: 2 }
+      remainingSessions: { lte: 1 }
     },
     include: { class: true }
   });

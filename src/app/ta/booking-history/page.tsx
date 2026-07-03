@@ -2,6 +2,7 @@ import { auth } from "@/auth";
 import { getTeacherBookingHistory } from "@/actions/queries";
 import { format } from "date-fns";
 import { MapPin, Calendar, CheckCircle, Clock3, History, XCircle } from "lucide-react";
+import UndoFinalizeButton from "./UndoFinalizeButton";
 
 
 export default async function BookingHistoryPage() {
@@ -38,6 +39,7 @@ export default async function BookingHistoryPage() {
           <div className="block md:hidden divide-y divide-slate-100">
             {history.map((item) => {
               const isPending = item.status === "PENDING";
+              const isCompleted = item.status === "COMPLETED";
               const isFreelance = item.classId === "freelance";
               return (
                 <div key={item.id} className="p-4 flex flex-col gap-3">
@@ -71,6 +73,12 @@ export default async function BookingHistoryPage() {
                       </div>
                     )}
                   </div>
+
+                  {isCompleted && (
+                    <div className="pt-2 border-t border-slate-100">
+                      <UndoFinalizeButton sessionId={item.id} />
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -86,11 +94,13 @@ export default async function BookingHistoryPage() {
                   <th className="p-4 font-bold">Ngày dạy</th>
                   <th className="p-4 font-bold">Thời gian</th>
                   <th className="p-4 font-bold text-right">Trạng thái</th>
+                  <th className="p-4 font-bold text-right">Hành động</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {history.map((item) => {
                   const isPending = item.status === "PENDING";
+                  const isCompleted = item.status === "COMPLETED";
                   const isFreelance = item.classId === "freelance";
                   return (
                     <tr key={item.id} className="hover:bg-slate-50/50 transition-colors">
@@ -160,6 +170,9 @@ export default async function BookingHistoryPage() {
                             </div>
                           );
                         })()}
+                      </td>
+                      <td className="p-4 text-right">
+                        {isCompleted ? <UndoFinalizeButton sessionId={item.id} /> : <span className="text-xs text-slate-400">-</span>}
                       </td>
                     </tr>
                   );

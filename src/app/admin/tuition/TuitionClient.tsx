@@ -137,14 +137,14 @@ export default function TuitionClient({
   };
   const studentsWithLowSessions = useMemo(() => {
     return students.filter((s) =>
-      s.enrolledCourses.some((c) => c.remainingSessions <= 2 || c.pendingInvoices.length > 0) ||
+      s.enrolledCourses.some((c) => c.remainingSessions <= 1 || c.pendingInvoices.length > 0) ||
       (s.allPendingInvoices && s.allPendingInvoices.length > 0)
     );
   }, [students]);
 
   const rawPaidStudents = useMemo(() => {
     return students.filter((s) =>
-      !s.enrolledCourses.some((c) => c.remainingSessions <= 2 || c.pendingInvoices.length > 0) &&
+      !s.enrolledCourses.some((c) => c.remainingSessions <= 1 || c.pendingInvoices.length > 0) &&
       (!s.allPendingInvoices || s.allPendingInvoices.length === 0)
     );
   }, [students]);
@@ -606,7 +606,7 @@ _Tin nhắn được thông báo tự động, phụ huynh có thể trao đổi
                 {type === "WARNING" ? (
                   <>
                     {student.enrolledCourses
-                      .filter((c) => c.remainingSessions <= 2)
+                      .filter((c) => c.remainingSessions <= 1)
                       .map((c) => (
                         <div key={c.enrollmentId} className="flex gap-1 flex-wrap">
                           <span

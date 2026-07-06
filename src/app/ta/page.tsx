@@ -29,7 +29,14 @@ export default async function ClassRosterPage({
 
   const sessionInfo = await prisma.classSession.findUnique({
     where: { id: sessionId },
-    include: { class: true, teacher: true }
+    include: { 
+      class: {
+        include: {
+          teachers: { include: { teacher: true } }
+        }
+      }, 
+      teacher: true 
+    }
   });
 
   if (!sessionInfo) {
@@ -113,7 +120,9 @@ export default async function ClassRosterPage({
       sessionInfo={{
         teacherId: sessionInfo.teacherId, // ✅ Bổ sung ID của giáo viên vào đây
         className: sessionInfo.class?.name || "Lớp Tự Do",
-        teacherName: sessionInfo.teacher.fullName,
+        teacherName: sessionInfo.class?.teachers 
+          ? sessionInfo.class.teachers.map(t => t.teacher.fullName).join(", ")
+          : sessionInfo.teacher.fullName,
         date: sessionInfo.date.toISOString(),
         status: sessionInfo.status,
         isAttendanceSubmitted: sessionInfo.isAttendanceSubmitted,

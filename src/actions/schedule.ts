@@ -278,15 +278,23 @@ export async function getTodayQuickAttendance() {
 
   const userId = session.user.id;
   
-  // Lấy ngày hôm nay
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const tomorrow = new Date(today);
-  tomorrow.setDate(tomorrow.getDate() + 1);
+  // Lấy ngày hôm nay (fix lỗi timezone với Prisma @db.Date)
+  // Prisma sẽ lấy phần yyyy-mm-dd theo chuẩn UTC của object Date truyền vào.
+  // Do đó ta cần tạo một object Date có ngày UTC trùng với ngày Local hiện tại.
+  const now = new Date();
+  const yyyy = now.getFullYear();
+  const mm = now.getMonth();
+  const dd = now.getDate();
+  
+  const today = new Date(Date.UTC(yyyy, mm, dd, 0, 0, 0, 0));
+  const tomorrow = new Date(Date.UTC(yyyy, mm, dd + 1, 0, 0, 0, 0));
 
   const sessions = await prisma.classSession.findMany({
     where: {
-      teacherId: userId,
+      OR: [
+        { teacherId: userId },
+        { class: { teachers: { some: { teacherId: userId } } } }
+      ],
       date: {
         gte: today,
         lt: tomorrow

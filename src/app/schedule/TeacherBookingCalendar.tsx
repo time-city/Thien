@@ -190,8 +190,11 @@ export default function TeacherBookingCalendar({
   const handleSelectEvent = useCallback(
     (event: CalendarEvent) => {
       const s = event.resource as ScheduleItemData;
-      // Chỉ cho phép giáo viên thao tác trên ca dạy của chính mình
-      if (s.teacherId !== teacherId) {
+      
+      const isMine = s.teacherId === teacherId || (!!s.classId && classes.some(c => c.id === s.classId));
+
+      // Chỉ cho phép giáo viên thao tác trên ca dạy của chính mình hoặc ca của lớp mình
+      if (!isMine) {
         toast.warning("Ca học này đã có người đăng ký.");
         return;
       }
@@ -203,7 +206,7 @@ export default function TeacherBookingCalendar({
 
       if (s.classId) {
         // Nếu là lớp học chính thức -> Đi đến trang điểm danh
-        if (s.status === "SCHEDULED") {
+        if (s.status === "SCHEDULED" || s.status === "COMPLETED") {
           router.push(`/ta?classId=${s.classId}&sessionId=${s.id}`);
         }
       } else {
@@ -211,7 +214,7 @@ export default function TeacherBookingCalendar({
         toast.info("Ca thuê phòng tự do không có tính năng điểm danh.");
       }
     },
-    [teacherId, router]
+    [teacherId, router, classes]
   );
 
   const events: CalendarEvent[] = useMemo(() => {
@@ -323,7 +326,8 @@ export default function TeacherBookingCalendar({
                   },
                   event: ({ event }: any) => {
                     const s = event.resource as ScheduleItemData;
-                    const isMine = s.teacherId === teacherId;
+                    const isMine = s.teacherId === teacherId || (!!s.classId && classes.some(c => c.id === s.classId));
+                    const isOwner = s.teacherId === teacherId;
 
                     return (
                       <div className="w-full h-full flex flex-col relative group pr-4 select-none break-words text-left">
@@ -333,7 +337,7 @@ export default function TeacherBookingCalendar({
                         </div>
 
                         {/* Hiện icon Dấu X để xin huỷ ca học CỦA MÌNH (Chỉ áp dụng cho thuê phòng tự do) */}
-                        {isMine && !s.classId && s.status !== "CANCELLED" && s.status !== "REJECTED" && !s.isCancelRequested && (
+                        {isOwner && !s.classId && s.status !== "CANCELLED" && s.status !== "REJECTED" && !s.isCancelRequested && (
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
@@ -354,7 +358,7 @@ export default function TeacherBookingCalendar({
                 // CSS BO VIỀN NHƯ GOOGLE CALENDAR
                 eventPropGetter={(event: CalendarEvent) => {
                   const s = event.resource as ScheduleItemData;
-                  const isMine = s.teacherId === teacherId;
+                  const isMine = s.teacherId === teacherId || (!!s.classId && classes.some(c => c.id === s.classId));
 
                   // Style cho Lớp Của Người Khác (Làm xám, mờ đi)
                   if (!isMine) {

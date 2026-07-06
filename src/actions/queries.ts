@@ -500,7 +500,12 @@ export type ScheduleItemData = {
 export async function getSchedule(roomId?: string, teacherId?: string, status?: string): Promise<ScheduleItemData[]> {
   const sessions = await prisma.classSession.findMany({
     where: {
-      ...(teacherId ? { teacherId } : {}),
+      ...(teacherId ? {
+        OR: [
+          { teacherId },
+          { class: { teachers: { some: { teacherId } } } }
+        ]
+      } : {}),
       ...(roomId ? { roomId } : {}),
       ...(status ? { status: status as SessionStatus } : { status: { not: "CANCELLED" } }),
     },

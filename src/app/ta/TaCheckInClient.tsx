@@ -170,13 +170,13 @@ export default function TaCheckInClient({
       return;
     }
 
-    if (!canFinalize) {
-      if (!allAssessed) {
-        const unassessed = studentsState.filter((s) => !s.attendance || !s.homework);
-        toast.error(`Vui lòng điểm danh và đánh giá bài tập toàn bộ học sinh trên trang này trước khi chốt ca! (Còn ${unassessed.length} bạn chưa đánh giá xong)`);
-      } else {
-        toast.error("Vui lòng đánh giá toàn bộ học sinh ở các trang còn lại trước khi chốt ca!");
-      }
+    if (!allAssessed) {
+      const unassessed = studentsState.filter((s) => {
+        if (!s.attendance) return true;
+        if (s.attendance === "EXCUSED" || s.attendance === "UNEXCUSED") return false;
+        return !s.homework;
+      });
+      toast.error(`Vui lòng điểm danh và đánh giá bài tập (với HS có mặt) toàn bộ học sinh trên trang này trước khi chốt ca! (Còn ${unassessed.length} bạn chưa xong)`);
       return;
     }
 
@@ -250,7 +250,13 @@ export default function TaCheckInClient({
   };
 
   // Kiểm tra xem đã điểm danh và đánh giá bài tập đủ 100% học sinh trên màn hình này chưa
-  const allAssessed = studentsState.length > 0 && studentsState.every((s) => s.attendance && s.homework);
+  const allAssessed = studentsState.length > 0 && studentsState.every((s) => {
+    if (!s.attendance) return false;
+    // Nếu học sinh vắng (có phép/không phép), không bắt buộc đánh giá bài tập
+    if (s.attendance === "EXCUSED" || s.attendance === "UNEXCUSED") return true;
+    // Nếu có mặt/đi trễ thì bắt buộc phải có đánh giá bài tập
+    return !!s.homework;
+  });
   const isFinalized = sessionInfo.isAttendanceSubmitted || sessionInfo.status === "COMPLETED";
   const canFinalize = !!sessionInfo.canFinalize && allAssessed;
 

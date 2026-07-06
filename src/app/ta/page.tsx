@@ -64,7 +64,7 @@ export default async function ClassRosterPage({
   const assessedStudentsCount = isFreelance ? 0 : await prisma.attendanceLog.count({
     where: { classSessionId: sessionId },
   });
-  const canFinalizeSession = isFreelance ? true : totalStudents > 0 && assessedStudentsCount === totalStudents;
+  const canFinalizeSession = isFreelance ? true : totalStudents > 0 && assessedStudentsCount >= totalStudents;
 
   console.log("\n================ DEBUG PHÂN TRANG ================");
   console.log("1. Param 'page' lấy từ URL:", page);

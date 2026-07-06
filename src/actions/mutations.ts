@@ -1164,20 +1164,16 @@ type AttendanceInput = {
 export async function submitAttendanceAndCalculateFinance(
   classSessionId: string,
   teacherId: string,
-  attendanceData: AttendanceInput[]
+  _attendanceData: any[] // Bỏ qua dữ liệu từ client để tránh lỗi phân trang
 ) {
   try {
-    if (!attendanceData?.length) {
-      return { success: false, error: "attendanceData rỗng" };
-    }
-
     const sessionInfo = await prisma.classSession.findUnique({
       where: { id: classSessionId },
       include: { class: true },
     });
 
     if (!sessionInfo) {
-      return { success: false, error: "Không tìm thấy classSession" };
+      return { success: false, error: "Không tìm thấy ca học" };
     }
 
     // Báo lỗi nếu session đã được chốt
@@ -1186,25 +1182,36 @@ export async function submitAttendanceAndCalculateFinance(
     }
 
     const classId = sessionInfo.classId;
-    const roomFee = 0; // Lớp trung tâm không tính phí phòng
-    const now = new Date();
-
-    const studentIds = attendanceData.map((r) => r.studentId);
-
     if (!classId) {
-      throw new Error("Lớp tự do (Freelance) không có danh sách học sinh để điểm danh.");
+      throw new Error("Lớp tự do (Freelance) không có danh sách học sinh để chốt ca.");
     }
 
-    const expectedStudentCount = await prisma.enrollment.count({
+    // Lấy danh sách học sinh đang học
+    const enrollments = await prisma.enrollment.findMany({
       where: { classId, status: "ACTIVE" },
+      include: { student: true }
     });
 
-    if (attendanceData.length !== expectedStudentCount) {
+    // Lấy danh sách học sinh đã được đánh giá từ DB
+    const attendanceLogs = await prisma.attendanceLog.findMany({
+      where: { classSessionId }
+    });
+
+    // Kiểm tra xem có học sinh nào thiếu không
+    const assessedStudentIds = new Set(attendanceLogs.map(log => log.studentId));
+    const missingStudents = enrollments.filter(e => !assessedStudentIds.has(e.studentId));
+
+    if (missingStudents.length > 0) {
+      const missingNames = missingStudents.map(m => m.student.fullName).join(", ");
       return {
         success: false,
-        error: "Vui lòng đánh giá toàn bộ học sinh trong tất cả các trang trước khi chốt ca",
+        error: `Vui lòng đánh giá toàn bộ học sinh trước khi chốt ca. Còn ${missingStudents.length} bạn chưa đánh giá: ${missingNames}`,
       };
     }
+
+    const roomFee = 0; // Lớp trung tâm không tính phí phòng
+    const now = new Date();
+    const studentIds = attendanceLogs.map((r) => r.studentId);
 
     let salaryCalculated = 0;
     let netIncome = 0;
@@ -1230,20 +1237,8 @@ export async function submitAttendanceAndCalculateFinance(
       // ==========================================
       // BƯỚC 2: GHI NHẬN ĐIỂM DANH & CHỐT CA
       // ==========================================
-      // Xóa các log cũ (nếu có do giáo viên đã bấm lưu lẻ từng bạn trước đó) để tránh trùng lặp
-      await tx.attendanceLog.deleteMany({
-        where: { classSessionId }
-      });
-
-      await tx.attendanceLog.createMany({
-        data: attendanceData.map((row) => ({
-          classSessionId,
-          studentId: row.studentId,
-          attendanceStatus: row.attendanceStatus,
-          homeworkStatus: row.homeworkStatus,
-          note: row.note,
-        })),
-      });
+      // Dữ liệu đã được lưu lẻ từng bạn vào DB thông qua saveStudentEvaluation
+      // Nên ở đây ta không cần xóa và tạo lại nữa, chỉ cần cập nhật trạng thái của Session
 
       const updatedSession = await tx.classSession.updateMany({
         where: { id: classSessionId, isAttendanceSubmitted: false },

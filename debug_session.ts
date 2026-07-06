@@ -1,23 +1,19 @@
-import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { prisma } from "./src/lib/prisma";
 
-export async function GET() {
+async function main() {
   const sessions = await prisma.classSession.findMany({
     where: {
       class: { name: { contains: "Hóa 9 NTĐ" } }
     },
-    orderBy: { date: 'desc' },
     include: {
       class: true
     }
   });
+  console.log("Found sessions:", sessions.map(s => ({ id: s.id, date: s.date, status: s.status })));
   
   if (sessions.length > 0) {
-    const session = sessions[0];
-    const sId = session.id;
-    const cId = session.classId;
-    
-    if (!cId) return NextResponse.json({ error: "No classId" });
+    const sId = sessions[sessions.length - 1].id;
+    const cId = sessions[sessions.length - 1].classId;
     
     const totalStudents = await prisma.enrollment.count({
       where: { classId: cId, status: "ACTIVE" }
@@ -27,6 +23,11 @@ export async function GET() {
       where: { classSessionId: sId }
     });
     
+    console.log("For latest session:");
+    console.log("totalStudents (ACTIVE enrollments):", totalStudents);
+    console.log("assessedStudentsCount (AttendanceLogs):", assessedStudentsCount);
+    
+    // Which students are enrolled but NOT assessed?
     const enrolled = await prisma.enrollment.findMany({
       where: { classId: cId, status: "ACTIVE" },
       select: { studentId: true, student: { select: { fullName: true } } }
@@ -39,11 +40,7 @@ export async function GET() {
     const assessedIds = assessed.map(a => a.studentId);
     const missing = enrolled.filter(e => !assessedIds.includes(e.studentId));
     
-    return NextResponse.json({
-      totalStudents,
-      assessedStudentsCount,
-      missing: missing.map(m => m.student?.fullName)
-    });
+    console.log("Missing students:", missing.map(m => m.student.fullName));
   }
-  return NextResponse.json({ error: "No sessions found" });
 }
+main();

@@ -67,7 +67,7 @@ export async function processStudentPayment(
   transactionRef?: string
 ): Promise<{ success: boolean; message?: string }> {
   try {
-    if (amountPaid <= 0) return { success: false, message: "Số tiền thanh toán phải lớn hơn 0" };
+    if (amountPaid < 0) return { success: false, message: "Số tiền thanh toán không được âm" };
 
     // Tự động sinh hóa đơn cho những lớp cạn buổi trước khi đập tiền vào
     await autoCreateInvoices(studentId);
@@ -95,9 +95,51 @@ export async function processStudentPayment(
       let itemIndex = 0;
 
       for (const invoice of pendingInvoices) {
+        const debtOfThisInvoice = invoice.expectedAmount - invoice.amountPaid;
+
+        // Xử lý riêng trường hợp hóa đơn 0đ (Học sinh được free hoặc áp voucher 100%)
+        if (debtOfThisInvoice <= 0) {
+          // Cập nhật hóa đơn
+          await tx.invoice.update({
+            where: { id: invoice.id },
+            data: {
+              status: "PAID",
+              transactionCode: tRef
+            }
+          });
+
+          // Xử lý Enrollment (cộng buổi học)
+          if (invoice.enrollment) {
+            const trEnrollment = invoice.enrollment;
+
+            // Ghi nhận PaymentHistory cho classId này (0đ)
+            await tx.paymentHistory.create({
+              data: {
+                studentId,
+                classId: trEnrollment.classId,
+                amount: 0,
+                paymentMethod,
+                status: "SUCCESS",
+                transactionCode: `${tRef}-${itemIndex++}`,
+                voucherRef: trEnrollment.currentVoucher // Tham chiếu phiếu thu
+              }
+            });
+
+            // Cộng buổi học
+            await tx.enrollment.update({
+              where: { id: trEnrollment.id },
+              data: {
+                feeStatus: "PAID",
+                remainingSessions: { increment: trEnrollment.class.sessionsPerPackage },
+                currentVoucher: { increment: 1 }
+              }
+            });
+          }
+          continue; // Xong hóa đơn 0đ, nhảy qua hóa đơn tiếp theo luôn
+        }
+
         if (remainingCash <= 0) break;
 
-        const debtOfThisInvoice = invoice.expectedAmount - invoice.amountPaid;
         const payAmount = Math.min(remainingCash, debtOfThisInvoice);
 
         if (payAmount > 0) {

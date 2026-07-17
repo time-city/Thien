@@ -450,8 +450,8 @@ _Phụ huynh đã nộp nhưng hệ thống chưa cập nhật, vui lòng nhắn
   };
 
   const handlePayCash = async () => {
-    const amount = Number(cashAmount);
-    if (isNaN(amount) || amount <= 0) return toast.error("Số tiền không hợp lệ");
+    const amount = cashAmount === "" ? 0 : Number(cashAmount);
+    if (isNaN(amount) || amount < 0 || (amount === 0 && finalPrice > 0)) return toast.error("Số tiền không hợp lệ");
 
     setIsProcessing(true);
     try {
@@ -471,8 +471,8 @@ _Phụ huynh đã nộp nhưng hệ thống chưa cập nhật, vui lòng nhắn
   };
 
   const handlePayTransfer = async () => {
-    const amount = Number(transferAmount);
-    if (isNaN(amount) || amount <= 0) return toast.error("Số tiền không hợp lệ");
+    const amount = transferAmount === "" ? 0 : Number(transferAmount);
+    if (isNaN(amount) || amount < 0 || (amount === 0 && finalPrice > 0)) return toast.error("Số tiền không hợp lệ");
 
     setIsProcessingTransfer(true);
     try {
@@ -578,7 +578,7 @@ _Phụ huynh đã nộp nhưng hệ thống chưa cập nhật, vui lòng nhắn
                 />
                 <button
                   onClick={handlePayCash}
-                  disabled={isProcessing || !cashAmount || loading}
+                  disabled={isProcessing || loading || (finalPrice > 0 && !cashAmount)}
                   className="h-8 md:h-10 px-3 md:px-4 whitespace-nowrap w-fit bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-md md:rounded-lg font-bold text-[10px] md:text-sm transition-colors flex items-center justify-center"
                 >
                   {isProcessing ? <Loader2 size={14} className="animate-spin md:w-4 md:h-4" /> : "Xác nhận"}
@@ -597,7 +597,7 @@ _Phụ huynh đã nộp nhưng hệ thống chưa cập nhật, vui lòng nhắn
                 />
                 <button
                   onClick={handlePayTransfer}
-                  disabled={isProcessingTransfer || !transferAmount || loading}
+                  disabled={isProcessingTransfer || loading || (finalPrice > 0 && !transferAmount)}
                   className="h-8 md:h-10 px-3 md:px-4 whitespace-nowrap w-fit bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-md md:rounded-lg font-bold text-[10px] md:text-sm transition-colors flex items-center justify-center"
                 >
                   {isProcessingTransfer ? <Loader2 size={14} className="animate-spin md:w-4 md:h-4" /> : "Xác nhận"}

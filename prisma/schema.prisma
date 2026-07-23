@@ -310,7 +310,7 @@ model AttendanceLog {
   id               String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   classSessionId   String           @db.Uuid
   studentId        String           @db.Uuid
-  attendanceStatus AttendanceStatus
+  attendanceStatus AttendanceStatus?
   homeworkStatus   HomeworkStatus?
   note             String?
   isReportSent     Boolean          @default(false)

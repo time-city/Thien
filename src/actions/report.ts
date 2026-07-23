@@ -15,7 +15,7 @@ export type StudentCourseReport = {
     date: Date;
     startTime: Date;
     endTime: Date;
-    attendanceStatus: string;
+    attendanceStatus: string | null;
     homeworkStatus: string | null;
     note: string | null;
     teacherName: string;
@@ -110,7 +110,7 @@ export type StudentCombinedReport = {
     date: Date;
     startTime: Date;
     endTime: Date;
-    attendanceStatus: string;
+    attendanceStatus: string | null;
     homeworkStatus: string | null;
     note: string | null;
     teacherName: string;

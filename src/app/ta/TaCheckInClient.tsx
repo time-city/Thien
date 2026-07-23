@@ -87,14 +87,20 @@ export default function TaCheckInClient({
     setStudentsState(prev => prev.map(st => st.id === id ? { ...st, [field]: newValue } : st));
     
     try {
-      await saveStudentEvaluation({
+      const res = await saveStudentEvaluation({
         classSessionId: sessionId,
         studentId: id,
         attendanceStatus: field === 'attendance' ? (newValue as any) : (student.attendance as any),
         homeworkStatus: field === 'homework' ? (newValue as any) : (student.homework as any),
         note: student.note,
       });
+      if (!res.success) {
+        // Hoàn tác UI nếu server báo lỗi
+        setStudentsState(prev => prev.map(st => st.id === id ? { ...st, [field]: student[field] } : st));
+        toast.error(res.error || "Lỗi khi cập nhật nhanh");
+      }
     } catch (err) {
+      setStudentsState(prev => prev.map(st => st.id === id ? { ...st, [field]: student[field] } : st));
       toast.error("Lỗi khi cập nhật nhanh");
     }
   };
@@ -147,8 +153,7 @@ export default function TaCheckInClient({
       if (res.success) {
         setStudentsState(prev => prev.map(st => ({ 
           ...st, 
-          homework: 'GOOD',
-          attendance: st.attendance || 'PRESENT' // Do server action tự đánh 'PRESENT' nếu chưa có log
+          homework: 'GOOD'
         })));
         toast.success("Đã đánh giá Đạt bài tập cho tất cả học sinh trong lớp.");
       } else {
@@ -249,13 +254,9 @@ export default function TaCheckInClient({
     router.push(`${pathname}?classId=${classId}&sessionId=${sessionId}&page=${newPage}`);
   };
 
-  // Kiểm tra xem đã điểm danh và đánh giá bài tập đủ 100% học sinh trên màn hình này chưa
+  // Kiểm tra xem đã điểm danh đủ 100% học sinh trên màn hình này chưa (bài tập là tùy chọn)
   const allAssessed = studentsState.length > 0 && studentsState.every((s) => {
-    if (!s.attendance) return false;
-    // Nếu học sinh vắng (có phép/không phép), không bắt buộc đánh giá bài tập
-    if (s.attendance === "EXCUSED" || s.attendance === "UNEXCUSED") return true;
-    // Nếu có mặt/đi trễ thì bắt buộc phải có đánh giá bài tập
-    return !!s.homework;
+    return !!s.attendance;
   });
   const isFinalized = sessionInfo.isAttendanceSubmitted || sessionInfo.status === "COMPLETED";
   const canFinalize = !!sessionInfo.canFinalize && allAssessed;

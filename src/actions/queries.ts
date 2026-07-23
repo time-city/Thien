@@ -378,7 +378,7 @@ export async function fetchClassDetailsForView(classId: string) {
 export type SessionLogData = {
   id: string;
   date: Date;
-  attendanceStatus: AttendanceStatus;
+  attendanceStatus: AttendanceStatus | null;
   homeworkStatus: HomeworkStatus | null;
   note: string | null;
   classId: string | null;

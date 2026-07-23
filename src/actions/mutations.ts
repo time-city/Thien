@@ -619,7 +619,7 @@ export async function deleteStudentByTeacher(id: string) {
 export async function saveStudentEvaluation(data: {
   classSessionId: string;
   studentId: string;
-  attendanceStatus: "PRESENT" | "LATE" | "EXCUSED" | "UNEXCUSED";
+  attendanceStatus?: "PRESENT" | "LATE" | "EXCUSED" | "UNEXCUSED" | null;
   homeworkStatus?: "GOOD" | "DONE" | "NOT_DONE" | null;
   note?: string | null;
 }) {
@@ -654,9 +654,9 @@ export async function saveStudentEvaluation(data: {
     revalidatePath("/schedule");
 
     return { success: true };
-  } catch (error) {
+  } catch (error: any) {
     console.error("saveStudentEvaluation error:", error);
-    return { success: false, error: "Lỗi hệ thống" };
+    return { success: false, error: error.message || "Lỗi hệ thống" };
   }
 }
 
@@ -759,7 +759,6 @@ export async function markAllHomeworkGoodAction(classId: string, sessionId: stri
         data: toCreateIds.map(id => ({
           classSessionId: sessionId,
           studentId: id,
-          attendanceStatus: "PRESENT",
           homeworkStatus: "GOOD"
         }))
       });
@@ -1197,8 +1196,9 @@ export async function submitAttendanceAndCalculateFinance(
       where: { classSessionId }
     });
 
-    // Kiểm tra xem có học sinh nào thiếu không
-    const assessedStudentIds = new Set(attendanceLogs.map(log => log.studentId));
+    // Kiểm tra xem có học sinh nào thiếu không (phải có attendanceStatus khác null)
+    const validLogs = attendanceLogs.filter(log => log.attendanceStatus !== null);
+    const assessedStudentIds = new Set(validLogs.map(log => log.studentId));
     const missingStudents = enrollments.filter(e => !assessedStudentIds.has(e.studentId));
 
     if (missingStudents.length > 0) {

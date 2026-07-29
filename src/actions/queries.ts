@@ -104,7 +104,7 @@ export type TuitionStudentData = {
     sessionsPerPackage: number;
     pendingInvoices: { id: string; status: string; expectedAmount: number; amountPaid: number }[];
   }[];
-  allPendingInvoices?: { id: string; status: string; expectedAmount: number; amountPaid: number; isDebt: boolean }[];
+  allPendingInvoices?: { id: string; status: string; expectedAmount: number; amountPaid: number }[];
   hasUnsentReports?: boolean;
   hasLogs?: boolean;
   lastReportedAt?: Date | null;
@@ -119,18 +119,25 @@ export async function getTuitionData(): Promise<TuitionStudentData[]> {
             not: "DROPPED"
           }
         },
-        include: { 
+        include: {
           class: true,
           invoices: {
             where: {
-              status: { in: ["PENDING", "UNDERPAID"] }
+              status: { in: ["PENDING"] }
             }
           }
         }
       },
       invoices: {
         where: {
-          status: { in: ["PENDING", "UNDERPAID"] }
+          status: { in: ["PENDING"] }
+        },
+        include: {
+          enrollment: {
+            include: {
+              class: true
+            }
+          }
         }
       },
       attendanceLogs: {
@@ -150,12 +157,12 @@ export async function getTuitionData(): Promise<TuitionStudentData[]> {
       status: inv.status,
       expectedAmount: inv.expectedAmount,
       amountPaid: inv.amountPaid,
-      isDebt: inv.isDebt
+      className: inv.enrollment?.class?.name || "Thu Hóa Đơn Lẻ"
     })),
     hasLogs: s.attendanceLogs && s.attendanceLogs.length > 0,
     hasUnsentReports: s.attendanceLogs && s.attendanceLogs.some(log => !log.isReportSent),
-    lastReportedAt: (s.attendanceLogs && s.attendanceLogs.filter(l => l.isReportSent && l.reportedAt).length > 0) 
-      ? s.attendanceLogs.filter(l => l.isReportSent && l.reportedAt).sort((a, b) => b.reportedAt!.getTime() - a.reportedAt!.getTime())[0].reportedAt 
+    lastReportedAt: (s.attendanceLogs && s.attendanceLogs.filter(l => l.isReportSent && l.reportedAt).length > 0)
+      ? s.attendanceLogs.filter(l => l.isReportSent && l.reportedAt).sort((a, b) => b.reportedAt!.getTime() - a.reportedAt!.getTime())[0].reportedAt
       : null,
     enrolledCourses: s.enrollments.map(e => ({
       enrollmentId: e.id,
@@ -268,7 +275,7 @@ export async function getAdminTuitionHistory(): Promise<TuitionHistoryItem[]> {
       paymentMethod: "BANK_TRANSFER",
       transactionCode: inv.transactionCode,
       studentName: inv.student?.fullName || "Không xác định",
-      className: inv.enrollment?.class?.name || (inv.isDebt ? "Thu Nợ" : "Thu Tổng Hợp"),
+      className: inv.enrollment?.class?.name || "Thu Tổng Hợp",
       isInvoice: true,
     })),
     ...histories.map((h: any) => ({
@@ -763,8 +770,8 @@ export async function getTeachersForFinance(month?: number, year?: number): Prom
     teachers.map(async (t) => {
       // 1. Tổng phí phòng CHƯA THANH TOÁN TRONG THÁNG
       const roomFeeAggr = await prisma.roomRentalLog.aggregate({
-        where: { 
-          teacherId: t.id, 
+        where: {
+          teacherId: t.id,
           status: "PENDING",
           classSession: { date: { gte: startDate, lte: endDate } }
         },

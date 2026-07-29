@@ -7,6 +7,7 @@ export interface StudentTarget {
   attendanceLogId: string;
   phone: string;
   name: string;
+  studentId?: string; // Optional, dùng để log vào DB
 }
 
 interface Props {
@@ -157,11 +158,49 @@ export default function ZaloBulkReportSender({ selectedStudents }: Props) {
         if (res.ok) {
           setSendResults(prev => ({ ...prev, [student.phone]: 'success' }));
           await markReportAsSent(student.attendanceLogId);
+          // Ghi log thành công
+          fetch('/api/zalobot/log-only', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              phone: student.phone,
+              message: `${messageText} ${student.name}`,
+              messageType: 'ATTENDANCE_REPORT',
+              studentId: student.studentId ?? null,
+              success: true,
+            }),
+          }).catch(() => {});
         } else {
           setSendResults(prev => ({ ...prev, [student.phone]: 'error' }));
+          // Ghi log thất bại
+          fetch('/api/zalobot/log-only', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              phone: student.phone,
+              message: `${messageText} ${student.name}`,
+              messageType: 'ATTENDANCE_REPORT',
+              studentId: student.studentId ?? null,
+              success: false,
+              errorNote: `HTTP ${res.status}`,
+            }),
+          }).catch(() => {});
         }
       } catch (error) {
         setSendResults(prev => ({ ...prev, [student.phone]: 'error' }));
+        // Ghi log lỗi kết nối
+        fetch('/api/zalobot/log-only', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            phone: student.phone,
+            message: `${messageText} ${student.name}`,
+            messageType: 'ATTENDANCE_REPORT',
+            studentId: student.studentId ?? null,
+            success: false,
+            errorNote: 'Lỗi kết nối',
+          }),
+        }).catch(() => {});
       }
       
       currentCount++;

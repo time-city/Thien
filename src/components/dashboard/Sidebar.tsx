@@ -18,7 +18,8 @@ import {
   ReceiptText,
   Wallet,
   Settings2,
-  History
+  History,
+  MessageSquare
 } from "lucide-react";
 
 import { getPendingSessionsCount } from "@/actions/mutations";
@@ -115,9 +116,23 @@ const menuItems: MenuItem[] = [
     section: "Tài chính",
   },
   {
+    title: "Ngoại lệ Học phí",
+    href: "/admin/history/tuition-exceptions",
+    icon: ReceiptText,
+    roles: ["SUPER_ADMIN"],
+    section: "Tài chính",
+  },
+  {
     title: "Lịch sử Lương",
     href: "/admin/history/salary",
     icon: Wallet,
+    roles: ["SUPER_ADMIN"],
+    section: "Tài chính",
+  },
+  {
+    title: "Lịch sử Zalo",
+    href: "/admin/history/zalo",
+    icon: MessageSquare,
     roles: ["SUPER_ADMIN"],
     section: "Tài chính",
   },

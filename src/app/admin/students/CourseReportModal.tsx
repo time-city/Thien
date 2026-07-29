@@ -100,13 +100,12 @@ export default function CourseReportModal({
 
         if (debt <= 0) {
           clearInterval(interval);
-          toast.success("Thanh toán thành công toàn bộ nợ qua mã QR!");
+          toast.success("Thanh toán thành công toàn bộ học phí qua mã QR!");
           onClose(); // Đóng modal tự động
           window.location.reload(); // Refresh toàn trang cho chắc chắn ăn dữ liệu
         } else if (debt < initialDebt) {
-          // Bắt được giao dịch chuyển thiếu tiền (UNDERPAID) -> Xử lý như tiền mặt
-          clearInterval(interval);
-          toast.success(`Đã nhận thanh toán một phần qua mã QR! Còn nợ: ${debt.toLocaleString("vi-VN")} đ`);
+          setInitialDebt(debt);
+          toast.success(`Đã nhận thanh toán một phần qua mã QR! Cần thu thêm: ${debt.toLocaleString("vi-VN")} đ`);
           onClose();
           window.location.reload();
         }
@@ -115,7 +114,9 @@ export default function CourseReportModal({
       }
     }, 3000);
 
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(interval);
+    };
   }, [isOpen, studentId, initialDebt, onClose]);
 
   // Tự động gửi Zalo nếu có cờ autoSend
@@ -240,16 +241,18 @@ export default function CourseReportModal({
 
       const headerTitle = hasLogs ? `Báo cáo học tập${dateStr}.` : "Thông báo đóng học phí.";
 
-      const message = `
+      let message = `
 Nông trại Khoa học tự nhiên kính gửi quý phụ huynh: ***${headerTitle}***
 • Học sinh: ***${studentName}***
-• Lớp đang học: ***${classNames}***
+• Lớp đang học: ***${classNames}***`.trim();
 
-Phụ huynh thanh toán học phí (mã QR hoặc tiền mặt):
+      if (finalPrice > 0) {
+        message += `\n\nPhụ huynh thanh toán học phí (mã QR hoặc tiền mặt):
 • Số tiền: ***${formattedPrice} vnđ***
-• Nội dung chuyển khoản: ***${descStr}***
+• Nội dung chuyển khoản: ***${descStr}***`;
+      }
 
-_Tin nhắn được thông báo tự động, phụ huynh có thể trao đổi thêm qua Zalo._`.trim();
+      message += `\n\n_Tin nhắn được thông báo tự động, phụ huynh có thể trao đổi thêm qua Zalo._`;
 
       // Send Image 1 (Chỉ gửi nếu có dữ liệu học tập)
       if (hasLogs) {
@@ -267,28 +270,30 @@ _Tin nhắn được thông báo tự động, phụ huynh có thể trao đổi
         }
       }
 
-      // Send Image 2 (QR)
-      await new Promise(r => setTimeout(r, 1000));
-      const formData2 = new FormData();
-      formData2.append("target", targetPhone);
-      formData2.append("image", file2);
+      // Send Image 2 (QR) - CHỈ GỬI NẾU CÓ THU TIỀN
+      if (finalPrice > 0) {
+        await new Promise(r => setTimeout(r, 1000));
+        const formData2 = new FormData();
+        formData2.append("target", targetPhone);
+        formData2.append("image", file2);
 
-      const imageRes2 = await fetch("/api/zalobot/send-image", {
-        method: "POST",
-        headers: { "x-api-key": process.env.NEXT_PUBLIC_ZALO_BOT_API_KEY || "" },
-        body: formData2,
-      });
+        const imageRes2 = await fetch("/api/zalobot/send-image", {
+          method: "POST",
+          headers: { "x-api-key": process.env.NEXT_PUBLIC_ZALO_BOT_API_KEY || "" },
+          body: formData2,
+        });
 
-      if (!imageRes2.ok) {
-        const errText = await imageRes2.text().catch(() => "No text");
-        console.error("Zalo Bot Image 2 Error:", imageRes2.status, errText);
-        throw new Error(`Lỗi gửi ảnh 2 (${imageRes2.status}): ${errText.substring(0, 100)}`);
+        if (!imageRes2.ok) {
+          const errText = await imageRes2.text().catch(() => "No text");
+          console.error("Zalo Bot Image 2 Error:", imageRes2.status, errText);
+          throw new Error(`Lỗi gửi ảnh 2 (${imageRes2.status}): ${errText.substring(0, 100)}`);
+        }
       }
 
       // Nghỉ 2 giây để đảm bảo ảnh đã tới nơi rồi mới gửi text
       await new Promise(r => setTimeout(r, 2000));
 
-      const textRes = await fetch("/api/zalobot/send", {
+      const textRes = await fetch("/api/zalobot/send-and-log", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -296,7 +301,9 @@ _Tin nhắn được thông báo tự động, phụ huynh có thể trao đổi
         },
         body: JSON.stringify({
           target: targetPhone,
-          message: message
+          message: message,
+          messageType: "ATTENDANCE_REPORT",
+          studentId: studentId
         }),
       });
 
@@ -351,8 +358,14 @@ _Tin nhắn được thông báo tự động, phụ huynh có thể trao đổi
     const classNamesArray = report.items.filter(i => i.type === "TUITION").map(i => i.className);
     const classNames = classNamesArray.length > 0 ? classNamesArray.join("; ") : "Tổng hợp";
 
-    const message = `***NHẮC BÁO HỌC PHÍ***
-Nông trại Khoa học tự nhiên ***CHƯA NHẬN*** học phí học sinh: ***${studentName}***
+    const isAdvanceBilling = report.items.some(i => i.type === "TUITION" && (i.remainingSessions ?? 0) >= 0);
+    const messageTitle = isAdvanceBilling ? "NHẮC ĐÓNG HỌC PHÍ KỲ TỚI" : "NHẮC BÁO HỌC PHÍ";
+    const messageBody = isAdvanceBilling
+      ? `Nông trại Khoa học tự nhiên thông báo học sinh: ***${studentName}*** đã hết hoặc sắp hết buổi học.`
+      : `Nông trại Khoa học tự nhiên ***CHƯA NHẬN*** học phí học sinh: ***${studentName}***`;
+
+    const message = `***${messageTitle}***
+${messageBody}
 Lớp: ***${classNames}***
 
 _Phụ huynh đã nộp nhưng hệ thống chưa cập nhật, vui lòng nhắn tin xác nhận để được kiểm tra lại tình trạng học phí._`;
@@ -391,25 +404,24 @@ _Phụ huynh đã nộp nhưng hệ thống chưa cập nhật, vui lòng nhắn
       // Nghỉ 2 giây để đảm bảo ảnh đã tới nơi rồi mới gửi text
       await new Promise(r => setTimeout(r, 2000));
 
-      const textRes = await fetch("/api/zalobot/send", {
+      const textRes = await fetch("/api/zalobot/send-and-log", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-api-key": process.env.NEXT_PUBLIC_ZALO_BOT_API_KEY || ""
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           target: report.phoneParent,
-          message: message
+          message: message,
+          messageType: isAdvanceBilling ? "ADVANCE_BILLING" : "TUITION_REMINDER",
+          studentId,
         }),
       });
 
       if (!textRes.ok) {
-        throw new Error("Lỗi khi gửi Text Zalo nhắc nợ");
+        throw new Error("Lỗi khi gửi Text Zalo nhắc học phí");
       }
 
-      toast.success("Đã gửi tin nhắn nhắc nợ và mã QR thành công!");
+      toast.success("Đã gửi tin nhắn nhắc học phí và mã QR thành công!");
     } catch (e: any) {
-      toast.error(e.message || "Lỗi kết nối Zalo");
+      toast.error("Lỗi gửi Zalo. Vui lòng kiểm tra lại Token.");
     } finally {
       styleTag.remove();
       setSendingZalo(false);
@@ -761,7 +773,7 @@ _Phụ huynh đã nộp nhưng hệ thống chưa cập nhật, vui lòng nhắn
                         <div key={idx} className="flex justify-between items-center p-3 border border-slate-100 rounded-lg bg-slate-50/50">
                           <div>
                             <p className="font-bold text-slate-800 text-sm">
-                              {item.type === "TUITION" ? `Học phí lớp: ${item.className} (Phiếu ${item.voucherNumber})` : "Thanh toán nợ cũ (Kỳ trước)"}
+                              {item.type === "TUITION" ? `Học phí lớp: ${item.className} (Phiếu ${item.voucherNumber})` : "Thanh toán tổng hợp"}
                             </p>
                             {item.type === "TUITION" && (
                               <p className="text-xs text-slate-500 mt-0.5">Gia hạn thêm {item.sessionsPerPackage} buổi học</p>

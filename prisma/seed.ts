@@ -119,7 +119,7 @@ async function main() {
       })
       await prisma.invoice.create({
         data: {
-          studentId: student.id, expectedAmount: 100000, amountPaid: 0, status: 'UNDERPAID', isDebt: true,
+          studentId: student.id, expectedAmount: 100000, amountPaid: 0, status: 'PENDING',
           details: [{ type: "DEBT", amount: 100000 }]
         }
       })
@@ -130,7 +130,7 @@ async function main() {
       })
       await prisma.invoice.create({
         data: {
-          studentId: student.id, expectedAmount: 200000, amountPaid: 0, status: 'UNDERPAID', isDebt: true,
+          studentId: student.id, expectedAmount: 200000, amountPaid: 0, status: 'PENDING',
           details: [{ type: "DEBT", amount: 200000 }]
         }
       })
@@ -144,7 +144,7 @@ async function main() {
       await prisma.invoice.create({
         data: {
           enrollmentId: enrollment.id, studentId: student.id, expectedAmount: expectedAmount, amountPaid: expectedAmount,
-          status: 'PAID', transactionCode: `SEPAY-${1000 + i}`,
+          status: "PENDING", transactionCode: `SEPAY-${1000 + i}`,
           details: [{ enrollmentId: enrollment.id, amount: expectedAmount, type: "TUITION" }]
         }
       })

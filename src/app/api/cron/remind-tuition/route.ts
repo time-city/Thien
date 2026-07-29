@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { sendZaloAndLog } from "@/lib/zalo";
 
 export async function GET(request: Request) {
   try {
@@ -8,7 +9,7 @@ export async function GET(request: Request) {
       where: {
         invoices: {
           some: {
-            status: { in: ["PENDING", "UNDERPAID"] }
+            status: "PENDING"
           }
         },
         attendanceLogs: {
@@ -20,7 +21,7 @@ export async function GET(request: Request) {
       },
       include: {
         invoices: {
-          where: { status: { in: ["PENDING", "UNDERPAID"] } },
+          where: { status: "PENDING" },
           include: { enrollment: { include: { class: true } } }
         },
         attendanceLogs: {
@@ -32,7 +33,7 @@ export async function GET(request: Request) {
     });
 
     const now = new Date();
-    const twentyFourHours = 24 * 60 * 60 * 1000; // Để 0 để test luôn
+    const twentyFourHours = 24 * 60 * 60 * 1000;
     let sentCount = 0;
 
     for (const student of studentsWithDebt) {
@@ -56,42 +57,49 @@ export async function GET(request: Request) {
 
         const classNameDisplay = classNames ? classNames : "Tổng hợp / Nợ cũ";
 
-        const message = `***NHẮC BÁO HỌC PHÍ***
-Nông trại Khoa học tự nhiên ***CHƯA NHẬN*** học phí học sinh: ***${student.fullName}***
-Lớp: ***${classNameDisplay}***
+        // Chỉ nhắc khi ĐÚNG BẰNG 0 buổi:
+        // - Âm (<0): Đã nhắc từ lần trước rồi (học lố), không nhắc lặp lại
+        // - Dương (>0): Còn buổi học, chưa cần nhắc
+        // - Bằng 0: Vừa hết phiếu, đây là lúc thích hợp nhất để nhắc đóng kỳ tới
+        const hasZeroSessions = student.invoices.some(
+          inv => inv.enrollment !== null && inv.enrollment.remainingSessions === 0
+        );
 
-_Phụ huynh đã nộp nhưng hệ thống chưa cập nhật, vui lòng nhắn tin xác nhận để được kiểm tra lại tình trạng học phí._`;
+        if (!hasZeroSessions) continue; // Bỏ qua nếu không có enrollment nào đang ở 0 phiếu
+
+        // Gom thông tin lớp + số phiếu để báo cáo rõ ràng
+        const classDetails = student.invoices
+          .filter(inv => inv.enrollment !== null && inv.enrollment.remainingSessions === 0)
+          .map(inv => `${inv.enrollment!.class.name} (0 buổi còn lại)`)
+          .join(", ");
+
+        const message = `***NHẮC ĐÓNG HỌC PHÍ KỲ MỚI***
+Nông trại Khoa học tự nhiên thông báo học sinh: ***${student.fullName}*** đã hết phiếu học.
+Lớp: ***${classDetails || classNameDisplay}***
+Số phiếu hiện tại: ***0***
+
+_Vui lòng đóng học phí cho bé ạ. Kính báo./._`;
+
 
         if (student.phoneParent) {
-          try {
-            // Gọi API Zalo Bot
-            const zaloResponse = await fetch("http://116.118.9.61:8080/send", {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                "x-api-key": process.env.NEXT_PUBLIC_ZALO_BOT_API_KEY || ""
-              },
-              body: JSON.stringify({
-                target: student.phoneParent,
-                message: message
-              })
+          const result = await sendZaloAndLog({
+            phone: student.phoneParent,
+            message,
+            messageType: "ADVANCE_BILLING",
+            studentId: student.id,
+          });
+
+          if (result.success) {
+            console.log(`[Cron] Đã gửi nhắc nợ cho phụ huynh học sinh ${student.fullName} (${student.phoneParent})`);
+            sentCount++;
+
+            // Cập nhật lại thời gian nhắc nợ cuối cùng vào bảng Student
+            await prisma.student.update({
+              where: { id: student.id },
+              data: { lastTuitionRemindAt: now }
             });
-
-            if (zaloResponse.ok) {
-              console.log(`[Cron] Đã gửi nhắc nợ cho phụ huynh học sinh ${student.fullName} (${student.phoneParent})`);
-              sentCount++;
-
-              // Cập nhật lại thời gian nhắc nợ cuối cùng vào bảng Student
-              await prisma.student.update({
-                where: { id: student.id },
-                data: { lastTuitionRemindAt: now }
-              });
-            } else {
-              const errorText = await zaloResponse.text();
-              console.error(`[Cron] Lỗi khi gửi Zalo cho ${student.fullName}. Status: ${zaloResponse.status}, Chi tiết: ${errorText}`);
-            }
-          } catch (zaloError) {
-            console.error(`[Cron] Không thể kết nối Zalo Bot cho ${student.fullName}`, zaloError);
+          } else {
+            console.error(`[Cron] Lỗi khi gửi Zalo cho ${student.fullName}: ${result.errorNote}`);
           }
         }
       }

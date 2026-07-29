@@ -4,22 +4,24 @@ generator client {
 }
 
 datasource db {
-  provider  = "postgresql"
-  schemas   = ["public"]
+  provider = "postgresql"
+  schemas  = ["public"]
 }
 
 // ================= ENUMS =================
 enum Role {
   SUPER_ADMIN
   TEACHER
+
   @@schema("public")
 }
 
 // 🟢 MỚI: Enum cho trạng thái phê duyệt tạo lớp học
 enum ClassStatus {
-  PENDING     // Giáo viên yêu cầu, chờ Admin duyệt
-  APPROVED    // Đã duyệt & đang hoạt động
-  REJECTED    // Bị từ chối
+  PENDING // Giáo viên yêu cầu, chờ Admin duyệt
+  APPROVED // Đã duyệt & đang hoạt động
+  REJECTED // Bị từ chối
+
   @@schema("public")
 }
 
@@ -27,6 +29,7 @@ enum EnrollmentStatus {
   ACTIVE
   PAUSED
   DROPPED
+
   @@schema("public")
 }
 
@@ -34,14 +37,16 @@ enum FeeStatus {
   PAID
   UNPAID
   OVERDUE
+
   @@schema("public")
 }
 
 enum SessionStatus {
-  PENDING       // 🟢 MỚI: Giáo viên xin lịch, chờ duyệt
+  PENDING // 🟢 MỚI: Giáo viên xin lịch, chờ duyệt
   SCHEDULED
   COMPLETED
-    CANCELLED
+  CANCELLED
+
   @@schema("public")
 }
 
@@ -50,6 +55,7 @@ enum AttendanceStatus {
   LATE
   EXCUSED
   UNEXCUSED
+
   @@schema("public")
 }
 
@@ -57,6 +63,7 @@ enum HomeworkStatus {
   GOOD
   DONE
   NOT_DONE
+
   @@schema("public")
 }
 
@@ -64,16 +71,17 @@ enum RentalStatus {
   PENDING
   PAID
   REFUNDED
+
   @@schema("public")
 }
 
 enum InvoiceStatus {
   PENDING
   PAID
-  UNDERPAID
   OVERPAID
   CANCELLED
   MERGED_TO_NEXT
+
   @@schema("public")
 }
 
@@ -81,12 +89,14 @@ enum Gender {
   MALE
   FEMALE
   OTHER
+
   @@schema("public")
 }
 
 enum PaymentMethod {
   BANK_TRANSFER
   CASH
+
   @@schema("public")
 }
 
@@ -94,33 +104,45 @@ enum PaymentStatus {
   SUCCESS
   FAILED
   PENDING
+
   @@schema("public")
 }
 
 enum TransactionStatus {
   PENDING
   MATCHED
+
+  @@schema("public")
+}
+
+enum ZaloMessageType {
+  PAYMENT_CONFIRM // Xác nhận đã nhận thanh toán học phí
+  TUITION_REMINDER // Nhắc nợ học phí (học âm buổi / chưa đóng tiền)
+  ADVANCE_BILLING // Nhắc đóng học phí kỳ mới (sắp hết buổi)
+  ATTENDANCE_REPORT // Báo cáo điểm danh và học tập
+  SALARY_NOTIFY // Thông báo lương / công nợ giáo viên
+
   @@schema("public")
 }
 
 // ================= MODELS =================
 model User {
-  id              String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  username        String          @unique
-  passwordHash    String
-  fullName        String
-  phone           String?
-  role            Role            @default(TEACHER)
-  isActive        Boolean         @default(true)
+  id           String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  username     String  @unique
+  passwordHash String
+  fullName     String
+  phone        String?
+  role         Role    @default(TEACHER)
+  isActive     Boolean @default(true)
 
-  salaryBalance   Float           @default(0)
-  createdAt       DateTime        @default(now())
+  salaryBalance Float    @default(0)
+  createdAt     DateTime @default(now())
 
-  classTeachers   ClassTeacher[]
-  classSessions   ClassSession[]
-  roomRentalLogs  RoomRentalLog[]
-  salaryPayments  SalaryPayment[]
-  createdClasses  Class[]         @relation("ClassCreator") // 🟢 MỚI: Lịch sử các lớp do user này yêu cầu tạo
+  classTeachers  ClassTeacher[]
+  classSessions  ClassSession[]
+  roomRentalLogs RoomRentalLog[]
+  salaryPayments SalaryPayment[]
+  createdClasses Class[]         @relation("ClassCreator") // 🟢 MỚI: Lịch sử các lớp do user này yêu cầu tạo
 
   @@map("users")
   @@schema("public")
@@ -129,11 +151,11 @@ model User {
 model SalaryPayment {
   id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   teacherId   String   @db.Uuid
-  amount      Float    // Số tiền trung tâm ĐÃ THANH TOÁN cho GV
-  note        String?  // Ghi chú (VD: "Thanh toán lương tháng 5", "Ứng trước")
+  amount      Float // Số tiền trung tâm ĐÃ THANH TOÁN cho GV
+  note        String? // Ghi chú (VD: "Thanh toán lương tháng 5", "Ứng trước")
   paymentDate DateTime @default(now())
-  
-  teacher     User     @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+
+  teacher User @relation(fields: [teacherId], references: [id], onDelete: Cascade)
 
   @@map("salary_payments")
   @@schema("public")
@@ -141,39 +163,39 @@ model SalaryPayment {
 
 // 🟢 MỚI: Bảng quản lý phòng học
 model Room {
-  id            String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  name          String         @unique // VD: "Phòng 1", "Phòng 2"
-  capacity      Int?
-  feePerHour    Float          @default(0) // Phí thuê phòng/giờ
-  isActive      Boolean        @default(true)
-  createdAt     DateTime       @default(now())
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name       String   @unique // VD: "Phòng 1", "Phòng 2"
+  capacity   Int?
+  feePerHour Float    @default(0) // Phí thuê phòng/giờ
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
 
-  sessions      ClassSession[]
+  sessions ClassSession[]
 
   @@map("rooms")
   @@schema("public")
 }
 
 model Class {
-  id                 String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  id                 String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   name               String
   category           String
-  pricePerSession    Float            @default(0)
-  sessionsPerPackage Int              @default(12)
-  
-  // 🟢 MỚI: Bổ sung trạng thái duyệt lớp và người tạo
-  status             ClassStatus      @default(APPROVED) 
-  createdById        String?          @db.Uuid           
-  
-  createdAt          DateTime         @default(now())
+  pricePerSession    Float  @default(0)
+  sessionsPerPackage Int    @default(12)
 
-  teachers           ClassTeacher[]
-  enrollments        Enrollment[]
-  sessions           ClassSession[]
-  payments           PaymentHistory[]
-  
+  // 🟢 MỚI: Bổ sung trạng thái duyệt lớp và người tạo
+  status      ClassStatus @default(APPROVED)
+  createdById String?     @db.Uuid
+
+  createdAt DateTime @default(now())
+
+  teachers    ClassTeacher[]
+  enrollments Enrollment[]
+  sessions    ClassSession[]
+  payments    PaymentHistory[]
+
   // 🟢 MỚI: Khóa ngoại liên kết tới người yêu cầu tạo lớp
-  createdBy          User?            @relation("ClassCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  createdBy User? @relation("ClassCreator", fields: [createdById], references: [id], onDelete: SetNull)
 
   @@map("classes")
   @@schema("public")
@@ -186,31 +208,33 @@ model ClassTeacher {
   subModule        String?
   salaryPerSession Float   @default(0) // 🟢 MỚI: Lương cứng mỗi buổi (0 = Lớp Freelance)
 
-  class     Class   @relation(fields: [classId], references: [id], onDelete: Cascade)
-  teacher   User    @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  class   Class @relation(fields: [classId], references: [id], onDelete: Cascade)
+  teacher User  @relation(fields: [teacherId], references: [id], onDelete: Cascade)
 
   @@map("class_teachers")
   @@schema("public")
 }
 
 model Student {
-  id                  String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  id                  String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   fullName            String
-  dob                 DateTime?            @db.Date
+  dob                 DateTime? @db.Date
   gender              Gender?
   school              String?
   phoneStudent        String?
   parentName          String?
   phoneParent         String?
-  qrCodeId            String?              @unique
+  qrCodeId            String?   @unique
   lastTuitionRemindAt DateTime?
-  createdAt           DateTime             @default(now())
+  createdAt           DateTime  @default(now())
 
   enrollments         Enrollment[]
   payments            PaymentHistory[]
   attendanceLogs      AttendanceLog[]
   pendingTransactions PendingTransaction[]
   invoices            Invoice[]
+  zaloMessageLogs     ZaloMessageLog[]
+  tuitionExceptions   TuitionException[]
 
   @@map("students")
   @@schema("public")
@@ -228,9 +252,9 @@ model Enrollment {
   feeStatus         FeeStatus        @default(PAID)
   createdAt         DateTime         @default(now())
 
-  student           Student          @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  class             Class            @relation(fields: [classId], references: [id], onDelete: Cascade)
-  invoices          Invoice[]
+  student  Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  class    Class     @relation(fields: [classId], references: [id], onDelete: Cascade)
+  invoices Invoice[]
 
   @@unique([studentId, classId])
   @@map("enrollments")
@@ -238,21 +262,20 @@ model Enrollment {
 }
 
 model Invoice {
-  id             String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  enrollmentId   String?       @db.Uuid
-  studentId      String        @db.Uuid
-  expectedAmount Int
-  amountPaid     Int           @default(0)
-  status         InvoiceStatus @default(PENDING)
+  id              String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  enrollmentId    String?       @db.Uuid
+  studentId       String        @db.Uuid
+  expectedAmount  Int
+  amountPaid      Int           @default(0)
+  status          InvoiceStatus @default(PENDING)
   transactionCode String?
-  isDebt         Boolean       @default(false)
-  details        Json?         
+  details         Json?
 
-  createdAt      DateTime      @default(now())
-  updatedAt      DateTime      @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  enrollment     Enrollment?   @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
-  student        Student       @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  enrollment Enrollment? @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  student    Student     @relation(fields: [studentId], references: [id], onDelete: Cascade)
 
   @@map("invoices")
   @@schema("public")
@@ -269,9 +292,10 @@ model PaymentHistory {
   status          PaymentStatus @default(SUCCESS)
   transactionCode String?       @unique
   createdAt       DateTime      @default(now())
+  note            String?       // Ghi chú về việc đóng thiếu/dư
 
-  student         Student       @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  class           Class         @relation(fields: [classId], references: [id], onDelete: Cascade)
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  class   Class   @relation(fields: [classId], references: [id], onDelete: Cascade)
 
   @@map("payment_history")
   @@schema("public")
@@ -281,7 +305,7 @@ model ClassSession {
   id                    String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   classId               String?       @db.Uuid // 🟢 CẬP NHẬT: Cho phép null (Lớp Freelance)
   teacherId             String        @db.Uuid
-  roomId                String?       @db.Uuid   // Cho phép xếp phòng học
+  roomId                String?       @db.Uuid // Cho phép xếp phòng học
   date                  DateTime      @db.Date
   startTime             DateTime      @db.Timestamptz
   endTime               DateTime      @db.Timestamptz
@@ -292,12 +316,12 @@ model ClassSession {
   isCancelRequested     Boolean       @default(false)
   cancelReason          String?
 
-  class                 Class?        @relation(fields: [classId], references: [id], onDelete: Cascade)
-  teacher               User          @relation(fields: [teacherId], references: [id], onDelete: Cascade)
-  room                  Room?         @relation(fields: [roomId], references: [id], onDelete: SetNull) // 🟢 MỚI
+  class   Class? @relation(fields: [classId], references: [id], onDelete: Cascade)
+  teacher User   @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  room    Room?  @relation(fields: [roomId], references: [id], onDelete: SetNull) // 🟢 MỚI
 
-  attendanceLogs        AttendanceLog[]
-  roomRentalLogs        RoomRentalLog[]
+  attendanceLogs AttendanceLog[]
+  roomRentalLogs RoomRentalLog[]
 
   // 🟢 ĐÃ SỬA: Bỏ UNIQUE constraint để cho phép các ca CANCELLED tồn tại song song với ca mới
   // @@unique([teacherId, date, slot])
@@ -307,18 +331,18 @@ model ClassSession {
 }
 
 model AttendanceLog {
-  id               String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  classSessionId   String           @db.Uuid
-  studentId        String           @db.Uuid
+  id               String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  classSessionId   String            @db.Uuid
+  studentId        String            @db.Uuid
   attendanceStatus AttendanceStatus?
   homeworkStatus   HomeworkStatus?
   note             String?
-  isReportSent     Boolean          @default(false)
+  isReportSent     Boolean           @default(false)
   reportedAt       DateTime?
-  createdAt        DateTime         @default(now())
+  createdAt        DateTime          @default(now())
 
-  classSession     ClassSession     @relation(fields: [classSessionId], references: [id], onDelete: Cascade)
-  student          Student          @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  classSession ClassSession @relation(fields: [classSessionId], references: [id], onDelete: Cascade)
+  student      Student      @relation(fields: [studentId], references: [id], onDelete: Cascade)
 
   @@unique([classSessionId, studentId])
   @@map("attendance_logs")
@@ -333,8 +357,8 @@ model RoomRentalLog {
   status         RentalStatus @default(PENDING)
   createdAt      DateTime     @default(now())
 
-  teacher        User         @relation(fields: [teacherId], references: [id], onDelete: Cascade)
-  classSession   ClassSession @relation(fields: [classSessionId], references: [id], onDelete: Cascade)
+  teacher      User         @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  classSession ClassSession @relation(fields: [classSessionId], references: [id], onDelete: Cascade)
 
   @@map("room_rental_logs")
   @@schema("public")
@@ -348,7 +372,7 @@ model PendingTransaction {
   studentId       String?           @db.Uuid
   createdAt       DateTime          @default(now())
 
-  student         Student?          @relation(fields: [studentId], references: [id], onDelete: SetNull)
+  student Student? @relation(fields: [studentId], references: [id], onDelete: SetNull)
 
   @@map("pending_transactions")
   @@schema("public")
@@ -358,8 +382,48 @@ model PendingTransaction {
 model SystemSetting {
   id    String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   key   String @unique // VD: "GLOBAL_ROOM_FEE"
-  value String         // Lưu giá trị dạng string
-  
+  value String // Lưu giá trị dạng string
+
   @@map("system_settings")
+  @@schema("public")
+}
+
+// 🟢 MỚI: Bảng lưu lịch sử tin nhắn Zalo đã gửi
+model ZaloMessageLog {
+  id          String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  studentId   String?         @db.Uuid
+  phone       String // Số điện thoại nhận tin
+  messageType ZaloMessageType
+  message     String // Nội dung tin nhắn đã gửi (full text)
+  success     Boolean         @default(true)
+  errorNote   String? // Lý do thất bại nếu có
+  sentAt      DateTime        @default(now())
+
+  student Student? @relation(fields: [studentId], references: [id], onDelete: SetNull)
+
+  @@map("zalo_message_logs")
+  @@schema("public")
+}
+
+enum ExceptionType {
+  UNDERPAID
+  OVERPAID
+
+  @@schema("public")
+}
+
+model TuitionException {
+  id         String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  studentId  String        @db.Uuid
+  amount     Int
+  type       ExceptionType
+  note       String?
+  isResolved Boolean       @default(false)
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@map("tuition_exceptions")
   @@schema("public")
 }

@@ -97,14 +97,14 @@ export default function TuitionClient({
     let processed = [...studentList];
 
     if (filterClass !== "ALL") {
-      processed = processed.filter(s => 
+      processed = processed.filter(s =>
         s.enrolledCourses.some(c => c.className === filterClass)
       );
     }
 
     if (searchTerm) {
       const lowerTerm = searchTerm.toLowerCase();
-      processed = processed.filter(s => 
+      processed = processed.filter(s =>
         (s.fullName && s.fullName.toLowerCase().includes(lowerTerm)) ||
         (s.parentName && s.parentName.toLowerCase().includes(lowerTerm)) ||
         (s.phoneStudent && s.phoneStudent.includes(searchTerm)) ||
@@ -118,10 +118,10 @@ export default function TuitionClient({
           const getFee = (s: TuitionStudentData) => {
             let total = 0;
             s.enrolledCourses.forEach(c => {
-               total += c.pendingInvoices.reduce((acc, inv) => acc + (inv.expectedAmount - inv.amountPaid), 0);
+              total += c.pendingInvoices.reduce((acc, inv) => acc + (inv.expectedAmount - inv.amountPaid), 0);
             });
             if (s.allPendingInvoices) {
-               total += s.allPendingInvoices.reduce((acc, inv) => acc + (inv.expectedAmount - inv.amountPaid), 0);
+              total += s.allPendingInvoices.reduce((acc, inv) => acc + (inv.expectedAmount - inv.amountPaid), 0);
             }
             return total;
           };
@@ -301,54 +301,59 @@ export default function TuitionClient({
 
           const headerTitle = hasLogs ? `Báo cáo học tập${dateStr}.` : "Thông báo đóng học phí.";
 
-          const message = `
+          let message = `
 Nông trại Khoa học tự nhiên kính gửi quý phụ huynh: ***${headerTitle}***
 • Học sinh: ***${data.studentName}***
-• Lớp đang học: ***${classNames}***
+• Lớp đang học: ***${classNames}***`.trim();
 
-Phụ huynh thanh toán học phí (mã QR hoặc tiền mặt):
+          if (data.totalExpectedAmount > 0) {
+            message += `\n\nPhụ huynh thanh toán học phí (mã QR hoặc tiền mặt):
 • Số tiền: ***${formattedPrice} vnđ***
-• Nội dung chuyển khoản: ***${descStr}***
+• Nội dung chuyển khoản: ***${descStr}***`;
+          }
 
-_Tin nhắn được thông báo tự động, phụ huynh có thể trao đổi thêm qua Zalo._`.trim();
+          message += `\n\n_Tin nhắn được thông báo tự động, phụ huynh có thể trao đổi thêm qua Zalo._`;
 
           const targetPhone = data.phoneParent.trim();
-          const formData2 = new FormData();
-          formData2.append("target", targetPhone);
-          formData2.append("image", file2);
 
-          const imageRes2 = await fetch("/api/zalobot/send-image", {
-            method: "POST",
-            headers: {
-              "x-api-key": process.env.NEXT_PUBLIC_ZALO_BOT_API_KEY || ""
-            },
-            body: formData2
-          });
+          // Gửi ảnh 2 (QR) - CHỈ GỬI NẾU CÓ THU TIỀN
+          if (data.totalExpectedAmount > 0) {
+            const formData2 = new FormData();
+            formData2.append("target", targetPhone);
+            formData2.append("image", file2);
 
-          if (!imageRes2.ok) {
-            const errText = await imageRes2.text().catch(() => "No text");
-            console.error("Zalo Bot Image 2 Error:", imageRes2.status, errText);
-            if (errText.includes("500") || errText.includes("400") || imageRes2.status === 500) {
-              toast.error(`Lỗi gửi ảnh học phí: Số điện thoại ${targetPhone} chưa đăng ký Zalo hoặc chặn tin nhắn.`, { duration: 6000 });
-            } else {
-              toast.error(`Lỗi gửi ảnh học phí cho ${data.studentName}`);
+            const imageRes2 = await fetch("/api/zalobot/send-image", {
+              method: "POST",
+              headers: {
+                "x-api-key": process.env.NEXT_PUBLIC_ZALO_BOT_API_KEY || ""
+              },
+              body: formData2
+            });
+
+            if (!imageRes2.ok) {
+              const errText = await imageRes2.text().catch(() => "No text");
+              console.error("Zalo Bot Image 2 Error:", imageRes2.status, errText);
+              if (errText.includes("500") || errText.includes("400") || imageRes2.status === 500) {
+                toast.error(`Lỗi gửi ảnh học phí: Số điện thoại ${targetPhone} chưa đăng ký Zalo hoặc chặn tin nhắn.`, { duration: 6000 });
+              } else {
+                toast.error(`Lỗi gửi ảnh học phí cho ${data.studentName}`);
+              }
+              count++;
+              continue;
             }
-            count++;
-            continue;
           }
 
           // Nghỉ 2 giây để đảm bảo ảnh đã tới nơi rồi mới gửi text
           await new Promise(r => setTimeout(r, 2000));
 
-          const textRes = await fetch("/api/zalobot/send", {
+          const textRes = await fetch("/api/zalobot/send-and-log", {
             method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "x-api-key": process.env.NEXT_PUBLIC_ZALO_BOT_API_KEY || ""
-            },
+            headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               target: targetPhone,
-              message: message
+              message: message,
+              messageType: "ATTENDANCE_REPORT",
+              studentId: studentId,
             }),
           });
 
@@ -481,11 +486,11 @@ _Tin nhắn được thông báo tự động, phụ huynh có thể trao đổi
     setIsSendingZaloDebt(true);
     try {
       await new Promise(r => setTimeout(r, 1000)); // Cần 1 giây để load QR Code VietQR
-      
+
       const isNegative = selectedTeacher.salaryBalance < 0;
       const elementId = "hidden-room-rental-bill";
       const element = document.getElementById(elementId);
-      
+
       if (element) {
         const dataUrl = await toPng(element, {
           cacheBust: true,
@@ -502,7 +507,7 @@ _Tin nhắn được thông báo tự động, phụ huynh có thể trao đổi
         const formData = new FormData();
         formData.append("target", teacherZaloPhone);
         formData.append("image", file);
-        
+
         let msg = "";
         if (isNegative) {
           msg = `Trung tâm gửi mã thanh toán cấn trừ tiền phòng / lương bị âm. Bạn vui lòng quét mã này để thanh toán.\nSố tiền: ${new Intl.NumberFormat("vi-VN").format(Math.abs(selectedTeacher.salaryBalance))}đ\nNội dung CK: HT ${selectedTeacher.phone || teacherZaloPhone || selectedTeacher.username}`;
@@ -518,7 +523,7 @@ _Tin nhắn được thông báo tự động, phụ huynh có thể trao đổi
           },
           body: formData
         });
-        
+
         if (!response.ok) {
           const errText = await response.text().catch(() => "No text");
           if (errText.includes("500") || errText.includes("400")) {
@@ -526,12 +531,25 @@ _Tin nhắn được thông báo tự động, phụ huynh có thể trao đổi
           } else {
             toast.error(`Lỗi gửi Zalo cho ${selectedTeacher.fullName}`);
           }
+          // Ghi log thất bại
+          fetch("/api/zalobot/log-only", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ phone: teacherZaloPhone, message: msg, messageType: "SALARY_NOTIFY", success: false, errorNote: `HTTP ${response.status}` }),
+          }).catch(() => { });
         } else {
           toast.success(`Đã gửi Zalo ${isNegative ? "mã thu tiền" : "báo cáo lương"} cho: ${teacherZaloPhone}`);
+          // Ghi log thành công
+          fetch("/api/zalobot/log-only", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ phone: teacherZaloPhone, message: msg, messageType: "SALARY_NOTIFY", success: true }),
+          }).catch(() => { });
           if (!isNegative) {
             handlePaySalary(); // Tự động xác nhận đã chuyển sau khi gửi Zalo báo cáo
           }
         }
+
       }
     } catch (err) {
       toast.error(`Lỗi tạo ảnh QR hoặc gửi Zalo`);
@@ -590,7 +608,7 @@ _Tin nhắn được thông báo tự động, phụ huynh có thể trao đổi
                 )}
                 {type === "WARNING" && !student.hasLogs && (
                   <span className="bg-blue-100 text-blue-700 text-[9px] md:text-[10px] px-1.5 py-0.5 rounded-full font-bold">
-                    Chỉ nhắc nợ
+                    Chỉ thu học phí
                   </span>
                 )}
               </div>
@@ -599,7 +617,7 @@ _Tin nhắn được thông báo tự động, phụ huynh có thể trao đổi
             <td className="py-2 px-2 md:py-3 md:px-4 hidden sm:table-cell text-[13px] md:text-sm">
               {student.enrolledCourses.length > 0
                 ? student.enrolledCourses.map((c) => c.className).join(", ")
-                : (student.allPendingInvoices?.length ? (student.allPendingInvoices[0].isDebt ? "Nợ Cũ" : "Hóa đơn") : "-")}
+                : (student.allPendingInvoices?.length ? "Hóa đơn" : "-")}
             </td>
             <td className="py-2 px-2 md:py-3 md:px-4">
               <div className="flex flex-wrap gap-1 md:gap-1.5 flex-col">
@@ -687,13 +705,13 @@ _Tin nhắn được thông báo tự động, phụ huynh có thể trao đổi
       {activeTab === "STUDENT" && (
         <div className="space-y-4">
           <div className="flex gap-4 border-b border-slate-200 px-2 md:px-0 mb-4">
-            <button 
+            <button
               onClick={() => setTuitionSubTab("WARNING")}
               className={`py-2 border-b-2 font-bold text-sm transition-colors whitespace-nowrap ${tuitionSubTab === "WARNING" ? "border-amber-500 text-amber-700" : "border-transparent text-slate-500 hover:text-slate-800"}`}
             >
               Cần nhắc nhở / Thu phí ({studentsWithLowSessions.length})
             </button>
-            <button 
+            <button
               onClick={() => setTuitionSubTab("PAID")}
               className={`py-2 border-b-2 font-bold text-sm transition-colors whitespace-nowrap ${tuitionSubTab === "PAID" ? "border-emerald-500 text-emerald-700" : "border-transparent text-slate-500 hover:text-slate-800"}`}
             >
@@ -931,7 +949,7 @@ _Tin nhắn được thông báo tự động, phụ huynh có thể trao đổi
                     disabled={isSendingZaloDebt || !teacherZaloPhone}
                     className="bg-[#0068FF] hover:bg-blue-700 text-white px-3 py-1.5 rounded font-bold text-xs flex items-center gap-1 disabled:opacity-50 transition-colors shrink-0"
                   >
-                    {isSendingZaloDebt ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />} 
+                    {isSendingZaloDebt ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />}
                     {selectedTeacher.salaryBalance < 0 ? "Gửi Zalo" : "Gửi Báo Cáo Zalo"}
                   </button>
                 </div>
@@ -941,10 +959,10 @@ _Tin nhắn được thông báo tự động, phụ huynh có thể trao đổi
                   <p className="text-[10px] text-slate-400 mt-1 italic">* Tin nhắn Zalo sẽ gửi kèm Bảng Kê Lương chi tiết và tự động chốt lương thành công.</p>
                 )}
               </div>
-              
+
               {/* Nút Xuất Hóa Đơn luôn hiện cho Giáo viên, bất kể âm dương để in Bảng Kê Lương / Phí */}
               <div className="mt-6 flex flex-col items-center w-full">
-                <button 
+                <button
                   onClick={handleDownloadRentalBill}
                   disabled={isLoadingRentalDetails || (roomRentals.length === 0 && teachingSessions.length === 0)}
                   className="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-2 rounded-lg font-bold text-xs flex items-center justify-center gap-2 transition-colors border border-slate-300 disabled:opacity-50"
@@ -1123,7 +1141,7 @@ _Tin nhắn được thông báo tự động, phụ huynh có thể trao đổi
                         <span className="font-medium text-left flex gap-1 items-center flex-wrap">
                           {s.fullName}
                           {alreadySent && <span className="text-amber-600 bg-amber-50 px-1 rounded text-[9px] font-bold border border-amber-200">Gửi lại</span>}
-                          {noLogsOnlyDebt && <span className="text-blue-600 bg-blue-50 px-1 rounded text-[9px] font-bold border border-blue-200">Nhắc nợ</span>}
+                          {noLogsOnlyDebt && <span className="text-blue-600 bg-blue-50 px-1 rounded text-[9px] font-bold border border-blue-200">Nhắc học phí</span>}
                         </span>
                         <span className={`font-mono text-right whitespace-nowrap ${s.phoneParent ? 'text-slate-600' : 'text-rose-500 font-bold'}`}>
                           {s.phoneParent || "Không có SĐT"}
@@ -1271,7 +1289,7 @@ _Tin nhắn được thông báo tự động, phụ huynh có thể trao đổi
                     <div key={idx} className="flex justify-between items-center p-3 border border-slate-100 rounded-lg bg-slate-50/50">
                       <div>
                         <p className="font-bold text-slate-800 text-sm">
-                          {item.type === "TUITION" ? `Học phí lớp: ${item.className} (Phiếu ${item.voucherNumber})` : "Thanh toán nợ cũ (Kỳ trước)"}
+                          {item.type === "TUITION" ? `Học phí lớp: ${item.className} (Phiếu ${item.voucherNumber})` : "Thanh toán kỳ trước"}
                         </p>
                         {item.type === "TUITION" && (
                           <p className="text-xs text-slate-500 mt-0.5">Gia hạn thêm {item.sessionsPerPackage} buổi học</p>

@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
+import { sendZaloAndLog } from "@/lib/zalo";
 
 export async function getTotalDebt(studentId: string): Promise<number> {
   // Tự động sinh hóa đơn cho các enrollment cạn buổi (<= 2) mà chưa có hóa đơn
@@ -10,7 +11,7 @@ export async function getTotalDebt(studentId: string): Promise<number> {
   const invoices = await prisma.invoice.findMany({
     where: {
       studentId,
-      status: { in: ["PENDING", "UNDERPAID"] }
+      status: "PENDING"
     }
   });
   return invoices.reduce((sum, inv) => sum + (inv.expectedAmount - inv.amountPaid), 0);
@@ -26,14 +27,14 @@ async function autoCreateInvoices(studentId: string) {
       where: { 
         studentId, 
         status: { not: "DROPPED" },
-        remainingSessions: { lte: 2 }
+        remainingSessions: { lte: 0 }
       },
       include: { class: true }
     });
 
     for (const enr of unbilledEnrollments) {
       const existingInv = await tx.invoice.findFirst({
-        where: { enrollmentId: enr.id, status: { in: ["PENDING", "UNDERPAID"] } }
+        where: { enrollmentId: enr.id, status: "PENDING" }
       });
       
       const correctAmount = enr.class.pricePerSession;
@@ -72,15 +73,17 @@ export async function processStudentPayment(
     // Tự động sinh hóa đơn cho những lớp cạn buổi trước khi đập tiền vào
     await autoCreateInvoices(studentId);
 
+    let sessionLines = "";
+
     await prisma.$transaction(async (tx) => {
-      // 0. KHÓA ROW-LEVEL ĐỂ CHỐNG RACE CONDITION (Tránh trùng lặp khi click đúp thanh toán)
+      // 0. KHÓA ROW-LEVEL ĐỂ CHỐNG RACE CONDITION
       await tx.$executeRaw`SELECT id FROM "students" WHERE id = ${studentId}::uuid FOR UPDATE`;
 
-      // 1. Lấy tất cả các hóa đơn cần thanh toán, ưu tiên cũ nhất trước
+      // 1. Lấy tất cả các hóa đơn cần thanh toán
       const pendingInvoices = await tx.invoice.findMany({
         where: {
           studentId,
-          status: { in: ["PENDING", "UNDERPAID"] }
+          status: "PENDING"
         },
         orderBy: { createdAt: "asc" },
         include: {
@@ -90,185 +93,124 @@ export async function processStudentPayment(
         }
       });
 
-      let remainingCash = amountPaid;
+      if (pendingInvoices.length === 0) {
+         // Thanh toán khi không có nợ -> OVERPAID
+         await tx.tuitionException.create({
+           data: {
+             studentId,
+             amount: amountPaid,
+             type: "OVERPAID",
+             note: "Thanh toán dư (Không có môn nào cần gia hạn)"
+           }
+         });
+         return; // Kết thúc transaction sớm
+      }
+
+      const totalExpected = pendingInvoices.reduce((sum, inv) => sum + inv.expectedAmount, 0);
       const tRef = transactionRef || `${paymentMethod}-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
       let itemIndex = 0;
+      let classNames: string[] = [];
 
+      let remainingCash = amountPaid;
+
+      // 2. Xử lý tất cả các hóa đơn PENDING
       for (const invoice of pendingInvoices) {
-        const debtOfThisInvoice = invoice.expectedAmount - invoice.amountPaid;
+        // Đổi trạng thái thành PAID bất kể số tiền
+        await tx.invoice.update({
+          where: { id: invoice.id },
+          data: {
+            amountPaid: invoice.expectedAmount,
+            status: "PAID",
+            transactionCode: tRef
+          }
+        });
 
-        // Xử lý riêng trường hợp hóa đơn 0đ (Học sinh được free hoặc áp voucher 100%)
-        if (debtOfThisInvoice <= 0) {
-          // Cập nhật hóa đơn
-          await tx.invoice.update({
-            where: { id: invoice.id },
+        if (invoice.enrollment) {
+          const trEnrollment = invoice.enrollment;
+          classNames.push(trEnrollment.class.name);
+
+          // Phân bổ log PaymentHistory (chia tiền tượng trưng cho từng lớp)
+          const logAmount = Math.min(Math.max(0, remainingCash), invoice.expectedAmount);
+          remainingCash -= logAmount;
+
+          await tx.paymentHistory.create({
             data: {
-              status: "PAID",
-              transactionCode: tRef
+              studentId,
+              classId: trEnrollment.classId,
+              amount: logAmount,
+              paymentMethod,
+              status: "SUCCESS",
+              transactionCode: `${tRef}-${itemIndex++}`,
+              voucherRef: trEnrollment.currentVoucher
             }
           });
 
-          // Xử lý Enrollment (cộng buổi học)
-          if (invoice.enrollment) {
-            const trEnrollment = invoice.enrollment;
-
-            // Ghi nhận PaymentHistory cho classId này (0đ)
-            await tx.paymentHistory.create({
-              data: {
-                studentId,
-                classId: trEnrollment.classId,
-                amount: 0,
-                paymentMethod,
-                status: "SUCCESS",
-                transactionCode: `${tRef}-${itemIndex++}`,
-                voucherRef: trEnrollment.currentVoucher // Tham chiếu phiếu thu
-              }
-            });
-
-            // Cộng buổi học
-            await tx.enrollment.update({
-              where: { id: trEnrollment.id },
-              data: {
-                feeStatus: "PAID",
-                remainingSessions: { increment: trEnrollment.class.sessionsPerPackage },
-                currentVoucher: { increment: 1 }
-              }
-            });
-          }
-          continue; // Xong hóa đơn 0đ, nhảy qua hóa đơn tiếp theo luôn
-        }
-
-        if (remainingCash <= 0) break;
-
-        const payAmount = Math.min(remainingCash, debtOfThisInvoice);
-
-        if (payAmount > 0) {
-          const newAmountPaid = invoice.amountPaid + payAmount;
-          const newStatus = newAmountPaid >= invoice.expectedAmount ? "PAID" : "UNDERPAID";
-
-          // Cập nhật hóa đơn
-          await tx.invoice.update({
-            where: { id: invoice.id },
+          // Cộng buổi học
+          const updatedEnr = await tx.enrollment.update({
+            where: { id: trEnrollment.id },
             data: {
-              amountPaid: newAmountPaid,
-              status: newStatus,
-              transactionCode: tRef
+              feeStatus: "PAID",
+              remainingSessions: { increment: trEnrollment.class.sessionsPerPackage },
+              currentVoucher: { increment: 1 }
             }
           });
-
-          // Xử lý Enrollment (cộng buổi học) và PaymentHistory
-          if (invoice.enrollment) {
-            const trEnrollment = invoice.enrollment;
-
-            // Ghi nhận PaymentHistory cho classId này
-            await tx.paymentHistory.create({
-              data: {
-                studentId,
-                classId: trEnrollment.classId,
-                amount: payAmount,
-                paymentMethod,
-                status: "SUCCESS",
-                transactionCode: `${tRef}-${itemIndex++}`,
-                voucherRef: trEnrollment.currentVoucher // Tham chiếu phiếu thu
-              }
-            });
-
-            // Cộng buổi học khi hóa đơn này được thanh toán HOÀN TẤT
-            if (newStatus === "PAID" && invoice.status !== "PAID") {
-              await tx.enrollment.update({
-                where: { id: trEnrollment.id },
-                data: {
-                  feeStatus: "PAID",
-                  remainingSessions: { increment: trEnrollment.class.sessionsPerPackage },
-                  currentVoucher: { increment: 1 }
-                }
-              });
-            }
-
-          } else {
-            // Fallback nếu không có enrollment (ví dụ: hóa đơn gộp cũ chưa bị xóa hết)
-            // Tìm một enrollment bất kỳ của học sinh để gán classId cho PaymentHistory
-            const fallbackEnrollment = await tx.enrollment.findFirst({
-              where: { studentId }
-            });
-            if (fallbackEnrollment) {
-              await tx.paymentHistory.create({
-                data: {
-                  studentId,
-                  classId: fallbackEnrollment.classId,
-                  amount: payAmount,
-                  paymentMethod,
-                  status: "SUCCESS",
-                  transactionCode: `${tRef}-${itemIndex++}`
-                }
-              });
-            }
-          }
-
-          remainingCash -= payAmount;
+          
+          sessionLines += `• ${trEnrollment.class.name}: Đã gia hạn ${trEnrollment.class.sessionsPerPackage} buổi (Hiện có: ${updatedEnr.remainingSessions} buổi)\n`;
         }
       }
 
-      // Xử lý ném tiền thừa (nếu còn)
-      // Hiện tại nếu remainingCash > 0, ta có thể lưu nó ở đâu đó, nhưng theo cơ bản ta sẽ bỏ qua hoặc tạo một OVERPAID record
+      // Xử lý tiền dư (nếu còn)
       if (remainingCash > 0) {
-        // Tùy chọn: Có thể tạo một hóa đơn OVERPAID mới
-        // Hoặc ghi log
-        console.log(`Học sinh ${studentId} đã đóng dư ${remainingCash} đ`);
+        await tx.tuitionException.create({
+          data: {
+            studentId,
+            amount: remainingCash,
+            type: "OVERPAID",
+            note: `Thanh toán dư cho các môn: ${classNames.join(", ")}`
+          }
+        });
+      } 
+      // Xử lý tiền thiếu
+      else if (amountPaid < totalExpected) {
+        await tx.tuitionException.create({
+          data: {
+            studentId,
+            amount: totalExpected - amountPaid,
+            type: "UNDERPAID",
+            note: `Thanh toán thiếu cho các môn: ${classNames.join(", ")}`
+          }
+        });
       }
     });
 
-    // revalidatePath chỉ hoạt động trong Next.js request context (Server Action/Route Handler)
-    // Khi gọi từ Webhook hay script, sẽ bị bỏ qua thay vì throw lỗi
     try {
       revalidatePath("/admin/tuition");
       revalidatePath("/admin/history/tuition");
-    } catch {
-      // Bỏ qua nếu không có Next.js request context (VD: gọi từ Webhook)
-    }
+    } catch {}
 
     // Gửi thông báo Zalo sau khi thanh toán hoàn tất
     try {
-      const student = await prisma.student.findUnique({ 
-        where: { id: studentId },
-        include: {
-          enrollments: {
-            where: { status: { not: "DROPPED" } },
-            include: { class: true }
-          }
-        }
-      });
-
-      if (student && student.phoneParent) {
-        // Tính lại tổng nợ sau khi đã thanh toán
-        const debt = await getTotalDebt(studentId);
-        
+      const student = await prisma.student.findUnique({ where: { id: studentId } });
+      if (student && student.phoneParent && sessionLines !== "") {
         const formatMoney = (m: number) => new Intl.NumberFormat('vi-VN').format(m) + 'đ';
         const methodVi = paymentMethod === "CASH" ? "Tiền mặt" : "Chuyển khoản";
         
-        const classNames = student.enrollments.map(e => e.class.name).join(" và ") || "Tổng hợp";
         const today = new Date();
         const monthYear = `${today.getDate().toString().padStart(2, '0')}/${(today.getMonth() + 1).toString().padStart(2, '0')}/${today.getFullYear()}`;
 
         let msg = `***XÁC NHẬN THANH TOÁN HỌC PHÍ***\n`;
-        msg += `Nông trại Khoa học tự nhiên ***${debt <= 0 ? 'ĐÃ NHẬN ĐỦ' : 'ĐÃ NHẬN MỘT PHẦN'}*** học phí học sinh: ***${student.fullName}***\n`;
+        msg += `Nông trại Khoa học tự nhiên đã nhận thanh toán học phí cho học sinh: ***${student.fullName}***\n`;
         msg += `Phiếu thu ***${monthYear}***\n`;
-        msg += `Lớp: ***${classNames}***\n`;
         msg += `Phương thức: ***${methodVi}***\n`;
-        
-        if (debt > 0) {
-          msg += `\n_Lưu ý: Học phí của bé vẫn còn nợ ${formatMoney(debt)}._\n`;
-        }
-        
+        msg += `Số tiền nhận: ***${formatMoney(amountPaid)}***\n`;
+        msg += `\n${sessionLines}\n`;
         msg += `_Kính báo./._`;
 
-        await fetch(`${process.env.NEXT_PUBLIC_ZALO_BOT_URL || 'http://116.118.9.61:8080'}/send`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "x-api-key": process.env.NEXT_PUBLIC_ZALO_BOT_API_KEY || ""
-          },
-          body: JSON.stringify({ target: student.phoneParent, message: msg })
+        await sendZaloAndLog({
+          phone: student.phoneParent,
+          message: msg,
+          messageType: "PAYMENT_CONFIRM",
+          studentId,
         });
       }
     } catch (zaloErr) {
@@ -295,7 +237,7 @@ export async function applyDiscount(studentId: string, discount: number): Promis
     const pendingInvoices = await prisma.invoice.findMany({
       where: {
         studentId,
-        status: { in: ["PENDING", "UNDERPAID"] }
+        status: "PENDING"
       },
       orderBy: { createdAt: "asc" }
     });

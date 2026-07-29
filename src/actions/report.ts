@@ -102,6 +102,7 @@ export type StudentCombinedReport = {
     sessionsPerPackage?: number;
     pendingInvoiceId?: string;
     voucherNumber?: number;
+    remainingSessions?: number;
   }[];
   totalExpectedAmount: number;
   logs: {
@@ -130,16 +131,12 @@ export async function getStudentCombinedReport(studentId: string): Promise<Stude
 
       studentId,
       status: { not: "DROPPED" },
-      remainingSessions: { lte: 1 }
+      remainingSessions: { lte: 0 }
     },
     include: { class: true }
   });
 
-  // 2. Fetch all underpaid invoices (debts)
-  const underpaidInvoices = await prisma.invoice.findMany({
-    where: { studentId, status: "UNDERPAID" },
-    orderBy: { createdAt: "asc" }
-  });
+  
 
   const pendingInvoices = await prisma.invoice.findMany({
     where: { studentId, status: "PENDING" },
@@ -153,7 +150,7 @@ export async function getStudentCombinedReport(studentId: string): Promise<Stude
   // Process enrollments
   for (const enr of enrollments) {
     // Check if there's already a pending invoice specifically for this enrollment
-    const inv = pendingInvoices.find(i => !i.isDebt && i.enrollmentId === enr.id);
+    const inv = pendingInvoices.find(i => i.enrollmentId === enr.id);
     const amount = inv ? inv.expectedAmount : enr.class.pricePerSession;
 
     if (inv) {
@@ -167,7 +164,8 @@ export async function getStudentCombinedReport(studentId: string): Promise<Stude
       amount: amount,
       sessionsPerPackage: enr.class.sessionsPerPackage,
       pendingInvoiceId: inv?.id,
-      voucherNumber: enr.currentVoucher
+      voucherNumber: enr.currentVoucher,
+      remainingSessions: enr.remainingSessions
     });
     totalExpectedAmount += amount;
   }
@@ -177,7 +175,7 @@ export async function getStudentCombinedReport(studentId: string): Promise<Stude
     if (!processedInvoiceIds.has(inv.id)) {
       const debt = inv.expectedAmount - inv.amountPaid;
       items.push({
-        type: inv.isDebt ? "DEBT" : "TUITION",
+        type: "TUITION",
         enrollmentId: inv.enrollmentId || undefined,
         className: inv.enrollment?.class?.name || "Hóa đơn tổng hợp",
         amount: debt,
@@ -189,16 +187,7 @@ export async function getStudentCombinedReport(studentId: string): Promise<Stude
     }
   }
 
-  // Process rollover debts
-  for (const inv of underpaidInvoices) {
-    const debt = inv.expectedAmount - inv.amountPaid;
-    items.push({
-      type: "DEBT",
-      amount: debt,
-      pendingInvoiceId: inv.id
-    });
-    totalExpectedAmount += debt;
-  }
+  
 
   // Fetch logs for the enrollments being paid
   const classIds = enrollments.map(e => e.classId);

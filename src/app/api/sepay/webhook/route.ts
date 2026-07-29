@@ -133,8 +133,10 @@ export async function POST(request: Request) {
         const result = await processStudentPayment(studentId, amount, "BANK_TRANSFER", sepayId);
         if (result.success) {
           console.log(`✅ Đã thanh toán thành công ${amount} cho học sinh ${studentId} qua Webhook`);
+          return NextResponse.json({ success: true, message: "Thanh toán thành công", studentId });
         } else {
           console.error(`❌ Lỗi khi thanh toán cho học sinh ${studentId}:`, result.message);
+          return NextResponse.json({ success: false, message: result.message, studentId });
         }
       } else {
         // 4. Fallback: Nếu không tìm thấy học sinh, thử tìm Giáo viên theo username hoặc số điện thoại

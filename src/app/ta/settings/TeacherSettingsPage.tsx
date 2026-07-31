@@ -13,10 +13,12 @@ import {
   Loader2,
   TrendingUp,
   MessageCircle,
+  Settings2,
 } from "lucide-react";
 
 import { useSession } from "next-auth/react";
 import { updateTeacherProfile } from "@/actions/mutations";
+import { setSystemSetting } from "@/actions/settings";
 import type { TeachingHistory, TeacherInfo } from "@/actions/queries";
 
 function formatVnd(amount: number) {
@@ -38,10 +40,12 @@ export default function TeacherSettingsPage({
   teacherInfo,
   teachingHistory = [],
   isAdmin = false,
+  initialCronEnabled = true,
 }: {
   teacherInfo: TeacherInfo;
   teachingHistory: TeachingHistory[];
   isAdmin?: boolean;
+  initialCronEnabled?: boolean;
 }) {
   const { update } = useSession();
   const [activeTab, setActiveTab] = useState<TabType>("profile");
@@ -51,6 +55,23 @@ export default function TeacherSettingsPage({
   const [newPassword, setNewPassword] = useState<string>("");
   const [confirmPassword, setConfirmPassword] = useState<string>("");
   const [loading, setLoading] = useState<boolean>(false);
+
+  const [isCronEnabled, setIsCronEnabled] = useState(initialCronEnabled);
+  const [isTogglingCron, setIsTogglingCron] = useState(false);
+
+  const handleToggleCron = async () => {
+    setIsTogglingCron(true);
+    const newValue = !isCronEnabled;
+    setIsCronEnabled(newValue);
+    const res = await setSystemSetting("CRON_TUITION_ENABLED", newValue ? "true" : "false");
+    if (res.success) {
+      toast.success(`Đã ${newValue ? "BẬT" : "TẮT"} tự động nhắc học phí (Cronjob)`);
+    } else {
+      toast.error(res.message || "Lỗi khi lưu cài đặt");
+      setIsCronEnabled(!newValue); // revert
+    }
+    setIsTogglingCron(false);
+  };
 
   useEffect(() => {
     if (teacherInfo?.fullName) {
@@ -335,7 +356,29 @@ export default function TeacherSettingsPage({
       )}
       {/* Tab 3: Zalo Bot Connection */}
       {isAdmin && activeTab === "zalo" && (
-        <ZaloConnectionWidget />
+        <div className="space-y-6">
+          <ZaloConnectionWidget />
+          {/* System Settings for Admin */}
+          <div className="bg-white border border-slate-200 rounded-2xl p-5 md:p-7 shadow-sm">
+            <h2 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
+              <Settings2 className="text-blue-500" size={20} />
+              Cài đặt Hệ thống (Dành cho Quản trị)
+            </h2>
+            <div className="flex items-center justify-between bg-slate-50 p-4 rounded-xl border border-slate-200/60">
+              <div className="flex flex-col">
+                <span className="text-sm font-bold text-slate-800">Tự động nhắc học phí (Cronjob)</span>
+                <span className="text-xs text-slate-500">Hệ thống sẽ tự động quét và gửi Zalo nhắc nợ vào 9h sáng mỗi ngày</span>
+              </div>
+              <button
+                onClick={handleToggleCron}
+                disabled={isTogglingCron}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 ${isCronEnabled ? 'bg-blue-600' : 'bg-slate-300'}`}
+              >
+                <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${isCronEnabled ? 'translate-x-6' : 'translate-x-1'}`} />
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
@@ -397,8 +440,10 @@ function ZaloConnectionWidget() {
   };
 
   return (
-    <div className="bg-white border border-slate-200 rounded-2xl p-5 md:p-7 shadow-sm">
-      <div className="flex flex-col items-center justify-center space-y-6 py-4 animate-in fade-in zoom-in-95 duration-500">
+    <div className="space-y-6">
+      {/* Bot Zalo Connection */}
+      <div className="bg-white border border-slate-200 rounded-2xl p-5 md:p-7 shadow-sm">
+        <div className="flex flex-col items-center justify-center space-y-6 py-4 animate-in fade-in zoom-in-95 duration-500">
         <div className={`p-4 rounded-full shadow-inner ${isLoggedIn ? 'bg-emerald-100 text-emerald-600' : 'bg-rose-100 text-rose-600'}`}>
           {isLoggedIn ? (
              <CheckCircle2 size={32} />
@@ -421,23 +466,14 @@ function ZaloConnectionWidget() {
             <MessageCircle size={16} />
             {isLoggedIn ? 'Đổi tài khoản khác' : 'Lấy mã QR Đăng Nhập'}
           </button>
-            
-            {qrUrl && (
-              <div className="p-4 bg-white border-2 border-dashed border-slate-200 rounded-xl flex flex-col items-center gap-3 w-full shadow-sm">
-                <p className="text-xs font-bold text-slate-500 uppercase tracking-widest text-center">Quét mã bằng Zalo</p>
-                <div className="p-2 bg-white border border-slate-100 shadow-sm rounded-lg">
-                  <img src={qrUrl} alt="Zalo Login QR" className="w-40 h-40 object-contain" />
-                </div>
-                <div className="flex items-center gap-2 text-[11px] font-medium text-blue-600 mt-1">
-                  <span className="relative flex h-2.5 w-2.5">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-blue-500"></span>
-                  </span>
-                  Đang chờ quét / xác nhận trên Zalo...
-                </div>
-              </div>
-            )}
           </div>
+          {qrUrl && !isLoggedIn && (
+            <div className="relative p-2 bg-white rounded-xl shadow-sm border border-slate-100 mt-4">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={qrUrl} alt="Zalo QR" className="w-64 h-64 object-contain" />
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

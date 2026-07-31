@@ -1,5 +1,6 @@
 import TeacherSettingsPage from "./TeacherSettingsPage"; // (Sửa lại đường dẫn import cho đúng thư mục của ông)
 import { getTeacherSettingsInfo } from "@/actions/queries"; // (Sửa lại đường dẫn nếu cần)
+import { getSystemSetting } from "@/actions/settings";
 import { auth } from "@/auth";
 
 export default async function SettingsPage() {
@@ -11,7 +12,10 @@ export default async function SettingsPage() {
   }
 
   // 2. Gọi hàm query lấy thông tin giáo viên và lịch sử
-  const data = await getTeacherSettingsInfo(session.user.id);
+  const [data, cronSetting] = await Promise.all([
+    getTeacherSettingsInfo(session.user.id),
+    getSystemSetting("CRON_TUITION_ENABLED", "true")
+  ]);
 
   // 3. Nếu không tìm thấy trong DB thì báo lỗi
   if (!data?.teacherInfo) {
@@ -24,6 +28,7 @@ export default async function SettingsPage() {
       teacherInfo={data.teacherInfo} 
       teachingHistory={data.teachingHistory} 
       isAdmin={session.user?.role === "SUPER_ADMIN" || session.user?.role === "ADMIN"}
+      initialCronEnabled={cronSetting === "true"}
     />
   );
 }

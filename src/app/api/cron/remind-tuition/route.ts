@@ -4,18 +4,19 @@ import { sendZaloAndLog } from "@/lib/zalo";
 
 export async function GET(request: Request) {
   try {
+    const setting = await prisma.systemSetting.findUnique({ where: { key: "CRON_TUITION_ENABLED" } });
+    const isCronEnabled = setting ? setting.value === "true" : true; // Default to true if not set
+
+    if (!isCronEnabled) {
+      return NextResponse.json({ success: true, message: "Cronjob is currently disabled in settings" });
+    }
+
     // 1. Tìm tất cả học sinh đang nợ tiền
     const studentsWithDebt = await prisma.student.findMany({
       where: {
         invoices: {
           some: {
             status: "PENDING"
-          }
-        },
-        attendanceLogs: {
-          some: {
-            isReportSent: true,
-            reportedAt: { not: null }
           }
         }
       },
@@ -25,8 +26,7 @@ export async function GET(request: Request) {
           include: { enrollment: { include: { class: true } } }
         },
         attendanceLogs: {
-          where: { isReportSent: true, reportedAt: { not: null } },
-          orderBy: { reportedAt: "desc" },
+          orderBy: { createdAt: "desc" },
           take: 1
         }
       }
@@ -39,9 +39,13 @@ export async function GET(request: Request) {
     for (const student of studentsWithDebt) {
       if (!student.attendanceLogs || student.attendanceLogs.length === 0) continue;
 
-      const lastReportedAt = student.attendanceLogs[0].reportedAt;
-      if (!lastReportedAt) continue;
+      const latestLog = student.attendanceLogs[0];
+      
+      // ĐIỀU KIỆN TIÊN QUYẾT: Admin PHẢI gửi báo cáo thủ công lần đầu (cho buổi học mới nhất)
+      // thì hệ thống mới bắt đầu nhắc tự động. Nếu buổi mới nhất chưa gửi báo cáo, sẽ bỏ qua.
+      if (!latestLog.isReportSent || !latestLog.reportedAt) continue;
 
+      const lastReportedAt = latestLog.reportedAt;
       const lastRemindedAt = student.lastTuitionRemindAt;
       const mostRecentContact = lastRemindedAt ? new Date(Math.max(lastReportedAt.getTime(), lastRemindedAt.getTime())) : lastReportedAt;
 

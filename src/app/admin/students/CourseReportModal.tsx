@@ -35,6 +35,8 @@ export default function CourseReportModal({
   studentName,
   classId,
   className,
+  month,
+  year,
   onSuccess,
   autoSend
 }: {
@@ -44,6 +46,8 @@ export default function CourseReportModal({
   studentName: string;
   classId?: string;
   className?: string;
+  month?: number;
+  year?: number;
   onSuccess?: () => void;
   autoSend?: boolean;
 }) {
@@ -66,7 +70,7 @@ export default function CourseReportModal({
   const fetchReport = async () => {
     setLoading(true);
     try {
-      const data = await getStudentCombinedReport(studentId);
+      const data = await getStudentCombinedReport(studentId, month, year);
       setReport(data);
       if (data) {
         setInitialDebt(data.totalExpectedAmount);
@@ -88,7 +92,7 @@ export default function CourseReportModal({
     setReport(null);
 
     fetchReport();
-  }, [isOpen, studentId]);
+  }, [isOpen, studentId, month, year]);
 
   useEffect(() => {
     if (!isOpen || initialDebt <= 0) return;
@@ -358,17 +362,16 @@ Nông trại Khoa học tự nhiên kính gửi quý phụ huynh: ***${headerTit
     const classNamesArray = report.items.filter(i => i.type === "TUITION").map(i => i.className);
     const classNames = classNamesArray.length > 0 ? classNamesArray.join("; ") : "Tổng hợp";
 
-    const isAdvanceBilling = report.items.some(i => i.type === "TUITION" && (i.remainingSessions ?? 0) >= 0);
-    const messageTitle = isAdvanceBilling ? "NHẮC ĐÓNG HỌC PHÍ KỲ TỚI" : "NHẮC BÁO HỌC PHÍ";
-    const messageBody = isAdvanceBilling
-      ? `Nông trại Khoa học tự nhiên thông báo học sinh: ***${studentName}*** đã hết hoặc sắp hết buổi học.`
-      : `Nông trại Khoa học tự nhiên ***CHƯA NHẬN*** học phí học sinh: ***${studentName}***`;
+    const monthLabel = month && year ? `tháng ${month}/${year}` : `tháng hiện tại`;
+    const messageTitle = "NHẮC BÁO HỌC PHÍ";
+    const messageBody = `Nông trại Khoa học tự nhiên thông báo học phí ${monthLabel} của học sinh: ***${studentName}***`;
 
     const message = `***${messageTitle}***
 ${messageBody}
 Lớp: ***${classNames}***
 
-_Phụ huynh đã nộp nhưng hệ thống chưa cập nhật, vui lòng nhắn tin xác nhận để được kiểm tra lại tình trạng học phí._`;
+_Học phí được tính cố định theo tháng._
+_Phụ huynh đã nộp nhưng hệ thống chưa cập nhật, vui lòng nhắn tin xác nhận để được kiểm tra lại._`;
 
     const styleTag = injectGlobalCSS(element2);
     try {
@@ -410,7 +413,7 @@ _Phụ huynh đã nộp nhưng hệ thống chưa cập nhật, vui lòng nhắn
         body: JSON.stringify({
           target: report.phoneParent,
           message: message,
-          messageType: isAdvanceBilling ? "ADVANCE_BILLING" : "TUITION_REMINDER",
+          messageType: "TUITION_REMINDER",
           studentId,
         }),
       });
@@ -750,9 +753,6 @@ _Phụ huynh đã nộp nhưng hệ thống chưa cập nhật, vui lòng nhắn
                         </tbody>
                       </table>
                     </div>
-                    <p className="text-xs text-center text-slate-500 mt-2 font-medium">
-                      Tổng số buổi chưa báo cáo: {report.logs.length} buổi
-                    </p>
                   </div>
                 )}
               </div>
@@ -773,10 +773,10 @@ _Phụ huynh đã nộp nhưng hệ thống chưa cập nhật, vui lòng nhắn
                         <div key={idx} className="flex justify-between items-center p-3 border border-slate-100 rounded-lg bg-slate-50/50">
                           <div>
                             <p className="font-bold text-slate-800 text-sm">
-                              {item.type === "TUITION" ? `Học phí lớp: ${item.className} (Phiếu ${item.voucherNumber})` : "Thanh toán tổng hợp"}
+                              {item.type === "TUITION" ? `Học phí lớp: ${item.className}` : "Thanh toán tổng hợp"}
                             </p>
-                            {item.type === "TUITION" && (
-                              <p className="text-xs text-slate-500 mt-0.5">Gia hạn thêm {item.sessionsPerPackage} buổi học</p>
+                            {item.type === "TUITION" && item.month && item.year && (
+                              <p className="text-xs text-slate-500 mt-0.5">Học phí tháng {item.month}/{item.year}</p>
                             )}
                           </div>
                           <div className="font-extrabold text-blue-700 whitespace-nowrap ml-2">

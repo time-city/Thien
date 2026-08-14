@@ -29,13 +29,13 @@ export default async function ClassRosterPage({
 
   const sessionInfo = await prisma.classSession.findUnique({
     where: { id: sessionId },
-    include: { 
+    include: {
       class: {
         include: {
           teachers: { include: { teacher: true } }
         }
-      }, 
-      teacher: true 
+      },
+      teacher: true
     }
   });
 
@@ -50,10 +50,10 @@ export default async function ClassRosterPage({
     );
   }
 
-  // --- BẮT ĐẦU ĐOẠN LOG DEBUG ---
   const currentPage = Number(page) > 0 ? Number(page) : 1;
   const pageSize = 10;
   const skip = (currentPage - 1) * pageSize;
+
 
   const isFreelance = classId === "freelance";
 
@@ -66,11 +66,6 @@ export default async function ClassRosterPage({
   });
   const canFinalizeSession = isFreelance ? true : totalStudents > 0 && assessedStudentsCount >= totalStudents;
 
-  console.log("\n================ DEBUG PHÂN TRANG ================");
-  console.log("1. Param 'page' lấy từ URL:", page);
-  console.log("2. Tính toán: currentPage =", currentPage, "| skip =", skip, "| take =", pageSize);
-  console.log("3. Tổng số học sinh lớp này:", totalStudents, "=> Tổng số trang:", totalPages);
-
   const enrollments = isFreelance ? [] : await prisma.enrollment.findMany({
     where: { classId: classId, status: "ACTIVE" },
     skip: skip,
@@ -82,28 +77,46 @@ export default async function ClassRosterPage({
             where: { classSessionId: sessionId }
           }
         }
+      },
+      invoices: {
+        where: {
+          status: "PAID"
+        }
       }
     },
     orderBy: { student: { fullName: "asc" } }
   });
 
-  console.log("4. Prisma trả về số lượng data:", enrollments.length);
-  console.log("5. Danh sách học sinh trên trang này:");
-  enrollments.forEach((e, idx) => {
-    console.log(`   [STT ${skip + idx + 1}] ID: ${e.studentId} | Tên: ${e.student.fullName}`);
-  });
-  console.log("====================================================\n");
-  // --- KẾT THÚC LOG DEBUG ---
+
+  const currentDate = new Date();
+  const currentMonth = currentDate.getMonth() + 1;
+  const currentYear = currentDate.getFullYear();
 
   const mappedStudents = enrollments.map((e, idx) => {
-    const currentLog = e.student.attendanceLogs[0]; 
+    const currentLog = e.student.attendanceLogs[0];
     const stt = (skip + idx + 1).toString();
+
+    // MIGRATION / FALLBACK LOGIC
+    const paidInvoice = e.invoices.find(inv => 
+      (inv.details as any)?.billingType === "MONTHLY_TUITION" && 
+      (inv.details as any)?.month === currentMonth && 
+      (inv.details as any)?.year === currentYear
+    );
+    
+    let isPaidThisMonth = !!paidInvoice;
+    if (!isPaidThisMonth) {
+      if (currentYear < 2026 || (currentYear === 2026 && currentMonth <= 7)) {
+        isPaidThisMonth = true;
+      } else if (currentYear === 2026 && currentMonth === 8) {
+        isPaidThisMonth = e.remainingSessions > 0;
+      }
+    }
 
     return {
       id: e.student.id,
       fullName: e.student.fullName,
       className: sessionInfo.class?.name || "Lớp Tự Do",
-      seat: stt, 
+      seat: stt,
       attendance: currentLog?.attendanceStatus || undefined,
       homework: currentLog?.homeworkStatus || undefined,
       note: currentLog?.note || "",
@@ -111,7 +124,7 @@ export default async function ClassRosterPage({
       parentName: e.student.parentName,
       parentPhone: e.student.phoneParent,
       remainingSessions: e.remainingSessions,
-      feeStatus: e.remainingSessions <= 0 ? "UNPAID" : e.feeStatus,
+      feeStatus: isPaidThisMonth ? "PAID" : "UNPAID",
     };
   });
 
@@ -120,7 +133,7 @@ export default async function ClassRosterPage({
       sessionInfo={{
         teacherId: sessionInfo.teacherId, // ✅ Bổ sung ID của giáo viên vào đây
         className: sessionInfo.class?.name || "Lớp Tự Do",
-        teacherName: sessionInfo.class?.teachers 
+        teacherName: sessionInfo.class?.teachers
           ? sessionInfo.class.teachers.map(t => t.teacher.fullName).join(", ")
           : sessionInfo.teacher.fullName,
         date: sessionInfo.date.toISOString(),

@@ -317,11 +317,10 @@ export default function MyClassesClient({
                       </div>
                       <div className="flex flex-wrap gap-1.5 mt-1">
                         {s.enrolledCourses?.map((ec: any) => {
-                          const isZero = ec.remainingSessions <= 0;
-                          const isLow = ec.remainingSessions > 0 && ec.remainingSessions <= 2;
+                          const isUnpaid = ec.feeStatus !== "PAID";
                           return (
-                            <span key={ec.classId} className={`text-[10px] font-bold px-2 py-1 rounded border ${isZero ? "text-rose-700 bg-rose-50 border-rose-200" : isLow ? "text-amber-700 bg-amber-50 border-amber-200" : "text-blue-700 bg-blue-50 border-blue-200"}`}>
-                              {ec.className}: <span className={isZero ? "font-extrabold underline" : ""}>Còn {ec.remainingSessions} buổi</span>
+                            <span key={ec.classId} className={`text-[10px] font-bold px-2 py-1 rounded border ${isUnpaid ? "text-rose-700 bg-rose-50 border-rose-200" : "text-blue-700 bg-blue-50 border-blue-200"}`}>
+                              {ec.className}: <span className={isUnpaid ? "font-extrabold underline" : ""}>{isUnpaid ? "Chưa đóng phí" : "Đã đóng phí"}</span>
                             </span>
                           )
                         })}
@@ -350,11 +349,10 @@ export default function MyClassesClient({
                           <td className="py-3 px-4">
                             <div className="flex flex-wrap gap-1.5">
                               {s.enrolledCourses?.map((ec: any) => {
-                                const isZero = ec.remainingSessions <= 0;
-                                const isLow = ec.remainingSessions > 0 && ec.remainingSessions <= 2;
+                                const isUnpaid = ec.feeStatus !== "PAID";
                                 return (
-                                  <span key={ec.classId} className={`text-[10px] font-bold px-2 py-1 rounded border ${isZero ? "text-rose-700 bg-rose-50 border-rose-200" : isLow ? "text-amber-700 bg-amber-50 border-amber-200" : "text-blue-700 bg-blue-50 border-blue-200"}`}>
-                                    {ec.className} <span className="opacity-60">|</span> <span className={isZero ? "font-extrabold underline" : ""}>Còn {ec.remainingSessions} buổi</span>
+                                  <span key={ec.classId} className={`text-[10px] font-bold px-2 py-1 rounded border ${isUnpaid ? "text-rose-700 bg-rose-50 border-rose-200" : "text-blue-700 bg-blue-50 border-blue-200"}`}>
+                                    {ec.className} <span className="opacity-60">|</span> <span className={isUnpaid ? "font-extrabold underline" : ""}>{isUnpaid ? "Chưa đóng phí" : "Đã đóng phí"}</span>
                                   </span>
                                 )
                               })}
@@ -397,13 +395,12 @@ export default function MyClassesClient({
                 </h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   {viewingStudent.enrolledCourses?.filter(ec => initialClasses.some(c => c.id === ec.classId)).map((ec) => {
-                    const isZero = ec.remainingSessions <= 0;
+                    const isUnpaid = ec.feeStatus !== "PAID";
                     return (
-                      <div key={ec.classId} className={`p-3 rounded-xl border ${isZero ? "bg-rose-50 border-rose-200" : "bg-blue-50 border-blue-200"}`}>
+                      <div key={ec.classId} className={`p-3 rounded-xl border ${isUnpaid ? "bg-rose-50 border-rose-200" : "bg-blue-50 border-blue-200"}`}>
                         <div className="font-bold text-sm text-slate-800 mb-1">{ec.className}</div>
-                        <div className="text-xs font-medium text-slate-600">Trạng thái phí: {ec.feeStatus === "PAID" ? "Đã đóng" : "Chưa đóng"}</div>
-                        <div className={`text-xs font-bold mt-2 ${isZero ? "text-rose-600" : "text-blue-600"}`}>
-                          Còn {ec.remainingSessions} buổi
+                        <div className={`text-xs font-bold mt-2 ${isUnpaid ? "text-rose-600" : "text-blue-600"}`}>
+                          Trạng thái phí: {isUnpaid ? "Chưa đóng" : "Đã đóng"}
                         </div>
                       </div>
                     )

@@ -1,6 +1,7 @@
 "use server"
 
 import { prisma } from "@/lib/prisma";
+import { autoCreateInvoices } from "./invoice";
 
 export type StudentCourseReport = {
   enrollmentId: string;
@@ -22,7 +23,13 @@ export type StudentCourseReport = {
   }[];
 };
 
-export async function getStudentCourseReport(studentId: string, classId: string): Promise<StudentCourseReport | null> {
+export async function getStudentCourseReport(studentId: string, classId: string, month?: number, year?: number): Promise<StudentCourseReport | null> {
+  const currentDate = new Date();
+  const targetMonth = month || currentDate.getMonth() + 1;
+  const targetYear = year || currentDate.getFullYear();
+  const startDate = new Date(targetYear, targetMonth - 1, 1);
+  const endDate = new Date(targetYear, targetMonth, 0, 23, 59, 59, 999);
+
   const student = await prisma.student.findUnique({
     where: { id: studentId },
     select: { fullName: true, phoneStudent: true, phoneParent: true }
@@ -51,7 +58,8 @@ export async function getStudentCourseReport(studentId: string, classId: string)
     where: {
       studentId: studentId,
       classSession: {
-        classId: classId
+        classId: classId,
+        date: { gte: startDate, lte: endDate }
       }
     },
     include: {
@@ -103,6 +111,8 @@ export type StudentCombinedReport = {
     pendingInvoiceId?: string;
     voucherNumber?: number;
     remainingSessions?: number;
+    month?: number;
+    year?: number;
   }[];
   totalExpectedAmount: number;
   logs: {
@@ -118,94 +128,101 @@ export type StudentCombinedReport = {
   }[];
 };
 
-export async function getStudentCombinedReport(studentId: string): Promise<StudentCombinedReport | null> {
+export async function getStudentCombinedReport(studentId: string, month?: number, year?: number): Promise<StudentCombinedReport | null> {
+  const currentDate = new Date();
+  const targetMonth = month || currentDate.getMonth() + 1;
+  const targetYear = year || currentDate.getFullYear();
+  
+  let reportMonth = targetMonth - 1;
+  let reportYear = targetYear;
+  if (reportMonth === 0) {
+    reportMonth = 12;
+    reportYear -= 1;
+  }
+
+  const startDate = new Date(reportYear, reportMonth - 1, 1);
+  const endDate = new Date(reportYear, reportMonth, 0, 23, 59, 59, 999);
+
   const student = await prisma.student.findUnique({
     where: { id: studentId },
     select: { fullName: true, phoneStudent: true, phoneParent: true }
   });
   if (!student) return null;
 
-  // 1. Fetch enrollments that need payment (remainingSessions <= 1)
-  const enrollments = await prisma.enrollment.findMany({
-    where: {
+  // Gọi hàm cũ để đảm bảo các học sinh nợ (cơ chế cũ) có invoice
+  await autoCreateInvoices(studentId, targetMonth, targetYear);
 
-      studentId,
-      status: { not: "DROPPED" },
-      remainingSessions: { lte: 0 }
-    },
-    include: { class: true }
-  });
-
-  
-
-  const pendingInvoices = await prisma.invoice.findMany({
+  // 1. Lấy TẤT CẢ hóa đơn PENDING của học sinh
+  const allPendingInvoices = await prisma.invoice.findMany({
     where: { studentId, status: "PENDING" },
     include: { enrollment: { include: { class: true } } }
   });
 
+  // Chỉ lấy hóa đơn học phí của đúng tháng đang chọn (và các hóa đơn lẻ khác)
+  const pendingInvoices = allPendingInvoices.filter(inv => {
+    const details = inv.details as any;
+    if (details?.billingType === "MONTHLY_TUITION") {
+      return details.month === targetMonth && details.year === targetYear;
+    }
+    if (details?.billingType === "MONTHLY") return false; // Lọc hóa đơn cũ
+    return true;
+  });
+
   const items: StudentCombinedReport["items"] = [];
   let totalExpectedAmount = 0;
-  const processedInvoiceIds = new Set<string>();
+  const classIds = new Set<string>();
 
-  // Process enrollments
-  for (const enr of enrollments) {
-    // Check if there's already a pending invoice specifically for this enrollment
-    const inv = pendingInvoices.find(i => i.enrollmentId === enr.id);
-    const amount = inv ? inv.expectedAmount : enr.class.pricePerSession;
-
-    if (inv) {
-      processedInvoiceIds.add(inv.id);
+  for (const inv of pendingInvoices) {
+    const debt = inv.expectedAmount - inv.amountPaid;
+    const invDetails = inv.details as any;
+    
+    if (inv.enrollment?.classId) {
+      classIds.add(inv.enrollment.classId);
     }
 
     items.push({
       type: "TUITION",
-      enrollmentId: enr.id,
-      className: enr.class.name,
-      amount: amount,
-      sessionsPerPackage: enr.class.sessionsPerPackage,
-      pendingInvoiceId: inv?.id,
-      voucherNumber: enr.currentVoucher,
-      remainingSessions: enr.remainingSessions
+      enrollmentId: inv.enrollmentId || undefined,
+      className: inv.enrollment?.class?.name || "Hóa đơn tổng hợp",
+      amount: debt,
+      sessionsPerPackage: inv.enrollment?.class?.sessionsPerPackage,
+      pendingInvoiceId: inv.id,
+      voucherNumber: inv.enrollment?.currentVoucher,
+      month: invDetails?.month,
+      year: invDetails?.year
     });
-    totalExpectedAmount += amount;
+    totalExpectedAmount += debt;
   }
 
-  // Process any other PENDING invoices that weren't caught above
-  for (const inv of pendingInvoices) {
-    if (!processedInvoiceIds.has(inv.id)) {
-      const debt = inv.expectedAmount - inv.amountPaid;
-      items.push({
-        type: "TUITION",
-        enrollmentId: inv.enrollmentId || undefined,
-        className: inv.enrollment?.class?.name || "Hóa đơn tổng hợp",
-        amount: debt,
-        sessionsPerPackage: inv.enrollment?.class?.sessionsPerPackage,
-        pendingInvoiceId: inv.id,
-        voucherNumber: inv.enrollment?.currentVoucher
-      });
-      totalExpectedAmount += debt;
-    }
-  }
-
+  // 2. Lấy log điểm danh TRONG THÁNG mục tiêu cho các lớp mà học sinh đang ACTIVE
+  const activeEnrollments = await prisma.enrollment.findMany({
+    where: { studentId, status: "ACTIVE" }
+  });
   
+  for (const enr of activeEnrollments) {
+    classIds.add(enr.classId);
+  }
 
-  // Fetch logs for the enrollments being paid
-  const classIds = enrollments.map(e => e.classId);
   const logs = await prisma.attendanceLog.findMany({
     where: {
       studentId: studentId,
-      isReportSent: false,
-      classSession: { classId: { in: classIds } }
+      classSession: { 
+        classId: { in: Array.from(classIds) },
+        date: { gte: startDate, lte: endDate }
+      }
     },
     include: {
       classSession: { include: { teacher: true, class: true } }
     },
-    orderBy: { classSession: { date: "asc" } }
+    orderBy: [
+      { classSession: { classId: "asc" } },
+      { classSession: { date: "asc" } }
+    ]
   });
 
-  // Deduplicate logs by date and slot (or classSessionId) to prevent duplicates from bad test data
-  const uniqueLogs = [];
-  const seenSessions = new Set();
+  // Dedup: loại bỏ log trùng classSessionId
+  const uniqueLogs: typeof logs = [];
+  const seenSessions = new Set<string>();
   for (const log of logs) {
     if (!seenSessions.has(log.classSessionId)) {
       seenSessions.add(log.classSessionId);

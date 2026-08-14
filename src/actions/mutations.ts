@@ -65,12 +65,10 @@ export async function createStudent(data: {
       const classesInfo = await prisma.class.findMany({ where: { id: { in: classIds } } });
 
       enrollmentsData = data.classEnrollments.map(ce => {
-        const cls = classesInfo.find(c => c.id === ce.classId);
         return {
           classId: ce.classId,
           feeStatus: ce.feeStatus,
-          // Nếu PAID -> Lấy đủ số buổi của khóa. Nếu UNPAID -> 0 buổi
-          remainingSessions: ce.feeStatus === "PAID" ? (cls?.sessionsPerPackage || 0) : 0
+          remainingSessions: 0 // [MONTHLY BILLING] Không dùng remainingSessions nữa
         };
       });
     }
@@ -146,18 +144,13 @@ export async function updateStudent(id: string, data: any) {
 
         // Tạo ghi danh cho những lớp thêm mới hoàn toàn (Kèm logic Paid/Unpaid)
         if (classesToAdd.length > 0) {
-          const classIdsToAdd = classesToAdd.map(c => c.classId);
-          const classesInfo = await tx.class.findMany({ where: { id: { in: classIdsToAdd } } });
-
           await tx.enrollment.createMany({
             data: classesToAdd.map(ce => {
-              const cls = classesInfo.find(c => c.id === ce.classId);
               return {
                 studentId: id,
                 classId: ce.classId,
                 feeStatus: ce.feeStatus,
-                // PAID thì cấp buổi, UNPAID thì 0 buổi
-                remainingSessions: ce.feeStatus === "PAID" ? (cls?.sessionsPerPackage || 0) : 0,
+                remainingSessions: 0, // [MONTHLY BILLING]
                 status: "ACTIVE"
               };
             })
@@ -242,8 +235,8 @@ export async function importStudentsCsv(data: {
             create: [{
               classId: classInfo.id,
               feeStatus: isPaid ? "PAID" : "UNPAID",
-              remainingSessions: isPaid ? classInfo.sessionsPerPackage : 0,
-              currentVoucher: isPaid ? 1 : 0
+              remainingSessions: 0, // [MONTHLY BILLING]
+              currentVoucher: 1
             }]
           };
         }
@@ -363,12 +356,10 @@ export async function addStudentByTeacher(data: TeacherStudentPayload) {
         school: data.school ?? null,
         enrollments: {
           create: selectedClassIds.map((classId) => {
-            const classInfo = classesInfo.find((item) => item.id === classId);
-
             return {
               classId,
               feeStatus: "PAID",
-              remainingSessions: classInfo?.sessionsPerPackage ?? 0,
+              remainingSessions: 0, // [MONTHLY BILLING]
             };
           }),
         },
@@ -559,7 +550,7 @@ export async function updateStudentByTeacher(id: string, data: any) {
                 studentId: id,
                 classId,
                 feeStatus: "PAID",
-                remainingSessions: classInfo?.sessionsPerPackage ?? 0,
+                remainingSessions: 0, // [MONTHLY BILLING]
                 status: "ACTIVE"
               };
             }),
@@ -650,8 +641,11 @@ export async function saveStudentEvaluation(data: {
       },
     });
 
-    revalidatePath("/ta");
-    revalidatePath("/schedule");
+    // KHÔNG gọi revalidatePath ở đây:
+    // - UI đã được cập nhật optimistic ngay lập tức ở client
+    // - revalidatePath("/ta") sẽ invalidate cache toàn bộ route → buộc server
+    //   re-render lại tất cả các trang phân trang → chậm rõ rệt khi lớp nhiều HS
+    // - Dữ liệu sẽ được sync đầy đủ khi giáo viên "Chốt ca" (submitAttendanceAndCalculateFinance)
 
     return { success: true };
   } catch (error: any) {
@@ -768,6 +762,24 @@ export async function markAllHomeworkGoodAction(classId: string, sessionId: stri
     return { success: true };
   } catch (err) {
     console.error("markAllHomeworkGoodAction error:", err);
+    return { success: false, error: "Lỗi hệ thống" };
+  }
+}
+
+
+export async function resetAllAttendanceAction(sessionId: string) {
+  const session = await auth();
+  if (!session?.user) return { success: false, error: "Unauthorized" };
+
+  try {
+    await prisma.attendanceLog.deleteMany({
+      where: { classSessionId: sessionId }
+    });
+
+    // Không cần revalidatePath — client sẽ reset state ngay lập tức
+    return { success: true };
+  } catch (err) {
+    console.error("resetAllAttendanceAction error:", err);
     return { success: false, error: "Lỗi hệ thống" };
   }
 }
@@ -1275,19 +1287,8 @@ export async function submitAttendanceAndCalculateFinance(
         },
       });
 
-      if (studentIds.length > 0) {
-        // Trừ đi 1 buổi học
-        await tx.enrollment.updateMany({
-          where: { classId: classId, studentId: { in: studentIds } },
-          data: { remainingSessions: { decrement: 1 } },
-        });
-
-        // Đổi trạng thái sang NỢ PHÍ nếu số buổi <= 0
-        await tx.enrollment.updateMany({
-          where: { classId: classId, studentId: { in: studentIds }, remainingSessions: { lte: 0 } },
-          data: { feeStatus: "UNPAID" },
-        });
-      }
+      // [MONTHLY BILLING] Không trừ buổi, không đổi feeStatus khi chốt ca
+      // Học phí được quản lý theo tháng bởi createMonthlyInvoices()
     });
 
     revalidatePath("/ta/settings");
@@ -1354,29 +1355,8 @@ export async function undoAttendanceFinalization(classSessionId: string) {
         });
       }
 
-      if (classSession.classId && evaluatedStudentIds.length > 0) {
-        // Chỉ hoàn phiếu cho học sinh đã có đánh giá trong chính ca học này.
-        await tx.enrollment.updateMany({
-          where: {
-            classId: classSession.classId,
-            studentId: { in: evaluatedStudentIds },
-          },
-          data: {
-            remainingSessions: { increment: 1 },
-          },
-        });
-
-        await tx.enrollment.updateMany({
-          where: {
-            classId: classSession.classId,
-            studentId: { in: evaluatedStudentIds },
-            remainingSessions: { gt: 0 },
-          },
-          data: {
-            feeStatus: "PAID",
-          },
-        });
-      }
+      // [MONTHLY BILLING] Không hoàn phiếu/buổi khi hoàn tác ca
+      // Học phí được quản lý theo tháng, không liên quan đến session
 
       if (salaryAdjustment !== 0) {
         await tx.user.update({
@@ -1979,7 +1959,7 @@ export async function transferStudentClass(studentId: string, oldClassId: string
           where: { id: existingNewClassEnrollment.id },
           data: {
             status: "ACTIVE",
-            remainingSessions: newRemainingSessions,
+            remainingSessions: 0, // [MONTHLY BILLING]
             feeStatus: oldEnrollment.feeStatus
           }
         });
@@ -1988,7 +1968,7 @@ export async function transferStudentClass(studentId: string, oldClassId: string
           data: {
             studentId,
             classId: newClassId,
-            remainingSessions: newRemainingSessions,
+            remainingSessions: 0, // [MONTHLY BILLING]
             feeStatus: oldEnrollment.feeStatus,
             status: "ACTIVE"
           }

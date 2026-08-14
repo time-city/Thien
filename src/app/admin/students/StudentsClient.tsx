@@ -136,7 +136,7 @@ export default function StudentsClient({
 
   const downloadSampleCsv = () => {
     const BOM = "\uFEFF"; 
-    const csvContent = BOM + "HỌC SINH,,,THÔNG TIN HỌC SINH,,,,,THÔNG TIN PHỤ HUYNH,,THỜI GIAN HỌC,,TRẠNG THÁI HỌC PHÍ,\nSTT,Họ và tên,Lớp,\"Số điện thoại\nHọc sinh\",Trường,Ngày sinh,Giới tính,Trạng thái,Họ và tên Phụ huynh,Số điện thoại Phụ huynh,Ngày bắt đầu,Ngày kết thúc,Phiếu đang sử dụng,Trạng thái học phí\n1,Nguyễn Văn A,Lớp 9,0901234567,THCS Lê Lợi,15/05/2012,Nam,,Nguyễn Văn B,0987654321,01/06/2026,,Phiếu 1,Đã thanh toán\n2,Trần Thị C,Lớp 9,,THCS Nguyễn Bỉnh Khiêm,20/10/2012,Nữ,,Trần Văn D,0912345678,01/06/2026,,Phiếu 1,";
+    const csvContent = BOM + "HỌC SINH,,,THÔNG TIN HỌC SINH,,,,,THÔNG TIN PHỤ HUYNH,,THỜI GIAN HỌC,,TRẠNG THÁI HỌC PHÍ,\nSTT,Họ và tên,Lớp,\"Số điện thoại\nHọc sinh\",Trường,Ngày sinh,Giới tính,Trạng thái,Họ và tên Phụ huynh,Số điện thoại Phụ huynh,Ngày bắt đầu,Ngày kết thúc,Trạng thái học phí\n1,Nguyễn Văn A,Lớp 9,0901234567,THCS Lê Lợi,15/05/2012,Nam,,Nguyễn Văn B,0987654321,01/06/2026,,Đã thanh toán\n2,Trần Thị C,Lớp 9,,THCS Nguyễn Bỉnh Khiêm,20/10/2012,Nữ,,Trần Văn D,0912345678,01/06/2026,,Chưa thanh toán\n";
     
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
@@ -193,7 +193,7 @@ export default function StudentsClient({
           const cols = rows[i];
           // STT(0), Họ và tên(1), Lớp(2), SDT(3), Trường(4), Ngày sinh(5), Giới tính(6), 
           // Trạng thái(7), Phụ huynh(8), SDT Phụ huynh(9), Ngày bắt đầu(10), 
-          // Ngày kết thúc(11), Phiếu(12), Trạng thái học phí(13)
+          // Ngày kết thúc(11), Trạng thái học phí(12)
           const fullName = cols[1]?.trim();
           if (!fullName) continue; 
 
@@ -207,7 +207,7 @@ export default function StudentsClient({
             parentName: cols[8]?.trim(),
             phoneParent: cols[9]?.trim(),
             createdAt: cols[10]?.trim(),
-            feeStatus: cols[13]?.trim() === "Đã thanh toán" ? "PAID" : "UNPAID"
+            feeStatus: cols[12]?.trim() === "Đã thanh toán" ? "PAID" : "UNPAID"
           });
         }
 
@@ -587,12 +587,12 @@ export default function StudentsClient({
                     <td className="py-3 px-4 hidden md:table-cell">
                       <div className="flex flex-wrap gap-1.5">
                         {s.enrolledCourses.map((c: any, i: number) => {
-                          const isLow = (c.remainingSessions ?? 0) <= 2;
+                          const isUnpaid = !c.isPaidThisMonth;
                           return (
-                            <span key={i} className={`text-xs font-semibold px-2 py-1 rounded-md border flex items-center gap-1.5 whitespace-nowrap ${isLow ? "bg-rose-50 text-rose-700 border-rose-200" : "bg-blue-50 text-blue-700 border-blue-100"}`}>
+                            <span key={i} className={`text-xs font-semibold px-2 py-1 rounded-md border flex items-center gap-1.5 whitespace-nowrap ${isUnpaid ? "bg-rose-50 text-rose-700 border-rose-200" : "bg-blue-50 text-blue-700 border-blue-100"}`}>
                               <BookOpen size={12} /> {c.className}
-                              <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold border ${isLow ? "bg-white text-rose-600 border-rose-100" : "bg-white text-blue-600 border-blue-100"}`}>
-                                Phiếu {c.voucherNumber ?? 1} • {c.remainingSessions ?? 0} buổi
+                              <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold border ${isUnpaid ? "bg-white text-rose-600 border-rose-100" : "bg-white text-blue-600 border-blue-100"}`}>
+                                {isUnpaid ? "Chưa đóng phí" : "Đã đóng phí"}
                               </span>
                             </span>
                           );
@@ -718,8 +718,8 @@ export default function StudentsClient({
                                   selected.feeStatus === "PAID" ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-rose-50 text-rose-700 border-rose-200"
                                 }`}
                               >
-                                <option value="UNPAID">Chưa nộp tiền (Hệ thống cấp 0 buổi)</option>
-                                <option value="PAID">Đã nộp tiền (+{c.sessionsPerPackage} buổi học)</option>
+                                <option value="UNPAID">Chưa nộp học phí</option>
+                                <option value="PAID">Đã nộp học phí</option>
                               </select>
                             )}
                           </div>
@@ -789,18 +789,14 @@ export default function StudentsClient({
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     {viewStudent.enrolledCourses.map((c: any, i) => {
-                      const isLow = (c.remainingSessions ?? 0) <= 2;
                       return (
                         <div key={i} className="p-3 border border-slate-200 rounded-xl bg-white shadow-sm flex flex-col gap-1.5">
                           <div className="font-bold text-slate-800 text-sm flex justify-between items-start">
                             <span>{c.className}</span>
-                            <span className={`px-2 py-0.5 rounded text-[11px] border whitespace-nowrap ${isLow ? "bg-rose-50 text-rose-600 border-rose-100" : "bg-slate-100 text-slate-600 border-slate-200"}`}>
-                              Còn {c.remainingSessions ?? 0} buổi
-                            </span>
                           </div>
                           <div className="text-xs text-slate-500 flex justify-between mt-1">
-                            <span className={c.feeStatus === "PAID" ? "text-emerald-600 font-bold" : "text-rose-600 font-bold"}>
-                              {c.feeStatus === "PAID" ? `Đã nộp học phí (Phiếu số ${c.voucherNumber ?? 1})` : `Chưa nộp (Phiếu số ${c.voucherNumber ?? 1})`}
+                            <span className={c.isPaidThisMonth ? "text-emerald-600 font-bold" : "text-rose-600 font-bold"}>
+                              {c.isPaidThisMonth ? "Đã nộp học phí" : "Chưa nộp"}
                             </span>
                           </div>
                           <div className="text-xs text-slate-500 mt-0.5">Giáo viên: <b>{c.teachers?.join(", ") || "Chưa phân công"}</b></div>

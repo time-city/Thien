@@ -4,6 +4,150 @@ import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { sendZaloAndLog } from "@/lib/zalo";
 
+// ==========================================
+// [MONTHLY BILLING] Tạo phiếu thu tháng mới
+// Được gọi khi admin bấm nút "Tạo phiếu thu tháng X"
+// ==========================================
+export async function createMonthlyInvoices(month: number, year: number): Promise<{
+  success: boolean;
+  created: number;
+  skipped: number;
+  alreadyExists: boolean;
+  error?: string;
+}> {
+  try {
+    // Lấy tất cả enrollment ACTIVE kèm thông tin lớp
+    const enrollments = await prisma.enrollment.findMany({
+      where: { status: "ACTIVE" },
+      include: { class: true, student: true }
+    });
+
+    let created = 0;
+    let skipped = 0;
+
+    const activeEnrollmentIds = enrollments.map((e) => e.id);
+    
+    const existingInvoices = await prisma.invoice.findMany({
+      where: {
+        enrollmentId: { in: activeEnrollmentIds },
+        status: { in: ["PENDING", "PAID"] }
+      }
+    });
+
+    const existingSet = new Set(
+      existingInvoices
+        .filter((inv) => {
+          const det = inv.details as any;
+          return det?.month === month && det?.year === year;
+        })
+        .map((inv) => inv.enrollmentId)
+    );
+
+    const newInvoicesData: any[] = [];
+    const enrollmentsToUpdate: string[] = [];
+
+    for (const enr of enrollments) {
+      const enrMonth = enr.createdAt.getMonth() + 1;
+      const enrYear = enr.createdAt.getFullYear();
+      
+      // Bỏ qua nếu tháng mục tiêu nhỏ hơn hoặc bằng tháng ghi danh (tháng đầu miễn phí)
+      if (year < enrYear || (year === enrYear && month <= enrMonth)) {
+        skipped++;
+        continue;
+      }
+
+      if (existingSet.has(enr.id)) {
+        skipped++;
+        continue;
+      }
+
+      newInvoicesData.push({
+        enrollmentId: enr.id,
+        studentId: enr.studentId,
+        expectedAmount: enr.class.pricePerSession,
+        amountPaid: 0,
+        status: "PENDING",
+        transactionCode: `MONTHLY-${month}-${year}-${enr.id.slice(-6)}`,
+        details: { month, year, billingType: "MONTHLY", className: enr.class.name }
+      });
+      enrollmentsToUpdate.push(enr.id);
+    }
+
+    if (newInvoicesData.length > 0) {
+      await prisma.$transaction([
+        prisma.invoice.createMany({ data: newInvoicesData }),
+        prisma.enrollment.updateMany({
+          where: { id: { in: enrollmentsToUpdate } },
+          data: { feeStatus: "UNPAID" }
+        })
+      ]);
+      created = newInvoicesData.length;
+    }
+
+    return { success: true, created, skipped, alreadyExists: created === 0 && skipped > 0 };
+  } catch (error) {
+    console.error("createMonthlyInvoices error:", error);
+    return { success: false, created: 0, skipped: 0, alreadyExists: false, error: "Lỗi tạo phiếu thu tháng" };
+  }
+}
+
+// ==========================================
+// [MONTHLY BILLING] Thống kê điểm danh tháng trước
+// Hiển thị ngay sau khi tạo phiếu thu tháng mới
+// ==========================================
+export async function getPreviousMonthAttendanceSummary(month: number, year: number): Promise<{
+  studentName: string;
+  className: string;
+  attendedSessions: number;
+  totalExpected: number;
+  enrollmentId: string;
+}[]> {
+  // Tính tháng trước
+  const prevMonth = month === 1 ? 12 : month - 1;
+  const prevYear = month === 1 ? year - 1 : year;
+
+  const startDate = new Date(prevYear, prevMonth - 1, 1);
+  const endDate = new Date(prevYear, prevMonth, 0, 23, 59, 59, 999);
+
+  const enrollments = await prisma.enrollment.findMany({
+    where: { status: "ACTIVE" },
+    include: {
+      class: true,
+      student: true
+    }
+  });
+
+  const result = [];
+  for (const enr of enrollments) {
+    const count = await prisma.attendanceLog.count({
+      where: {
+        studentId: enr.studentId,
+        classSession: {
+          classId: enr.classId,
+          date: { gte: startDate, lte: endDate },
+          isAttendanceSubmitted: true
+        }
+      }
+    });
+
+    result.push({
+      studentName: enr.student.fullName,
+      className: enr.class.name,
+      attendedSessions: count,
+      totalExpected: enr.class.sessionsPerPackage,
+      enrollmentId: enr.id
+    });
+  }
+
+  // Sắp xếp theo tên lớp, rồi tên học sinh
+  result.sort((a, b) => {
+    if (a.className !== b.className) return a.className.localeCompare(b.className);
+    return a.studentName.localeCompare(b.studentName);
+  });
+
+  return result;
+}
+
 export async function getTotalDebt(studentId: string): Promise<number> {
   // Tự động sinh hóa đơn cho các enrollment cạn buổi (<= 2) mà chưa có hóa đơn
   await autoCreateInvoices(studentId);
@@ -18,47 +162,69 @@ export async function getTotalDebt(studentId: string): Promise<number> {
 }
 
 // Hàm phụ trợ tự động lên hóa đơn cho các Enrollment đến hạn
-async function autoCreateInvoices(studentId: string) {
-  await prisma.$transaction(async (tx) => {
-    // Khóa dòng học sinh để chống Race Condition khi nhiều luồng cùng gọi getTotalDebt
-    await tx.$executeRaw`SELECT id FROM "students" WHERE id = ${studentId}::uuid FOR UPDATE`;
+export async function autoCreateInvoices(studentId: string, month?: number, year?: number) {
+  const currentDate = new Date();
+  const targetMonth = month || currentDate.getMonth() + 1;
+  const targetYear = year || currentDate.getFullYear();
 
-    const unbilledEnrollments = await tx.enrollment.findMany({
-      where: { 
-        studentId, 
-        status: { not: "DROPPED" },
-        remainingSessions: { lte: 0 }
-      },
-      include: { class: true }
+  // Lấy tất cả enrollment đang ACTIVE
+  const enrollments = await prisma.enrollment.findMany({
+    where: { 
+      studentId, 
+      status: "ACTIVE"
+    },
+    include: { class: true }
+  });
+
+  for (const enr of enrollments) {
+    // Tìm hóa đơn của tháng này (bất kể PENDING hay PAID)
+    // Prisma không hỗ trợ lọc JSON trực tiếp tốt trên SQLite/một số DB, nên lọc thủ công ở mảng trả về hoặc query mở rộng
+    // Do số lượng hóa đơn của 1 student không quá lớn, ta fetch PENDING hoặc PAID rồi lọc
+    const existingInvoices = await prisma.invoice.findMany({
+      where: {
+        studentId,
+        enrollmentId: enr.id
+      }
     });
 
-    for (const enr of unbilledEnrollments) {
-      const existingInv = await tx.invoice.findFirst({
-        where: { enrollmentId: enr.id, status: "PENDING" }
-      });
-      
-      const correctAmount = enr.class.pricePerSession;
+    let hasInvoiceThisMonth = existingInvoices.some(inv => {
+      const details = inv.details as any;
+      return details?.billingType === "MONTHLY_TUITION" && 
+             details?.month === targetMonth && 
+             details?.year === targetYear;
+    });
 
-      if (!existingInv) {
-        await tx.invoice.create({
-          data: {
-            enrollmentId: enr.id,
-            studentId: studentId,
-            expectedAmount: correctAmount,
-            amountPaid: 0,
-            status: "PENDING",
-            transactionCode: `AUTO-${Date.now()}`
-          }
-        });
-      } else if (existingInv.status === "PENDING" && existingInv.expectedAmount !== correctAmount && !existingInv.details) {
-        // Chỉ tự động fix amount nếu hóa đơn chưa từng bị sửa tay (chưa có details)
-        await tx.invoice.update({
-          where: { id: existingInv.id },
-          data: { expectedAmount: correctAmount }
-        });
+    // MIGRATION / FALLBACK LOGIC
+    if (!hasInvoiceThisMonth) {
+      if (targetYear < 2026 || (targetYear === 2026 && targetMonth <= 7)) {
+        hasInvoiceThisMonth = true;
+      } else if (targetYear === 2026 && targetMonth === 8) {
+        hasInvoiceThisMonth = enr.remainingSessions > 0;
       }
     }
-  });
+
+    if (!hasInvoiceThisMonth) {
+      // Học phí 1 tháng chính là trường pricePerSession
+      const expectedAmount = enr.class.pricePerSession;
+      
+      await prisma.invoice.create({
+        data: {
+          studentId,
+          enrollmentId: enr.id,
+          expectedAmount,
+          amountPaid: 0,
+          status: "PENDING",
+          transactionCode: `MONTH-${targetMonth}-${targetYear}-${enr.id.slice(-6)}`,
+          details: { 
+            billingType: "MONTHLY_TUITION", 
+            className: enr.class.name,
+            month: targetMonth,
+            year: targetYear
+          }
+        }
+      });
+    }
+  }
 }
 
 export async function processStudentPayment(
@@ -145,17 +311,20 @@ export async function processStudentPayment(
             }
           });
 
-          // Cộng buổi học
-          const updatedEnr = await tx.enrollment.update({
+          // [MONTHLY BILLING] Không cộng buổi nữa, chỉ cập nhật feeStatus
+          const invoiceDetails = invoice.details as any;
+          const paidMonth = invoiceDetails?.month;
+          const paidYear = invoiceDetails?.year;
+          const monthLabel = (paidMonth && paidYear)
+            ? `tháng ${paidMonth}/${paidYear}`
+            : `tháng hiện tại`;
+
+          await tx.enrollment.update({
             where: { id: trEnrollment.id },
-            data: {
-              feeStatus: "PAID",
-              remainingSessions: { increment: trEnrollment.class.sessionsPerPackage },
-              currentVoucher: { increment: 1 }
-            }
+            data: { feeStatus: "PAID" }
           });
-          
-          sessionLines += `• ${trEnrollment.class.name}: Đã gia hạn ${trEnrollment.class.sessionsPerPackage} buổi (Hiện có: ${updatedEnr.remainingSessions} buổi)\n`;
+
+          sessionLines += `• ${trEnrollment.class.name}: Đã thanh toán học phí ${monthLabel}\n`;
         }
       }
 
@@ -204,7 +373,8 @@ export async function processStudentPayment(
         msg += `Phương thức: ***${methodVi}***\n`;
         msg += `Số tiền nhận: ***${formatMoney(amountPaid)}***\n`;
         msg += `\n${sessionLines}\n`;
-        msg += `_Kính báo./._`;
+        msg += `_Kính báo./._\n`;
+        msg += `_Học phí được tính cố định theo tháng._`;
 
         await sendZaloAndLog({
           phone: student.phoneParent,

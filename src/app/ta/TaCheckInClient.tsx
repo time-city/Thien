@@ -1,13 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useAuth } from "@/lib/AuthContext";
 import { useRouter, usePathname } from "next/navigation";
 import StudentEvaluationModal from "./StudentEvaluationModal"; 
 import type { CheckInStudent, UISessionInfo } from "../../app/types";
 import Link from "next/link";
-import { ArrowLeft, Loader2, CheckCircle2, AlertTriangle } from "lucide-react";
-import { saveStudentEvaluation, submitAttendanceAndCalculateFinance, markAllHomeworkGoodAction, markAllAttendancePresentAction } from "@/actions/mutations";
+import { ArrowLeft, Loader2, CheckCircle2, AlertTriangle, RotateCcw } from "lucide-react";
+import { saveStudentEvaluation, submitAttendanceAndCalculateFinance, markAllHomeworkGoodAction, markAllAttendancePresentAction, resetAllAttendanceAction } from "@/actions/mutations";
 import { getTodayQuickAttendance } from "@/actions/schedule";
 import { toast } from "sonner";
 import UndoFinalizeButton from "./booking-history/UndoFinalizeButton";
@@ -40,6 +40,8 @@ export default function TaCheckInClient({
   const [isSubmittingFinal, setIsSubmittingFinal] = useState(false);
   const [isMarkingAllHomework, setIsMarkingAllHomework] = useState(false);
   const [isMarkingAllAttendance, setIsMarkingAllAttendance] = useState(false);
+  const [isResettingAll, setIsResettingAll] = useState(false);
+  const [showResetModal, setShowResetModal] = useState(false);
 
   // Quick Attendance: Ca dạy tiếp theo và trước đó
   const [nextSession, setNextSession] = useState<any>(null);
@@ -75,35 +77,71 @@ export default function TaCheckInClient({
     });
   }, [sessionId]);
 
-  // Hàm lưu đánh giá nháp cho từng học sinh
-  const handleQuickUpdate = async (id: string, field: 'attendance' | 'homework', value: string) => {
+  // Debounce timers: { "studentId_field": TimerId }
+  const debounceTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  // Lưu giá trị mới nhất chờ gửi lên server (được cập nhật mỗi lần click)
+  const pendingValues = useRef<Record<string, { student: CheckInStudent; newValue: string | null }>>({});
+  // Lưu giá trị gốc trước chuỗi click để rollback khi lỗi
+  const originalValues = useRef<Record<string, any>>({});
+
+  // Hàm lưu đánh giá nháp cho từng học sinh (có debounce 300ms)
+  // - UI cập nhật NGAY LẬP TỨC (optimistic)
+  // - API chỉ được gọi 1 lần SAU 300ms kể từ lần click cuối
+  const handleQuickUpdate = useCallback((id: string, field: 'attendance' | 'homework', value: string) => {
     const student = studentsState.find(s => s.id === id);
     if (!student) return;
-    
-    // Bấm lại giá trị cũ -> Hủy chọn
+
+    // Bấm lại giá trị cũ -> Hủy chọn (toggle)
     const newValue = student[field] === value ? null : value;
-    
-    // Cập nhật giao diện ngay lập tức
+
+    // Cập nhật giao diện ngay lập tức (optimistic update)
     setStudentsState(prev => prev.map(st => st.id === id ? { ...st, [field]: newValue } : st));
-    
-    try {
-      const res = await saveStudentEvaluation({
-        classSessionId: sessionId,
-        studentId: id,
-        attendanceStatus: field === 'attendance' ? (newValue as any) : (student.attendance as any),
-        homeworkStatus: field === 'homework' ? (newValue as any) : (student.homework as any),
-        note: student.note,
-      });
-      if (!res.success) {
-        // Hoàn tác UI nếu server báo lỗi
-        setStudentsState(prev => prev.map(st => st.id === id ? { ...st, [field]: student[field] } : st));
-        toast.error(res.error || "Lỗi khi cập nhật nhanh");
-      }
-    } catch (err) {
-      setStudentsState(prev => prev.map(st => st.id === id ? { ...st, [field]: student[field] } : st));
-      toast.error("Lỗi khi cập nhật nhanh");
+
+    const key = `${id}_${field}`;
+
+    // Lần click đầu tiên trong chuỗi: lưu lại giá trị gốc để có thể rollback
+    if (!debounceTimers.current[key]) {
+      originalValues.current[key] = student[field];
     }
-  };
+
+    // Lưu student snapshot + giá trị mới nhất (sẽ được dùng khi timer fire)
+    pendingValues.current[key] = { student, newValue };
+
+    // Hủy timer cũ, đặt timer mới
+    clearTimeout(debounceTimers.current[key]);
+    debounceTimers.current[key] = setTimeout(async () => {
+      delete debounceTimers.current[key];
+
+      const pending = pendingValues.current[key];
+      delete pendingValues.current[key];
+      if (!pending) return;
+
+      try {
+        const res = await saveStudentEvaluation({
+          classSessionId: sessionId,
+          studentId: id,
+          attendanceStatus: (field === 'attendance' ? pending.newValue : pending.student.attendance) as any,
+          homeworkStatus:   (field === 'homework'    ? pending.newValue : pending.student.homework)   as any,
+          note: pending.student.note,
+        });
+
+        if (!res.success) {
+          // Rollback về giá trị gốc trước chuỗi click
+          setStudentsState(prev => prev.map(st =>
+            st.id === id ? { ...st, [field]: originalValues.current[key] } : st
+          ));
+          toast.error(res.error || "Lỗi khi cập nhật nhanh");
+        }
+      } catch {
+        setStudentsState(prev => prev.map(st =>
+          st.id === id ? { ...st, [field]: originalValues.current[key] } : st
+        ));
+        toast.error("Lỗi khi cập nhật nhanh");
+      } finally {
+        delete originalValues.current[key];
+      }
+    }, 300);
+  }, [studentsState, sessionId]);
 
   const handleSaveAssessment = async (id: string, updates: Partial<CheckInStudent>) => {
     try {
@@ -163,6 +201,30 @@ export default function TaCheckInClient({
       toast.error("Có lỗi xảy ra khi đánh giá hàng loạt.");
     } finally {
       setIsMarkingAllHomework(false);
+    }
+  };
+
+  const handleResetAll = async () => {
+    setIsResettingAll(true);
+    try {
+      const res = await resetAllAttendanceAction(sessionId);
+      if (res.success) {
+        // Reset toàn bộ state client về chưa đánh giá
+        setStudentsState(prev => prev.map(st => ({
+          ...st,
+          attendance: undefined,
+          homework: undefined,
+          note: "",
+        })));
+        setShowResetModal(false);
+        toast.success("Đã xóa toàn bộ trạng thái điểm danh về chưa đánh giá.");
+      } else {
+        toast.error(res.error || "Có lỗi xảy ra khi reset.");
+      }
+    } catch {
+      toast.error("Lỗi hệ thống khi reset.");
+    } finally {
+      setIsResettingAll(false);
     }
   };
 
@@ -330,7 +392,7 @@ export default function TaCheckInClient({
             <div className="grid grid-cols-2 sm:flex sm:flex-row gap-2 w-full sm:w-auto">
               <button
                 onClick={handleMarkAllAttendancePresent}
-                disabled={isMarkingAllAttendance}
+                disabled={isMarkingAllAttendance || isFinalized}
                 className={`h-9 px-2 sm:px-3 flex items-center justify-center gap-1 sm:gap-1.5 text-slate-700 text-[11px] sm:text-xs font-bold rounded-lg border border-slate-300 shadow-sm transition-all whitespace-nowrap bg-white hover:bg-slate-50 disabled:opacity-50 w-full`}
                 title="Điểm danh Có mặt cho tất cả học sinh"
               >
@@ -339,14 +401,25 @@ export default function TaCheckInClient({
               </button>
               <button
                 onClick={handleMarkAllHomeworkGood}
-                disabled={isMarkingAllHomework}
+                disabled={isMarkingAllHomework || isFinalized}
                 className={`h-9 px-2 sm:px-3 flex items-center justify-center gap-1 sm:gap-1.5 text-slate-700 text-[11px] sm:text-xs font-bold rounded-lg border border-slate-300 shadow-sm transition-all whitespace-nowrap bg-white hover:bg-slate-50 disabled:opacity-50 w-full`}
                 title="Đánh giá tất cả học sinh đều Đạt bài tập"
               >
                 {isMarkingAllHomework ? <Loader2 size={14} className="animate-spin shrink-0" /> : <CheckCircle2 size={14} className="text-emerald-600 shrink-0" />}
                 Tất cả Đạt (BT)
               </button>
-              
+
+              {/* NÚT RESET TOÀN BỘ */}
+              <button
+                onClick={() => setShowResetModal(true)}
+                disabled={isResettingAll || isFinalized}
+                className="h-9 px-2 sm:px-3 flex items-center justify-center gap-1 sm:gap-1.5 text-rose-600 text-[11px] sm:text-xs font-bold rounded-lg border border-rose-200 shadow-sm transition-all whitespace-nowrap bg-white hover:bg-rose-50 disabled:opacity-50 w-full"
+                title="Xóa toàn bộ trạng thái điểm danh, reset về chưa đánh giá"
+              >
+                {isResettingAll ? <Loader2 size={14} className="animate-spin shrink-0" /> : <RotateCcw size={14} className="shrink-0" />}
+                Xóa tất cả
+              </button>
+
               {/* NÚT MỞ MODAL CHỐT CA */}
               <button
                 onClick={handleFinalizeSession}
@@ -452,7 +525,7 @@ export default function TaCheckInClient({
                         </div>
                         <div className="flex flex-col justify-center">
                            <div className="font-bold text-slate-800 text-xs sm:text-[13px] leading-none mb-1">{student.fullName}</div>
-                           <div className="text-[10px] sm:text-[11px] text-slate-500 font-medium leading-none">Còn {student.remainingSessions} buổi</div>
+                           <div className={`text-[10px] sm:text-[11px] font-bold leading-none ${student.feeStatus === "PAID" ? "text-emerald-600" : "text-rose-500"}`}>{student.feeStatus === "PAID" ? "Đã đóng phí" : "Chưa đóng phí"}</div>
                         </div>
                       </div>
                     </td>
@@ -569,7 +642,7 @@ export default function TaCheckInClient({
               </div>
               <h3 className="text-lg font-extrabold text-slate-900 mb-2">Xác Nhận Chốt Ca</h3>
               <p className="text-[13px] text-slate-500 font-medium leading-relaxed">
-                Bạn có chắc chắn muốn chốt ca học này? Hệ thống sẽ tự động <b>trừ phiếu học sinh</b>, <b>tính lương</b> vào ví giáo viên và có thể hoàn tác sau đó nếu cần.
+                Bạn có chắc chắn muốn chốt ca học này? Hệ thống sẽ tự động <b>tính lương</b> vào ví giáo viên và có thể hoàn tác sau đó nếu cần.
               </p>
             </div>
             
@@ -592,6 +665,49 @@ export default function TaCheckInClient({
                   <CheckCircle2 size={16} />
                 )}
                 {isSubmittingFinal ? "Đang xử lý..." : "Chốt Ngay"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================== */}
+      {/* MODAL XÁC NHẬN RESET TOÀN BỘ ĐIỂM DANH */}
+      {/* ========================================== */}
+      {showResetModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden flex flex-col animate-in zoom-in-95 duration-200">
+            <div className="p-6 flex flex-col items-center text-center">
+              <div className="w-14 h-14 bg-rose-100 text-rose-600 rounded-full flex items-center justify-center mb-4">
+                <RotateCcw size={26} strokeWidth={2.5} />
+              </div>
+              <h3 className="text-lg font-extrabold text-slate-900 mb-2">Xóa Toàn Bộ Điểm Danh?</h3>
+              <p className="text-[13px] text-slate-500 font-medium leading-relaxed">
+                Thao tác này sẽ <b className="text-rose-600">xóa hết trạng thái điểm danh và bài tập</b> của tất cả học sinh trong ca học này, đưa về trạng thái <b>chưa đánh giá</b>.
+                <br /><br />
+                Bạn có thể điểm danh lại từ đầu sau khi reset.
+              </p>
+            </div>
+
+            <div className="p-4 border-t border-slate-100 flex gap-3 bg-slate-50">
+              <button
+                onClick={() => setShowResetModal(false)}
+                disabled={isResettingAll}
+                className="flex-1 px-4 py-2.5 rounded-xl font-bold text-sm text-slate-600 bg-white border border-slate-200 hover:bg-slate-100 transition-colors disabled:opacity-50"
+              >
+                Hủy
+              </button>
+              <button
+                onClick={handleResetAll}
+                disabled={isResettingAll}
+                className="flex-1 px-4 py-2.5 rounded-xl font-bold text-sm bg-rose-600 text-white hover:bg-rose-700 transition-colors shadow-sm flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
+              >
+                {isResettingAll ? (
+                  <Loader2 size={16} className="animate-spin" />
+                ) : (
+                  <RotateCcw size={16} />
+                )}
+                {isResettingAll ? "Đang xóa..." : "Xóa Ngay"}
               </button>
             </div>
           </div>

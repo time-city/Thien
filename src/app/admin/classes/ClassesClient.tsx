@@ -229,7 +229,7 @@ export default function ClassesClient({
                 <th className="py-3 px-4 w-10 sm:w-12 text-center hidden sm:table-cell">STT</th>
                 <th className="py-3 px-4">Lớp Học</th>
                 <th className="py-3 px-4 w-32 hidden md:table-cell">Danh mục</th>
-                <th className="py-3 px-4 hidden lg:table-cell">Học phí/phiếu</th>
+                <th className="py-3 px-4 hidden lg:table-cell">Học phí/Tháng</th>
                 <th className="py-3 px-4 hidden lg:table-cell">Số buổi/Khóa</th>
                 <th className="py-3 px-4 hidden sm:table-cell">Giáo viên</th>
                 <th className="py-3 px-4 w-28 sm:w-32 text-center">Thao tác</th>
@@ -374,7 +374,7 @@ export default function ClassesClient({
                     </div>
 
                     <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
-                      <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Học phí/Phiếu</div>
+                      <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Học phí/Tháng</div>
                       <div className="mt-2 font-extrabold text-emerald-700 text-lg">
                         {formatVnCurrency(viewingClassData?.pricePerSession ?? 0)}đ
                       </div>
@@ -574,7 +574,7 @@ export default function ClassesClient({
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1.5">
-                  <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Học phí / Phiếu</label>
+                  <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Học phí/Tháng</label>
                   <div className="relative">
                     <DollarSign size={16} className="absolute left-3 top-3 text-slate-400" />
                     <CurrencyInput

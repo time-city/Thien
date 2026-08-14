@@ -12,6 +12,8 @@ import { settleTeacherBalance, fetchTeachersFinance, getTeacherSalaryDetails } f
 import { getStudentCombinedReport, StudentCombinedReport } from "@/actions/report";
 import { toPng } from "html-to-image";
 import CourseReportModal from "../students/CourseReportModal";
+import { getTuitionData } from "@/actions/queries";
+import { createMonthlyInvoices, getPreviousMonthAttendanceSummary } from "@/actions/invoice";
 
 export type TeacherFinanceViewData = {
   id: string;
@@ -76,8 +78,12 @@ export default function TuitionClient({
       fetchTeachersFinance(selectedMonth, selectedYear).then((data) => {
         setTeachers(data);
       });
+      getTuitionData(selectedMonth, selectedYear).then((data) => {
+        setStudents(data);
+      });
     });
   }, [selectedMonth, selectedYear]);
+
 
   const availableClasses = useMemo(() => {
     const classSet = new Set<string>();
@@ -137,14 +143,14 @@ export default function TuitionClient({
   };
   const studentsWithLowSessions = useMemo(() => {
     return students.filter((s) =>
-      s.enrolledCourses.some((c) => c.remainingSessions <= 1 || c.pendingInvoices.length > 0) ||
+      s.enrolledCourses.some((c) => !c.isPaidThisMonth) ||
       (s.allPendingInvoices && s.allPendingInvoices.length > 0)
     );
   }, [students]);
 
   const rawPaidStudents = useMemo(() => {
     return students.filter((s) =>
-      !s.enrolledCourses.some((c) => c.remainingSessions <= 1 || c.pendingInvoices.length > 0) &&
+      !s.enrolledCourses.some((c) => !c.isPaidThisMonth) &&
       (!s.allPendingInvoices || s.allPendingInvoices.length === 0)
     );
   }, [students]);
@@ -196,7 +202,7 @@ export default function TuitionClient({
       setBulkSendProgress({ current: count, total: selectedStudentIds.length, currentName: "Đang tải dữ liệu..." });
 
       try {
-        const data = await getStudentCombinedReport(studentId);
+        const data = await getStudentCombinedReport(studentId, selectedMonth, selectedYear);
         if (!data || !data.phoneParent) {
           console.warn("Bỏ qua học sinh vì không có dữ liệu hoặc số điện thoại:", studentId);
           count++;
@@ -624,13 +630,13 @@ Nông trại Khoa học tự nhiên kính gửi quý phụ huynh: ***${headerTit
                 {type === "WARNING" ? (
                   <>
                     {student.enrolledCourses
-                      .filter((c) => c.remainingSessions <= 1)
+                      .filter((c) => !c.isPaidThisMonth)
                       .map((c) => (
                         <div key={c.enrollmentId} className="flex gap-1 flex-wrap">
                           <span
                             className="bg-rose-50 text-rose-700 font-bold px-1.5 md:px-2 py-0.5 rounded text-[10px] md:text-[11px] border border-rose-100 whitespace-nowrap"
                           >
-                            {c.className} ({c.remainingSessions} buổi)
+                            {c.className}: Chưa đóng
                           </span>
                         </div>
                       ))}
@@ -640,7 +646,7 @@ Nông trại Khoa học tự nhiên kính gửi quý phụ huynh: ***${headerTit
                     {student.enrolledCourses.map((c) => (
                       <div key={c.enrollmentId} className="flex gap-1 flex-wrap">
                         <span className="bg-emerald-50 text-emerald-700 font-bold px-1.5 md:px-2 py-0.5 rounded text-[10px] md:text-[11px] border border-emerald-200 whitespace-nowrap">
-                          {c.className}: Còn {c.remainingSessions} phiếu
+                          {c.className}: Đã đóng
                         </span>
                       </div>
                     ))}
@@ -704,6 +710,47 @@ Nông trại Khoa học tự nhiên kính gửi quý phụ huynh: ***${headerTit
       {/* TAB 1: THU HỌC PHÍ */}
       {activeTab === "STUDENT" && (
         <div className="space-y-4">
+          
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-white p-4 rounded-2xl border border-slate-200 shadow-sm gap-4 mb-4">
+            <h2 className="text-lg font-bold text-slate-800">Quản Lý Học Phí Tháng {selectedMonth}/{selectedYear}</h2>
+            <div className="flex items-center gap-2 flex-wrap">
+
+              <select
+                value={selectedMonth}
+                onChange={(e) => setSelectedMonth(Number(e.target.value))}
+                className="bg-slate-50 border border-slate-200 text-slate-800 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-2 font-semibold"
+              >
+                {Array.from({ length: 12 }).map((_, i) => {
+                  const monthValue = i + 1;
+                  const isFutureMonth = selectedYear === currentDate.getFullYear() && monthValue > currentDate.getMonth() + 1;
+                  if (isFutureMonth) return null;
+                  return (
+                    <option key={monthValue} value={monthValue}>
+                      Tháng {monthValue}
+                    </option>
+                  );
+                })}
+              </select>
+              <select
+                value={selectedYear}
+                onChange={(e) => {
+                  const newYear = Number(e.target.value);
+                  setSelectedYear(newYear);
+                  if (newYear === currentDate.getFullYear() && selectedMonth > currentDate.getMonth() + 1) {
+                    setSelectedMonth(currentDate.getMonth() + 1);
+                  }
+                }}
+                className="bg-slate-50 border border-slate-200 text-slate-800 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-2 font-semibold"
+              >
+                {[currentDate.getFullYear() - 1, currentDate.getFullYear()].map((y) => (
+                  <option key={y} value={y}>
+                    Năm {y}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
           <div className="flex gap-4 border-b border-slate-200 px-2 md:px-0 mb-4">
             <button
               onClick={() => setTuitionSubTab("WARNING")}
@@ -791,7 +838,7 @@ Nông trại Khoa học tự nhiên kính gửi quý phụ huynh: ***${headerTit
       {activeTab === "TEACHER_SALARY" && (
         <div className="flex flex-col gap-4">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-white p-4 rounded-2xl border border-slate-200 shadow-sm gap-4">
-            <h2 className="text-lg font-bold text-slate-800">Lương Giáo Viên</h2>
+            <h2 className="text-lg font-bold text-slate-800">Lương Giáo Viên Tháng {selectedMonth}/{selectedYear}</h2>
             <div className="flex items-center gap-2">
               <select
                 value={selectedMonth}
@@ -1187,6 +1234,8 @@ Nông trại Khoa học tự nhiên kính gửi quý phụ huynh: ***${headerTit
           classId={reportData.classId}
           studentName={reportData.studentName}
           className={reportData.className}
+          month={selectedMonth}
+          year={selectedYear}
           onSuccess={() => router.refresh()}
         />
       )}
@@ -1289,10 +1338,10 @@ Nông trại Khoa học tự nhiên kính gửi quý phụ huynh: ***${headerTit
                     <div key={idx} className="flex justify-between items-center p-3 border border-slate-100 rounded-lg bg-slate-50/50">
                       <div>
                         <p className="font-bold text-slate-800 text-sm">
-                          {item.type === "TUITION" ? `Học phí lớp: ${item.className} (Phiếu ${item.voucherNumber})` : "Thanh toán kỳ trước"}
+                          {item.type === "TUITION" ? `Học phí lớp: ${item.className}` : "Thanh toán kỳ trước"}
                         </p>
-                        {item.type === "TUITION" && (
-                          <p className="text-xs text-slate-500 mt-0.5">Gia hạn thêm {item.sessionsPerPackage} buổi học</p>
+                        {item.type === "TUITION" && item.month && item.year && (
+                          <p className="text-xs text-slate-500 mt-0.5">Học phí tháng {item.month}/{item.year}</p>
                         )}
                       </div>
                       <div className="font-extrabold text-blue-700 whitespace-nowrap ml-2">

@@ -1,3 +1,5 @@
+"use server";
+
 import { prisma } from "@/lib/prisma";
 import {
   Role,
@@ -103,6 +105,7 @@ export type TuitionStudentData = {
     price: number;
     sessionsPerPackage: number;
     pendingInvoices: { id: string; status: string; expectedAmount: number; amountPaid: number }[];
+    isPaidThisMonth?: boolean;
   }[];
   allPendingInvoices?: { id: string; status: string; expectedAmount: number; amountPaid: number }[];
   hasUnsentReports?: boolean;
@@ -110,7 +113,7 @@ export type TuitionStudentData = {
   lastReportedAt?: Date | null;
 };
 
-export async function getTuitionData(): Promise<TuitionStudentData[]> {
+export async function getTuitionData(month?: number, year?: number): Promise<TuitionStudentData[]> {
   const students = await prisma.student.findMany({
     include: {
       enrollments: {
@@ -123,7 +126,7 @@ export async function getTuitionData(): Promise<TuitionStudentData[]> {
           class: true,
           invoices: {
             where: {
-              status: { in: ["PENDING"] }
+              status: { in: ["PENDING", "PAID"] }
             }
           }
         }
@@ -146,40 +149,102 @@ export async function getTuitionData(): Promise<TuitionStudentData[]> {
     }
   });
 
-  return students.map(s => ({
-    id: s.id,
-    fullName: s.fullName,
-    phoneStudent: s.phoneStudent,
-    phoneParent: s.phoneParent,
-    parentName: s.parentName,
-    allPendingInvoices: s.invoices.map(inv => ({
-      id: inv.id,
-      status: inv.status,
-      expectedAmount: inv.expectedAmount,
-      amountPaid: inv.amountPaid,
-      className: inv.enrollment?.class?.name || "Thu Hóa Đơn Lẻ"
-    })),
-    hasLogs: s.attendanceLogs && s.attendanceLogs.length > 0,
-    hasUnsentReports: s.attendanceLogs && s.attendanceLogs.some(log => !log.isReportSent),
-    lastReportedAt: (s.attendanceLogs && s.attendanceLogs.filter(l => l.isReportSent && l.reportedAt).length > 0)
-      ? s.attendanceLogs.filter(l => l.isReportSent && l.reportedAt).sort((a, b) => b.reportedAt!.getTime() - a.reportedAt!.getTime())[0].reportedAt
-      : null,
-    enrolledCourses: s.enrollments.map(e => ({
-      enrollmentId: e.id,
-      classId: e.classId,
-      className: e.class.name,
-      feeStatus: e.feeStatus,
-      remainingSessions: e.remainingSessions,
-      price: e.class.pricePerSession,
-      sessionsPerPackage: e.class.sessionsPerPackage,
-      pendingInvoices: e.invoices.map(inv => ({
+  const currentDate = new Date();
+  const targetMonth = month || currentDate.getMonth() + 1;
+  const targetYear = year || currentDate.getFullYear();
+
+  return students.map(s => {
+    const enrolledCourses = s.enrollments.map(e => {
+      const paidInvoice = e.invoices.find(inv => 
+        inv.status === "PAID" && 
+        (inv.details as any)?.billingType === "MONTHLY_TUITION" && 
+        (inv.details as any)?.month === targetMonth && 
+        (inv.details as any)?.year === targetYear
+      );
+
+      let pendingInvoice = e.invoices.find(inv => 
+        inv.status === "PENDING" && 
+        (inv.details as any)?.billingType === "MONTHLY_TUITION" && 
+        (inv.details as any)?.month === targetMonth && 
+        (inv.details as any)?.year === targetYear
+      );
+
+      // MIGRATION / FALLBACK LOGIC cho giai đoạn chuyển giao sang thu theo tháng
+      let isPaidThisMonth = !!paidInvoice;
+      if (!isPaidThisMonth) {
+        if (targetYear < 2026 || (targetYear === 2026 && targetMonth <= 7)) {
+          // Các tháng 7 về quá khứ coi như đã thu hết
+          isPaidThisMonth = true;
+        } else if (targetYear === 2026 && targetMonth === 8) {
+          // Tháng 8 hiện tại: nếu số buổi còn lại > 0 tức là đã đóng theo cơ chế cũ
+          isPaidThisMonth = e.remainingSessions > 0;
+        }
+      }
+
+      if (!isPaidThisMonth && !pendingInvoice) {
+        // Synthetic PENDING invoice for UI display of debt
+        pendingInvoice = {
+          id: `SYNTHETIC-${e.id}-${targetMonth}-${targetYear}`,
+          status: "PENDING",
+          expectedAmount: e.class.pricePerSession,
+          amountPaid: 0
+        } as any;
+      }
+
+      const invoicesToReturn = pendingInvoice ? [pendingInvoice] : [];
+
+      return {
+        enrollmentId: e.id,
+        classId: e.classId,
+        className: e.class.name,
+        feeStatus: e.feeStatus,
+        remainingSessions: e.remainingSessions,
+        price: e.class.pricePerSession,
+        sessionsPerPackage: e.class.sessionsPerPackage,
+        pendingInvoices: invoicesToReturn.map(inv => ({
+          id: inv.id,
+          status: inv.status,
+          expectedAmount: inv.expectedAmount,
+          amountPaid: inv.amountPaid
+        })),
+        isPaidThisMonth
+      };
+    });
+
+    const syntheticAndMonthlyTuitionInvoices = enrolledCourses.flatMap(c => 
+      c.pendingInvoices.map(inv => ({
+        ...inv,
+        className: c.className
+      }))
+    );
+
+    const otherRealInvoices = s.invoices
+      .filter(inv => inv.status === "PENDING" && (inv.details as any)?.billingType !== "MONTHLY_TUITION" && (inv.details as any)?.billingType !== "MONTHLY")
+      .map(inv => ({
         id: inv.id,
         status: inv.status,
         expectedAmount: inv.expectedAmount,
-        amountPaid: inv.amountPaid
-      }))
-    }))
-  }));
+        amountPaid: inv.amountPaid,
+        className: inv.enrollment?.class?.name || "Thu Hóa Đơn Lẻ"
+      }));
+
+    const allPendingInvoices = [...syntheticAndMonthlyTuitionInvoices, ...otherRealInvoices];
+
+    return {
+      id: s.id,
+      fullName: s.fullName,
+      phoneStudent: s.phoneStudent,
+      phoneParent: s.phoneParent,
+      parentName: s.parentName,
+      allPendingInvoices,
+      hasLogs: s.attendanceLogs && s.attendanceLogs.length > 0,
+      hasUnsentReports: s.attendanceLogs && s.attendanceLogs.some(log => !log.isReportSent),
+      lastReportedAt: (s.attendanceLogs && s.attendanceLogs.filter(l => l.isReportSent && l.reportedAt).length > 0)
+        ? s.attendanceLogs.filter(l => l.isReportSent && l.reportedAt).sort((a, b) => b.reportedAt!.getTime() - a.reportedAt!.getTime())[0].reportedAt
+        : null,
+      enrolledCourses
+    };
+  });
 }
 
 export type ClassData = {
@@ -413,11 +478,15 @@ export type StudentData = {
   gender: string | null;
   dob: Date | null;
   school: string | null;
-  enrolledCourses: EnrolledCourseData[];
+  enrolledCourses: (EnrolledCourseData & { isPaidThisMonth?: boolean })[];
   logs: SessionLogData[];
 };
 
 export async function getStudentsDetailed(): Promise<StudentData[]> {
+  const currentDate = new Date();
+  const currentMonth = currentDate.getMonth() + 1;
+  const currentYear = currentDate.getFullYear();
+
   const students = await prisma.student.findMany({
     include: {
       enrollments: {
@@ -432,6 +501,11 @@ export async function getStudentsDetailed(): Promise<StudentData[]> {
               teachers: { include: { teacher: true } },
             },
           },
+          invoices: {
+            where: {
+              status: "PAID"
+            }
+          }
         },
       },
       attendanceLogs: {
@@ -452,17 +526,36 @@ export async function getStudentsDetailed(): Promise<StudentData[]> {
     gender: s.gender,
     dob: s.dob,
     school: s.school,
-    enrolledCourses: s.enrollments.map((e) => ({
-      enrollmentId: e.id,
-      classId: e.classId,
-      className: e.class.name,
-      subjectName: (e.class as any).subjectName ?? null,
-      remainingSessions: e.remainingSessions,
-      feeStatus: e.feeStatus,
-      status: e.status,
-      teachers: e.class.teachers.map((t) => t.teacher.fullName),
-      voucherNumber: e.currentVoucher,
-    })),
+    enrolledCourses: s.enrollments.map((e) => {
+      // MIGRATION / FALLBACK LOGIC
+      const paidInvoice = e.invoices.find(inv => 
+        (inv.details as any)?.billingType === "MONTHLY_TUITION" && 
+        (inv.details as any)?.month === currentMonth && 
+        (inv.details as any)?.year === currentYear
+      );
+      
+      let isPaidThisMonth = !!paidInvoice;
+      if (!isPaidThisMonth) {
+        if (currentYear < 2026 || (currentYear === 2026 && currentMonth <= 7)) {
+          isPaidThisMonth = true;
+        } else if (currentYear === 2026 && currentMonth === 8) {
+          isPaidThisMonth = e.remainingSessions > 0;
+        }
+      }
+
+      return {
+        enrollmentId: e.id,
+        classId: e.classId,
+        className: e.class.name,
+        subjectName: (e.class as any).subjectName ?? null,
+        remainingSessions: e.remainingSessions,
+        feeStatus: e.feeStatus,
+        status: e.status,
+        teachers: e.class.teachers.map((t) => t.teacher.fullName),
+        voucherNumber: e.currentVoucher,
+        isPaidThisMonth
+      };
+    }),
     logs: s.attendanceLogs.map((log) => ({
       id: log.id,
       date: log.classSession.date,

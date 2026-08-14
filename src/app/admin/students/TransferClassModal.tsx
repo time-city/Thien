@@ -96,7 +96,7 @@ export default function TransferClassModal({
           </div>
 
           <div className="bg-blue-50 border border-blue-100 rounded-xl p-3 text-xs text-blue-700 mt-2 leading-relaxed">
-            Hệ thống sẽ tự động tính toán số buổi đã học ở lớp cũ, và cấp số buổi còn lại tương ứng cho lớp mới. Phiếu học cũ sẽ được bảo lưu.
+            Trạng thái nộp học phí của lớp cũ sẽ được tự động bảo lưu và chuyển sang lớp mới.
           </div>
 
           <div className="mt-6 pt-4 flex justify-end gap-3 border-t border-slate-100">

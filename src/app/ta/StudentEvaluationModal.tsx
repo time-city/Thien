@@ -162,17 +162,8 @@ export default function StudentEvaluationModal({
               <DetailRow icon={Users} label="SĐT phụ huynh" value={student.parentPhone} />
             </div>
 
-            {(student.remainingSessions != null || student.feeStatus) && (
+            {student.feeStatus && (
               <div className="pt-5 border-t border-slate-200 flex flex-col gap-3">
-                {student.remainingSessions != null && (
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5"><ClipboardList size={14}/> Buổi còn lại</span>
-                    <span className={`text-xs font-bold px-2 py-0.5 rounded-md ${student.remainingSessions <= 2 ? "bg-rose-100 text-rose-700" : "bg-slate-200 text-slate-700"}`}>
-                      {student.remainingSessions} buổi
-                    </span>
-                  </div>
-                )}
-                
                 {student.feeStatus && (
                   <div className="flex items-center justify-between">
                     <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5"><CreditCard size={14}/> Học phí</span>

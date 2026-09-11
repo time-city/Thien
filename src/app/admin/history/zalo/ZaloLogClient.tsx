@@ -1,9 +1,10 @@
 "use client";
 
 import React, { useState, useCallback, useTransition, useEffect } from "react";
-import { getZaloMessageLogs, ZaloLogItem, GetZaloLogsResult } from "@/actions/zalo";
+import { getZaloMessageLogs, ZaloLogItem, GetZaloLogsResult, resendZaloMessage } from "@/actions/zalo";
 import { ZaloMessageType } from "@prisma/client";
-import { MessageSquare, CheckCircle2, XCircle, ChevronLeft, ChevronRight, Search, Filter } from "lucide-react";
+import { MessageSquare, CheckCircle2, XCircle, ChevronLeft, ChevronRight, Search, Filter, RotateCcw } from "lucide-react";
+import { toast } from "sonner";
 
 // ─── Cấu hình badge theo loại tin nhắn ─────────────────────────────────────
 const MESSAGE_TYPE_CONFIG: Record<
@@ -83,6 +84,19 @@ export default function ZaloLogClient({ initialData }: { initialData: GetZaloLog
 
     return () => clearTimeout(handler);
   }, [messageType, studentName, fromDate, toDate, fetchLogs]);
+
+  const handleResend = async (e: React.MouseEvent, logId: string) => {
+    e.stopPropagation();
+    startTransition(async () => {
+      const res = await resendZaloMessage(logId);
+      if (res.success) {
+        toast.success("Đã gửi lại tin nhắn thành công!");
+        fetchLogs(page, messageType, studentName, fromDate, toDate);
+      } else {
+        toast.error(res.message || "Không thể gửi lại tin nhắn.");
+      }
+    });
+  };
 
   const totalPages = Math.ceil(data.total / data.pageSize);
 
@@ -199,9 +213,19 @@ export default function ZaloLogClient({ initialData }: { initialData: GetZaloLog
                         {log.success ? (
                           <CheckCircle2 size={18} className="text-emerald-500 mx-auto" />
                         ) : (
-                          <span title={log.errorNote ?? ""}>
-                            <XCircle size={18} className="text-red-500 mx-auto" />
-                          </span>
+                          <div className="flex items-center justify-center gap-2">
+                            <span title={log.errorNote ?? ""}>
+                              <XCircle size={18} className="text-red-500" />
+                            </span>
+                            <button
+                              onClick={(e) => handleResend(e, log.id)}
+                              disabled={isPending}
+                              title="Gửi lại"
+                              className="p-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors disabled:opacity-50"
+                            >
+                              <RotateCcw size={16} />
+                            </button>
+                          </div>
                         )}
                       </td>
                     </tr>

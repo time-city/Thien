@@ -90,3 +90,56 @@ export async function getZaloMessageLogs({
     pageSize,
   };
 }
+
+export async function resendZaloMessage(logId: string): Promise<{ success: boolean; message?: string }> {
+  try {
+    const oldLog = await prisma.zaloMessageLog.findUnique({
+      where: { id: logId }
+    });
+
+    if (!oldLog) {
+      return { success: false, message: "Không tìm thấy tin nhắn cũ." };
+    }
+
+    // Call the external API again to avoid cyclic dependencies with `sendZaloAndLog` or we can just import it.
+    // Wait, we can import `sendZaloAndLog` at the top. Let's just import it at the top and call it here.
+    // However, since `zalo.ts` is an action file, let's just do it directly.
+    const ZALO_BOT_URL = process.env.NEXT_PUBLIC_ZALO_BOT_URL || "http://116.118.9.61:8080";
+    const ZALO_BOT_API_KEY = process.env.NEXT_PUBLIC_ZALO_BOT_API_KEY || "";
+    
+    const res = await fetch(`${ZALO_BOT_URL}/send`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": ZALO_BOT_API_KEY,
+      },
+      body: JSON.stringify({ target: oldLog.phone, message: oldLog.message }),
+    });
+
+    if (!res.ok) {
+      const errText = await res.text().catch(() => "Không thể đọc response");
+      return { success: false, message: `Lỗi khi gửi lại: HTTP ${res.status}: ${errText}` };
+    }
+
+    // Log the new successful message and delete the old failed log
+    await prisma.$transaction([
+      prisma.zaloMessageLog.create({
+        data: {
+          phone: oldLog.phone,
+          message: oldLog.message,
+          messageType: oldLog.messageType,
+          studentId: oldLog.studentId,
+          success: true,
+        },
+      }),
+      prisma.zaloMessageLog.delete({
+        where: { id: logId }
+      })
+    ]);
+
+    return { success: true };
+  } catch (error: any) {
+    console.error("resendZaloMessage error:", error);
+    return { success: false, message: error?.message || "Lỗi hệ thống khi gửi lại tin nhắn." };
+  }
+}

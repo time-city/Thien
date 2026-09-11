@@ -188,6 +188,7 @@ export default function TuitionClient({
   const [bulkSendProgress, setBulkSendProgress] = useState({ current: 0, total: 0, currentName: "" });
   const [hiddenReportData, setHiddenReportData] = useState<any>(null); // To render hidden report for capturing
   const [showConfirmBulkSend, setShowConfirmBulkSend] = useState(false);
+  const [onlySendTuition, setOnlySendTuition] = useState(false);
 
   const handleBulkSendClick = () => {
     if (selectedStudentIds.length === 0) return toast.error("Vui lòng chọn ít nhất 1 học sinh!");
@@ -236,8 +237,8 @@ export default function TuitionClient({
         const element1 = document.getElementById("hidden-report-export-area-1");
         const element2 = document.getElementById("hidden-report-export-area-2");
         if (element1 && element2) {
-          // ẢNH 1 (Chỉ gửi nếu có dữ liệu học tập)
-          const hasLogs = data.logs && data.logs.length > 0;
+          // ẢNH 1 (Chỉ gửi nếu có dữ liệu học tập và không check tùy chọn chỉ gửi học phí)
+          const hasLogs = !onlySendTuition && data.logs && data.logs.length > 0;
           if (hasLogs) {
             const dataUrl1 = await toPng(element1, {
               cacheBust: true,
@@ -358,7 +359,7 @@ Nông trại Khoa học tự nhiên kính gửi quý phụ huynh: ***${headerTit
             body: JSON.stringify({
               target: targetPhone,
               message: message,
-              messageType: "ATTENDANCE_REPORT",
+              messageType: onlySendTuition ? "TUITION_REMINDER" : "ATTENDANCE_REPORT",
               studentId: studentId,
             }),
           });
@@ -1176,6 +1177,17 @@ Nông trại Khoa học tự nhiên kính gửi quý phụ huynh: ***${headerTit
             <div className="p-6 text-center text-slate-600 text-sm max-h-[70vh] overflow-y-auto">
               Bạn đã kiểm tra kỹ tình hình học tập và đánh giá của <span className="font-bold text-blue-600">{selectedStudentIds.length} học sinh</span> đã chọn chưa?
               <br /><br />
+
+              <label className="flex items-center gap-2 mb-4 text-left p-3 border border-slate-200 rounded-lg bg-slate-50 cursor-pointer hover:bg-slate-100 transition-colors">
+                <input 
+                  type="checkbox" 
+                  className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500" 
+                  checked={onlySendTuition} 
+                  onChange={(e) => setOnlySendTuition(e.target.checked)} 
+                  disabled={isBulkSending}
+                />
+                <span className="font-semibold text-slate-700">Chỉ gửi phiếu thu học phí (không gửi báo cáo học tập)</span>
+              </label>
 
               <div className="text-left bg-slate-50 p-3 rounded-lg border border-slate-200 text-xs mb-4">
                 <div className="font-bold mb-2">Danh sách gửi ({selectedStudentIds.length}):</div>

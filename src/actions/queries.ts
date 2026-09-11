@@ -169,15 +169,11 @@ export async function getTuitionData(month?: number, year?: number): Promise<Tui
         (inv.details as any)?.year === targetYear
       );
 
-      // MIGRATION / FALLBACK LOGIC cho giai đoạn chuyển giao sang thu theo tháng
       let isPaidThisMonth = !!paidInvoice;
       if (!isPaidThisMonth) {
         if (targetYear < 2026 || (targetYear === 2026 && targetMonth <= 7)) {
           // Các tháng 7 về quá khứ coi như đã thu hết
           isPaidThisMonth = true;
-        } else if (targetYear === 2026 && targetMonth === 8) {
-          // Tháng 8 hiện tại: nếu số buổi còn lại > 0 tức là đã đóng theo cơ chế cũ
-          isPaidThisMonth = e.remainingSessions > 0;
         }
       }
 
@@ -538,8 +534,6 @@ export async function getStudentsDetailed(): Promise<StudentData[]> {
       if (!isPaidThisMonth) {
         if (currentYear < 2026 || (currentYear === 2026 && currentMonth <= 7)) {
           isPaidThisMonth = true;
-        } else if (currentYear === 2026 && currentMonth === 8) {
-          isPaidThisMonth = e.remainingSessions > 0;
         }
       }
 

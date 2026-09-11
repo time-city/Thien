@@ -59,6 +59,7 @@ export default function CourseReportModal({
   // Zalo Sending States
   const [confirmSendOpen, setConfirmSendOpen] = useState(false);
   const [sendingZalo, setSendingZalo] = useState(false);
+  const [onlySendTuition, setOnlySendTuition] = useState(false);
 
   const [isProcessing, setIsProcessing] = useState(false);
   const [isProcessingTransfer, setIsProcessingTransfer] = useState(false);
@@ -199,32 +200,32 @@ export default function CourseReportModal({
     setSendingZalo(true);
     const styleTag = injectGlobalCSS(element1);
     try {
-      const dataUrl1 = await toPng(element1, {
-        cacheBust: true,
-        pixelRatio: 2,
-        backgroundColor: "#ffffff",
-        style: { transform: "scale(1)", transformOrigin: "top left" }
-      });
+      const targetPhone = report.phoneParent.trim();
+      let dateStr = "";
+      const hasLogs = !onlySendTuition && report.logs && report.logs.length > 0;
+
+      let file1: File | null = null;
+      if (hasLogs) {
+        const dataUrl1 = await toPng(element1, {
+          cacheBust: true,
+          pixelRatio: 2,
+          backgroundColor: "#ffffff",
+          style: { transform: "scale(1)", transformOrigin: "top left" }
+        });
+        const res1 = await fetch(dataUrl1);
+        const blob1 = await res1.blob();
+        file1 = new File([blob1], `BaoCao_HocTap_${studentName.replace(/\s+/g, "_")}.png`, { type: "image/png" });
+      }
+
       const dataUrl2 = await toPng(element2, {
         cacheBust: true,
         pixelRatio: 2,
         backgroundColor: "#ffffff",
         style: { transform: "scale(1)", transformOrigin: "top left" }
       });
-
-      const res1 = await fetch(dataUrl1);
-      const blob1 = await res1.blob();
-
       const res2 = await fetch(dataUrl2);
       const blob2 = await res2.blob();
-
-      const file1 = new File([blob1], `BaoCao_HocTap_${studentName.replace(/\s+/g, "_")}.png`, { type: "image/png" });
       const file2 = new File([blob2], `BaoCao_HocPhi_${studentName.replace(/\s+/g, "_")}.png`, { type: "image/png" });
-
-      const targetPhone = report.phoneParent.trim();
-
-      let dateStr = "";
-      const hasLogs = report.logs && report.logs.length > 0;
       if (hasLogs) {
         const dates = report.logs.map(l => new Date(l.date));
         const minDate = new Date(Math.min(...dates.map(d => d.getTime())));
@@ -259,7 +260,7 @@ Nông trại Khoa học tự nhiên kính gửi quý phụ huynh: ***${headerTit
       message += `\n\n_Tin nhắn được thông báo tự động, phụ huynh có thể trao đổi thêm qua Zalo._`;
 
       // Send Image 1 (Chỉ gửi nếu có dữ liệu học tập)
-      if (hasLogs) {
+      if (hasLogs && file1) {
         const formData1 = new FormData();
         formData1.append("target", targetPhone);
         formData1.append("image", file1);
@@ -306,7 +307,7 @@ Nông trại Khoa học tự nhiên kính gửi quý phụ huynh: ***${headerTit
         body: JSON.stringify({
           target: targetPhone,
           message: message,
-          messageType: "ATTENDANCE_REPORT",
+          messageType: onlySendTuition ? "TUITION_REMINDER" : "ATTENDANCE_REPORT",
           studentId: studentId
         }),
       });
@@ -840,9 +841,21 @@ _Phụ huynh đã nộp nhưng hệ thống chưa cập nhật, vui lòng nhắn
                 </div>
               </div>
               <div className="p-6">
-                <p className="text-slate-700 font-medium mb-2 text-center text-base leading-relaxed">
+                <p className="text-slate-700 font-medium mb-4 text-center text-base leading-relaxed">
                   Bạn đã kiểm tra kĩ nội dung báo cáo và số tiền thanh toán bên phải chưa?
                 </p>
+
+                <label className="flex items-center gap-2 mb-4 p-3 border border-slate-200 rounded-lg bg-slate-50 cursor-pointer hover:bg-slate-100 transition-colors">
+                  <input 
+                    type="checkbox" 
+                    className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500" 
+                    checked={onlySendTuition} 
+                    onChange={(e) => setOnlySendTuition(e.target.checked)} 
+                    disabled={sendingZalo}
+                  />
+                  <span className="font-semibold text-slate-700 text-sm">Chỉ gửi phiếu thu học phí (không gửi báo cáo học tập)</span>
+                </label>
+
                 {!report?.phoneParent && (
                   <div className="mt-4 p-3 bg-red-50 text-red-700 rounded-lg border border-red-200 text-sm font-bold flex items-center gap-2">
                     <X size={16} /> Học sinh này chưa có số điện thoại phụ huynh!

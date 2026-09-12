@@ -295,8 +295,8 @@ Nông trại Khoa học tự nhiên kính gửi quý phụ huynh: ***${headerTit
         }
       }
 
-      // Nghỉ 2 giây để đảm bảo ảnh đã tới nơi rồi mới gửi text
-      await new Promise(r => setTimeout(r, 2000));
+      // Nghỉ 4 giây để đảm bảo ảnh đã tới nơi và được Zalo xử lý xong rồi mới gửi text
+      await new Promise(r => setTimeout(r, 4000));
 
       const textRes = await fetch("/api/zalobot/send-and-log", {
         method: "POST",

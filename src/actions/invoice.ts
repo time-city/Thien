@@ -269,6 +269,7 @@ export async function processStudentPayment(
              note: "Thanh toán dư (Không có môn nào cần gia hạn)"
            }
          });
+         sessionLines += "• Nộp trước học phí (Đã lưu vào số dư)\n";
          return; // Kết thúc transaction sớm
       }
 

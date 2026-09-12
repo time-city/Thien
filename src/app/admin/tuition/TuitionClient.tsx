@@ -350,8 +350,8 @@ Nông trại Khoa học tự nhiên kính gửi quý phụ huynh: ***${headerTit
             }
           }
 
-          // Nghỉ 2 giây để đảm bảo ảnh đã tới nơi rồi mới gửi text
-          await new Promise(r => setTimeout(r, 2000));
+          // Nghỉ 4 giây để đảm bảo ảnh đã tới nơi và được Zalo xử lý xong rồi mới gửi text
+          await new Promise(r => setTimeout(r, 4000));
 
           const textRes = await fetch("/api/zalobot/send-and-log", {
             method: "POST",
@@ -711,7 +711,7 @@ Nông trại Khoa học tự nhiên kính gửi quý phụ huynh: ***${headerTit
       {/* TAB 1: THU HỌC PHÍ */}
       {activeTab === "STUDENT" && (
         <div className="space-y-4">
-          
+
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-white p-4 rounded-2xl border border-slate-200 shadow-sm gap-4 mb-4">
             <h2 className="text-lg font-bold text-slate-800">Quản Lý Học Phí Tháng {selectedMonth}/{selectedYear}</h2>
             <div className="flex items-center gap-2 flex-wrap">
@@ -1179,11 +1179,11 @@ Nông trại Khoa học tự nhiên kính gửi quý phụ huynh: ***${headerTit
               <br /><br />
 
               <label className="flex items-center gap-2 mb-4 text-left p-3 border border-slate-200 rounded-lg bg-slate-50 cursor-pointer hover:bg-slate-100 transition-colors">
-                <input 
-                  type="checkbox" 
-                  className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500" 
-                  checked={onlySendTuition} 
-                  onChange={(e) => setOnlySendTuition(e.target.checked)} 
+                <input
+                  type="checkbox"
+                  className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                  checked={onlySendTuition}
+                  onChange={(e) => setOnlySendTuition(e.target.checked)}
                   disabled={isBulkSending}
                 />
                 <span className="font-semibold text-slate-700">Chỉ gửi phiếu thu học phí (không gửi báo cáo học tập)</span>

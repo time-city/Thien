@@ -106,6 +106,8 @@ export type TuitionStudentData = {
     sessionsPerPackage: number;
     pendingInvoices: { id: string; status: string; expectedAmount: number; amountPaid: number }[];
     isPaidThisMonth?: boolean;
+    isBeforeEnrollment?: boolean;
+    startDate?: Date;
   }[];
   allPendingInvoices?: { id: string; status: string; expectedAmount: number; amountPaid: number }[];
   hasUnsentReports?: boolean;
@@ -169,15 +171,21 @@ export async function getTuitionData(month?: number, year?: number): Promise<Tui
         (inv.details as any)?.year === targetYear
       );
 
+      // Kiểm tra ngày bắt đầu học
+      const enrollStartDate = e.startDate || e.createdAt || s.createdAt;
+      const startYear = enrollStartDate.getFullYear();
+      const startMonth = enrollStartDate.getMonth() + 1;
+      const isBeforeEnrollment = targetYear < startYear || (targetYear === startYear && targetMonth < startMonth);
+
       let isPaidThisMonth = !!paidInvoice;
       if (!isPaidThisMonth) {
-        if (targetYear < 2026 || (targetYear === 2026 && targetMonth <= 7)) {
-          // Các tháng 7 về quá khứ coi như đã thu hết
+        if (isBeforeEnrollment || targetYear < 2026 || (targetYear === 2026 && targetMonth <= 7)) {
+          // Các tháng trước khi nhập học hoặc các tháng 7 về quá khứ coi như không nợ
           isPaidThisMonth = true;
         }
       }
 
-      if (!isPaidThisMonth && !pendingInvoice) {
+      if (!isPaidThisMonth && !pendingInvoice && !isBeforeEnrollment) {
         // Synthetic PENDING invoice for UI display of debt
         pendingInvoice = {
           id: `SYNTHETIC-${e.id}-${targetMonth}-${targetYear}`,
@@ -203,7 +211,9 @@ export async function getTuitionData(month?: number, year?: number): Promise<Tui
           expectedAmount: inv.expectedAmount,
           amountPaid: inv.amountPaid
         })),
-        isPaidThisMonth
+        isPaidThisMonth,
+        isBeforeEnrollment,
+        startDate: enrollStartDate
       };
     });
 
@@ -463,6 +473,7 @@ export type EnrolledCourseData = {
   status: string;
   teachers: string[];
   voucherNumber: number;
+  startDate?: Date | null;
 };
 
 export type StudentData = {
@@ -474,6 +485,8 @@ export type StudentData = {
   gender: string | null;
   dob: Date | null;
   school: string | null;
+  startDate?: Date | null;
+  createdAt?: Date;
   enrolledCourses: (EnrolledCourseData & { isPaidThisMonth?: boolean })[];
   logs: SessionLogData[];
 };
@@ -513,53 +526,59 @@ export async function getStudentsDetailed(): Promise<StudentData[]> {
     orderBy: { createdAt: "desc" },
   });
 
-  return students.map((s) => ({
-    id: s.id,
-    fullName: s.fullName,
-    phone: s.phoneStudent,
-    parentName: s.parentName,
-    parentPhone: s.phoneParent,
-    gender: s.gender,
-    dob: s.dob,
-    school: s.school,
-    enrolledCourses: s.enrollments.map((e) => {
-      // MIGRATION / FALLBACK LOGIC
-      const paidInvoice = e.invoices.find(inv => 
-        (inv.details as any)?.billingType === "MONTHLY_TUITION" && 
-        (inv.details as any)?.month === currentMonth && 
-        (inv.details as any)?.year === currentYear
-      );
-      
-      let isPaidThisMonth = !!paidInvoice;
-      if (!isPaidThisMonth) {
-        if (currentYear < 2026 || (currentYear === 2026 && currentMonth <= 7)) {
-          isPaidThisMonth = true;
+  return students.map((s) => {
+    const studentStartDate = s.enrollments.find(e => e.startDate)?.startDate || s.createdAt;
+    return {
+      id: s.id,
+      fullName: s.fullName,
+      phone: s.phoneStudent,
+      parentName: s.parentName,
+      parentPhone: s.phoneParent,
+      gender: s.gender,
+      dob: s.dob,
+      school: s.school,
+      startDate: studentStartDate,
+      createdAt: s.createdAt,
+      enrolledCourses: s.enrollments.map((e) => {
+        // MIGRATION / FALLBACK LOGIC
+        const paidInvoice = e.invoices.find(inv => 
+          (inv.details as any)?.billingType === "MONTHLY_TUITION" && 
+          (inv.details as any)?.month === currentMonth && 
+          (inv.details as any)?.year === currentYear
+        );
+        
+        let isPaidThisMonth = !!paidInvoice;
+        if (!isPaidThisMonth) {
+          if (currentYear < 2026 || (currentYear === 2026 && currentMonth <= 7)) {
+            isPaidThisMonth = true;
+          }
         }
-      }
 
-      return {
-        enrollmentId: e.id,
-        classId: e.classId,
-        className: e.class.name,
-        subjectName: (e.class as any).subjectName ?? null,
-        remainingSessions: e.remainingSessions,
-        feeStatus: e.feeStatus,
-        status: e.status,
-        teachers: e.class.teachers.map((t) => t.teacher.fullName),
-        voucherNumber: e.currentVoucher,
-        isPaidThisMonth
-      };
-    }),
-    logs: s.attendanceLogs.map((log) => ({
-      id: log.id,
-      date: log.classSession.date,
-      attendanceStatus: log.attendanceStatus,
-      homeworkStatus: log.homeworkStatus,
-      note: log.note,
-      classId: log.classSession.classId,
-      className: log.classSession.class?.name || "Lớp Tự Do (Thuê phòng)",
-    })),
-  }));
+        return {
+          enrollmentId: e.id,
+          classId: e.classId,
+          className: e.class.name,
+          subjectName: (e.class as any).subjectName ?? null,
+          remainingSessions: e.remainingSessions,
+          feeStatus: e.feeStatus,
+          status: e.status,
+          teachers: e.class.teachers.map((t) => t.teacher.fullName),
+          voucherNumber: e.currentVoucher,
+          isPaidThisMonth,
+          startDate: e.startDate || s.createdAt
+        };
+      }),
+      logs: s.attendanceLogs.map((log) => ({
+        id: log.id,
+        date: log.classSession.date,
+        attendanceStatus: log.attendanceStatus,
+        homeworkStatus: log.homeworkStatus,
+        note: log.note,
+        classId: log.classSession.classId,
+        className: log.classSession.class?.name || "Lớp Tự Do (Thuê phòng)",
+      })),
+    };
+  });
 }
 
 export async function getStudentById(id: string) {

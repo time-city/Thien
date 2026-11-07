@@ -52,12 +52,14 @@ export async function createStudent(data: {
   gender?: string;
   dob?: StudentDobInput;
   school?: string | null;
+  startDate?: string | null;
   // Đổi từ classIds sang mảng object chứa trạng thái học phí
   classEnrollments?: { classId: string; feeStatus: "PAID" | "UNPAID" }[];
 }) {
   await checkSuperAdmin();
   try {
     let enrollmentsData: any[] = [];
+    const parsedStartDate = data.startDate ? new Date(data.startDate) : new Date();
 
     // Nếu có chọn lớp, móc db Class ra để lấy số buổi của gói (sessionsPerPackage)
     if (data.classEnrollments && data.classEnrollments.length > 0) {
@@ -68,7 +70,8 @@ export async function createStudent(data: {
         return {
           classId: ce.classId,
           feeStatus: ce.feeStatus,
-          remainingSessions: 0 // [MONTHLY BILLING] Không dùng remainingSessions nữa
+          remainingSessions: 0, // [MONTHLY BILLING] Không dùng remainingSessions nữa
+          startDate: parsedStartDate
         };
       });
     }
@@ -97,7 +100,7 @@ export async function createStudent(data: {
 export async function updateStudent(id: string, data: any) {
   await checkSuperAdmin();
   try {
-    const { classEnrollments, dob, school, ...rest } = data; // Lấy classEnrollments thay vì classIds
+    const { classEnrollments, dob, school, startDate, ...rest } = data; // Lấy classEnrollments thay vì classIds
 
     const updateData: any = {
       ...rest,
@@ -105,8 +108,17 @@ export async function updateStudent(id: string, data: any) {
       school: school ?? null,
     };
 
+    const parsedStartDate = startDate ? new Date(startDate) : undefined;
+
     await prisma.$transaction(async (tx) => {
       await tx.student.update({ where: { id }, data: updateData });
+
+      if (parsedStartDate) {
+        await tx.enrollment.updateMany({
+          where: { studentId: id },
+          data: { startDate: parsedStartDate }
+        });
+      }
 
       if (classEnrollments && Array.isArray(classEnrollments)) {
         const existingEnrollments = await tx.enrollment.findMany({
@@ -137,7 +149,10 @@ export async function updateStudent(id: string, data: any) {
           for (const ce of classesToReactivate) {
             await tx.enrollment.updateMany({
               where: { studentId: id, classId: ce.classId },
-              data: { status: "ACTIVE" } // Giữ nguyên số buổi và feeStatus cũ
+              data: {
+                status: "ACTIVE",
+                ...(parsedStartDate ? { startDate: parsedStartDate } : {})
+              }
             });
           }
         }
@@ -151,7 +166,8 @@ export async function updateStudent(id: string, data: any) {
                 classId: ce.classId,
                 feeStatus: ce.feeStatus,
                 remainingSessions: 0, // [MONTHLY BILLING]
-                status: "ACTIVE"
+                status: "ACTIVE",
+                startDate: parsedStartDate || new Date()
               };
             })
           });
@@ -227,6 +243,7 @@ export async function importStudentsCsv(data: {
 
         const classNameStr = row.className?.trim();
         const classInfo = classNameStr ? existingClasses.find(c => c.name === classNameStr) : null;
+        const parsedCreatedAt = parseDDMMYYYY(row.createdAt);
 
         let enrollmentsData: any = undefined;
         if (classInfo) {
@@ -236,12 +253,11 @@ export async function importStudentsCsv(data: {
               classId: classInfo.id,
               feeStatus: isPaid ? "PAID" : "UNPAID",
               remainingSessions: 0, // [MONTHLY BILLING]
-              currentVoucher: 1
+              currentVoucher: 1,
+              startDate: parsedCreatedAt || new Date()
             }]
           };
         }
-
-        const parsedCreatedAt = parseDDMMYYYY(row.createdAt);
 
         await tx.student.create({
           data: {
@@ -360,6 +376,7 @@ export async function addStudentByTeacher(data: TeacherStudentPayload) {
               classId,
               feeStatus: "PAID",
               remainingSessions: 0, // [MONTHLY BILLING]
+              startDate: new Date(),
             };
           }),
         },
@@ -551,7 +568,8 @@ export async function updateStudentByTeacher(id: string, data: any) {
                 classId,
                 feeStatus: "PAID",
                 remainingSessions: 0, // [MONTHLY BILLING]
-                status: "ACTIVE"
+                status: "ACTIVE",
+                startDate: new Date()
               };
             }),
           });
@@ -1970,7 +1988,8 @@ export async function transferStudentClass(studentId: string, oldClassId: string
             classId: newClassId,
             remainingSessions: 0, // [MONTHLY BILLING]
             feeStatus: oldEnrollment.feeStatus,
-            status: "ACTIVE"
+            status: "ACTIVE",
+            startDate: oldEnrollment.startDate || new Date()
           }
         });
       }

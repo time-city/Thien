@@ -149,10 +149,16 @@ export default function TuitionClient({
   }, [students]);
 
   const rawPaidStudents = useMemo(() => {
-    return students.filter((s) =>
-      !s.enrolledCourses.some((c) => !c.isPaidThisMonth) &&
-      (!s.allPendingInvoices || s.allPendingInvoices.length === 0)
-    );
+    return students.filter((s) => {
+      // Nếu tất cả các lớp đều chưa nhập học trong tháng này và không có buổi học/hóa đơn nào, không hiển thị ở tháng cũ
+      const hasActiveEnrollmentThisMonth = s.enrolledCourses.some((c) => !c.isBeforeEnrollment);
+      if (!hasActiveEnrollmentThisMonth && !s.hasLogs) return false;
+
+      return (
+        !s.enrolledCourses.some((c) => !c.isPaidThisMonth) &&
+        (!s.allPendingInvoices || s.allPendingInvoices.length === 0)
+      );
+    });
   }, [students]);
 
   const processedLowSessions = useMemo(() => processStudents(studentsWithLowSessions), [studentsWithLowSessions, searchTerm, sortOption, filterClass]);

@@ -67,6 +67,7 @@ export default function StudentsClient({
   const [gender, setGender] = useState("");
   const [dob, setDob] = useState("");
   const [school, setSchool] = useState("");
+  const [startDate, setStartDate] = useState("");
   
   // State quản lý việc chọn lớp và trạng thái đóng phí
   const [selectedClasses, setSelectedClasses] = useState<SelectedClassInfo[]>([]);
@@ -106,6 +107,7 @@ export default function StudentsClient({
     setGender("");
     setDob("");
     setSchool("");
+    setStartDate(new Date().toISOString().slice(0, 10)); // Mặc định là ngày hiện tại (now)
     setSelectedClasses([]);
     setIsModalOpen(true);
   };
@@ -121,6 +123,12 @@ export default function StudentsClient({
     setGender(s.gender || "");
     setDob(s.dob ? new Date(s.dob).toISOString().slice(0, 10) : "");
     setSchool(s.school || "");
+    
+    // Mặc định lấy startDate có sẵn, nếu chưa có thì lấy createdAt, nếu chưa có nữa thì lấy ngày hiện tại
+    const initialStartDate = s.startDate 
+      ? new Date(s.startDate).toISOString().slice(0, 10) 
+      : (s.createdAt ? new Date(s.createdAt).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10));
+    setStartDate(initialStartDate);
     
     // Map data cũ vào state mới
     setSelectedClasses(s.enrolledCourses.map(c => ({
@@ -269,13 +277,14 @@ export default function StudentsClient({
       gender: gender || undefined,
       dob: dob || undefined,
       school: school || undefined,
+      startDate: startDate || undefined,
       classEnrollments: selectedClasses,
     };
 
     if (editingStudent) {
       setIsModalOpen(false); // Close immediately for optimistic UI
       startTransition(async () => {
-        addOptimisticStudent({ type: "UPDATE", payload: { ...editingStudent, ...payload, pending: true } });
+        addOptimisticStudent({ type: "UPDATE", payload: { ...editingStudent, ...payload, startDate: startDate ? new Date(startDate) : editingStudent.startDate, pending: true } });
         const res = await updateStudent(editingStudent.id, payload);
         if (res?.success) {
           toast.success("Cập nhật học sinh thành công!");
@@ -298,6 +307,8 @@ export default function StudentsClient({
         const tempStudent: StudentData = {
           id: tempId,
           ...payload,
+          startDate: startDate ? new Date(startDate) : new Date(),
+          createdAt: new Date(),
           logs: [],
           enrolledCourses: classes
             .filter(c => selectedClasses.some(sc => sc.classId === c.id))
@@ -566,6 +577,9 @@ export default function StudentsClient({
                           </span>
                         )}
                       </div>
+                      <div className="text-[11px] text-slate-400 mt-0.5">
+                        Vào học: <span className="font-medium text-slate-600">{s.startDate ? new Date(s.startDate).toLocaleDateString("vi-VN") : (s.createdAt ? new Date(s.createdAt).toLocaleDateString("vi-VN") : "Chưa cập nhật")}</span>
+                      </div>
                     </td>
                     <td className="py-3 px-4 hidden lg:table-cell">
                       {s.dob ? <span className="text-sm font-medium text-slate-600 whitespace-nowrap">{new Date(s.dob).toLocaleDateString("vi-VN")}</span> : <span className="text-xs text-slate-400 italic">Chưa cập nhật</span>}
@@ -670,6 +684,18 @@ export default function StudentsClient({
                   <datalist id="danang-schools">{DA_NANG_SCHOOLS.map(s => <option key={s} value={s} />)}</datalist>
                 </div>
               </div>
+              <div className="space-y-1.5 p-3 bg-blue-50/60 border border-blue-100 rounded-xl">
+                <label className="text-[11px] font-bold text-blue-700 uppercase tracking-wider flex items-center gap-2">
+                  <Calendar size={14} className="text-blue-600" /> Ngày bắt đầu vào học
+                </label>
+                <input 
+                  type="date" 
+                  value={startDate} 
+                  onChange={(e) => setStartDate(e.target.value)} 
+                  className="w-full h-10 px-3 border border-blue-200 rounded-lg bg-white text-sm font-semibold focus:ring-2 focus:ring-blue-200 outline-none transition-all text-slate-800" 
+                />
+                <p className="text-[11px] text-slate-500 italic">Mặc định là hôm nay / ngày tạo. Dùng để đối soát học phí các tháng cũ chính xác.</p>
+              </div>
               <div className="space-y-1.5 pt-2 border-t border-slate-100 mt-2">
                 <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Tên Phụ huynh</label>
                 <input value={parentName} onChange={(e) => setParentName(e.target.value)} placeholder="Tên phụ huynh" className="w-full h-10 px-3 border border-slate-200 rounded-xl bg-slate-50 text-sm font-semibold focus:ring-2 focus:ring-blue-100 outline-none transition-all" />
@@ -768,6 +794,7 @@ export default function StudentsClient({
                       <p className="flex justify-between sm:block"><span className="text-slate-500 font-medium inline-block w-24">Điện thoại:</span> <span className="font-semibold text-slate-700">{viewStudent.phone || "Chưa cập nhật"}</span></p>
                       <p className="flex justify-between sm:block"><span className="text-slate-500 font-medium inline-block w-24">Ngày sinh:</span> <span className="font-semibold text-slate-700">{viewStudent.dob ? new Date(viewStudent.dob).toLocaleDateString("vi-VN") : "Chưa cập nhật"}</span></p>
                       <p className="flex justify-between sm:block"><span className="text-slate-500 font-medium inline-block w-24">Trường:</span> <span className="font-semibold text-slate-700">{viewStudent.school || "Chưa cập nhật"}</span></p>
+                      <p className="flex justify-between sm:block"><span className="text-slate-500 font-medium inline-block w-24">Ngày vào học:</span> <span className="font-semibold text-blue-700">{viewStudent.startDate ? new Date(viewStudent.startDate).toLocaleDateString("vi-VN") : (viewStudent.createdAt ? new Date(viewStudent.createdAt).toLocaleDateString("vi-VN") : "Chưa cập nhật")}</span></p>
                     </div>
                   </div>
                 </div>

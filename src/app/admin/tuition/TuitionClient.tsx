@@ -1302,18 +1302,26 @@ Nông trại Khoa học tự nhiên kính gửi quý phụ huynh: ***${headerTit
                             {new Date(log.date).toLocaleDateString("vi-VN")}
                           </td>
                           <td className="py-2 px-4 text-center whitespace-nowrap align-top">
-                            <span className={`text-[10px] font-bold px-2 py-1 rounded-md uppercase ${log.attendanceStatus === "PRESENT" ? "bg-emerald-100 text-emerald-700" :
-                              log.attendanceStatus === "ABSENT" ? "bg-rose-100 text-rose-700" : "bg-amber-100 text-amber-700"
-                              }`}>
-                              {log.attendanceStatus === "PRESENT" ? "Có mặt" : log.attendanceStatus === "ABSENT" ? "Vắng" : "Có phép"}
+                            <span className={`text-[10px] font-bold px-2 py-1 rounded-md uppercase ${
+                              log.attendanceStatus === "PRESENT" ? "bg-emerald-100 text-emerald-700" :
+                              log.attendanceStatus === "LATE" ? "bg-amber-100 text-amber-700" :
+                              log.attendanceStatus === "EXCUSED" ? "bg-sky-100 text-sky-700" :
+                              log.attendanceStatus === "UNEXCUSED" ? "bg-rose-100 text-rose-700" :
+                              "bg-slate-100 text-slate-700"
+                            }`}>
+                              {log.attendanceStatus === "PRESENT" ? "Có mặt" :
+                               log.attendanceStatus === "LATE" ? "Đi trễ" :
+                               log.attendanceStatus === "EXCUSED" ? "Có phép" :
+                               log.attendanceStatus === "UNEXCUSED" ? "Không phép" : "-"}
                             </span>
                           </td>
                           <td className="py-2 px-4 text-center whitespace-nowrap align-top">
                             {log.homeworkStatus ? (
-                              <span className={`text-[10px] font-bold px-2 py-1 rounded-md uppercase ${log.homeworkStatus === "GOOD" ? "bg-emerald-100 text-emerald-700" :
-                                log.homeworkStatus === "DONE" ? "bg-amber-100 text-amber-700" : "bg-rose-100 text-rose-700"
-                                }`}>
-                                {log.homeworkStatus === "GOOD" ? "Đạt" : log.homeworkStatus === "DONE" ? "Không đạt" : "Không làm"}
+                              <span className={`text-[10px] font-bold px-2 py-1 rounded-md uppercase ${
+                                log.homeworkStatus === "GOOD" ? "bg-emerald-100 text-emerald-700" :
+                                log.homeworkStatus === "DONE" ? "bg-blue-100 text-blue-700" : "bg-rose-100 text-rose-700"
+                              }`}>
+                                {log.homeworkStatus === "GOOD" ? "Tốt" : log.homeworkStatus === "DONE" ? "Đạt" : "Chưa làm"}
                               </span>
                             ) : (
                               <span className="text-slate-400 text-xs">-</span>

@@ -439,14 +439,30 @@ export default function MyClassesClient({
                         <div className="grid grid-cols-2 gap-2 text-xs mb-2">
                           <div className="flex items-center gap-1.5">
                             <span className="text-slate-500">Điểm danh:</span>
-                            <span className={`font-bold ${log.attendanceStatus === "PRESENT" ? "text-emerald-600" : log.attendanceStatus === "ABSENT" ? "text-rose-600" : "text-amber-600"}`}>
-                              {log.attendanceStatus === "PRESENT" ? "Có mặt" : log.attendanceStatus === "ABSENT" ? "Vắng mặt" : "Đi trễ"}
+                            <span className={`font-bold ${
+                              log.attendanceStatus === "PRESENT" ? "text-emerald-600" :
+                              log.attendanceStatus === "LATE" ? "text-amber-600" :
+                              log.attendanceStatus === "EXCUSED" ? "text-sky-600" :
+                              log.attendanceStatus === "UNEXCUSED" ? "text-rose-600" :
+                              "text-slate-500"
+                            }`}>
+                              {log.attendanceStatus === "PRESENT" ? "Có mặt" :
+                               log.attendanceStatus === "LATE" ? "Đi trễ" :
+                               log.attendanceStatus === "EXCUSED" ? "Có phép" :
+                               log.attendanceStatus === "UNEXCUSED" ? "Vắng mặt" : "-"}
                             </span>
                           </div>
                           <div className="flex items-center gap-1.5">
                             <span className="text-slate-500">Bài tập:</span>
-                            <span className={`font-bold ${log.homeworkStatus === "GOOD" ? "text-emerald-600" : log.homeworkStatus === "NOT_DONE" ? "text-rose-600" : "text-amber-600"}`}>
-                              {!log.homeworkStatus ? "Chưa chấm" : log.homeworkStatus === "GOOD" ? "Đạt" : log.homeworkStatus === "NOT_DONE" ? "Không làm" : "Không đạt"}
+                            <span className={`font-bold ${
+                              log.homeworkStatus === "GOOD" ? "text-emerald-600" :
+                              log.homeworkStatus === "DONE" ? "text-blue-600" :
+                              log.homeworkStatus === "NOT_DONE" ? "text-rose-600" :
+                              "text-slate-400"
+                            }`}>
+                              {!log.homeworkStatus ? "Chưa chấm" :
+                               log.homeworkStatus === "GOOD" ? "Tốt" :
+                               log.homeworkStatus === "DONE" ? "Đạt" : "Chưa làm"}
                             </span>
                           </div>
                         </div>
